@@ -1,0 +1,19 @@
+# Profile Configuration
+# This is a User Layer file. The system will never overwrite it.
+
+name: Raunaq Rakesh
+email: raunaq1509@gmail.com
+phone: "+91-7982271861"
+location: Gurgaon, India
+linkedin: https://linkedin.com/in/raunaqrakesh
+portfolio: https://raunaqrakesh.com
+github: https://github.com/Raunaq-nous
+
+# Experience summary
+years_of_experience: "7+"
+current_role: Strategy Consultant & AI Builder
+current_company: ""
+
+# Preferred date format
+date_format: "YYYY-MM-DD"
+timezone: "Asia/Kolkata"

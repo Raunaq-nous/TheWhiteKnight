@@ -1,0 +1,74 @@
+# Target Role Buckets
+# Each bucket defines a class of roles to source and score against.
+# This is a User Layer file.
+
+buckets:
+  - name: MBB Strategy
+    titles:
+      - Project Leader
+      - Engagement Manager
+      - Associate Partner
+      - Principal
+    seniority: Senior+
+    geographies:
+      - India
+      - Middle East
+      - Singapore
+    sectors:
+      - Consulting
+      - Financial Services
+    exclusions:
+      - Junior Analyst
+      - Intern
+
+  - name: AI Product
+    titles:
+      - Senior Product Manager, AI
+      - Head of Product, AI
+      - Director of Product
+      - VP Product
+    seniority: Senior+
+    geographies:
+      - Global Remote
+      - India
+      - Middle East
+      - Singapore
+    sectors:
+      - Technology
+      - AI/ML
+      - SaaS
+    exclusions:
+      - Associate PM
+      - Junior PM
+
+  - name: Chief of Staff
+    titles:
+      - Chief of Staff
+      - Strategy Lead
+      - Head of CEO Office
+    seniority: Director+
+    geographies:
+      - Global Remote
+      - Middle East
+      - India
+    sectors:
+      - Technology
+      - Consulting
+      - Fintech
+
+  - name: Strategy Ops
+    titles:
+      - VP Strategy & Operations
+      - Director of Strategy
+      - Strategy & Ops Lead
+      - Head of Strategy
+    seniority: Senior+
+    geographies:
+      - India
+      - Singapore
+      - Middle East
+      - Global Remote
+    sectors:
+      - Technology
+      - E-commerce
+      - Fintech
