@@ -1,0 +1,81 @@
+name: Bootstrap CareerOS (Steps 1-3)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unzip build kits
+        run: |
+          unzip -o CareerOS-BuildKit.zip -d extracted/ 2>/dev/null || true
+          [ -f files.zip ] && unzip -o files.zip -d extracted-files/ 2>/dev/null || true
+          echo "=== Extracted files ===" && find extracted/ extracted-files/ 2>/dev/null | sort
+
+      - name: Copy CLAUDE.md to root
+        run: |
+          F=$(find extracted/ extracted-files/ -name "CLAUDE.md" 2>/dev/null | head -1)
+          [ -n "$F" ] && cp "$F" ./CLAUDE.md && echo "OK: $F" || printf "# CareerOS\\n> placeholder\\n" > ./CLAUDE.md
+
+      - name: Copy DATA_CONTRACT.md to root
+        run: |
+          F=$(find extracted/ extracted-files/ -name "DATA_CONTRACT.md" 2>/dev/null | head -1)
+          [ -n "$F" ] && cp "$F" ./DATA_CONTRACT.md && echo "OK: $F" || printf "# Data Contract\\n> placeholder\\n" > ./DATA_CONTRACT.md
+
+      - name: Set up .claude/ directory
+        run: |
+          D=$(find extracted/ extracted-files/ -type d -name ".claude" 2>/dev/null | head -1)
+          mkdir -p .claude/skills .claude/agents
+          [ -n "$D" ] && cp -r "$D/." ./.claude/ && echo "OK: $D" || echo "No .claude dir found"
+
+      - name: Mirror .claude/ to .agent/
+        run: mkdir -p .agent && cp -r .claude/. .agent/ && echo "Mirrored"
+
+      - name: Set up docs/build-kit/
+        run: |
+          mkdir -p docs/build-kit
+          while IFS= read -r f; do
+            n=$(basename "$f" .md | tr '[:upper:]' '[:lower:]')
+            case "$n" in
+              *product*brief*|*brief*) cp "$f" docs/build-kit/01-product-brief.md && echo "brief: $f" ;;
+              *sdd*|*workflow*) cp "$f" docs/build-kit/02-sdd-workflow.md && echo "sdd: $f" ;;
+              *template*explain*|*claude*template*) cp "$f" docs/build-kit/03-claude-template-explained.md ;;
+              *prompt*) cp "$f" docs/build-kit/04-prompt-library.md && echo "prompts: $f" ;;
+              *design*token*|*token*) cp "$f" docs/build-kit/05-design-tokens.md && echo "tokens: $f" ;;
+            esac
+          done < <(find extracted/ extracted-files/ -name "*.md" 2>/dev/null)
+          ls -la docs/build-kit/
+
+      - name: Create AGENTS.md
+        run: cp CLAUDE.md AGENTS.md && echo "AGENTS.md created"
+
+      - name: Create User Layer folder structure
+        run: |
+          mkdir -p persona/resumes persona/cover-letters config applications/_archived data docs/research docs/spec/tasks docs/handoffs docs/reviews
+          find persona config applications data docs/research docs/spec docs/handoffs docs/reviews -type d -exec touch {}/.gitkeep \\;
+
+      - name: Create sync-skills.sh
+        run: |
+          printf '#!/bin/bash\\nset -e\\necho "Syncing .claude/ to .agent/..."\\nrsync -av --delete .claude/ .agent/\\ncp CLAUDE.md AGENTS.md\\necho "Sync complete"\\n' > sync-skills.sh
+          chmod +x sync-skills.sh
+
+      - name: Create .gitignore
+        run: |
+          printf '*.pdf\\n*.docx\\n*.zip\\n__pycache__/\\n.cache/\\nnode_modules/\\n.env\\n.env.*\\nsecrets/\\n*.secret\\n.DS_Store\\nThumbs.db\\nextracted/\\nextracted-files/\\n' > .gitignore
+
+      - name: Show final repo structure
+        run: find . -not -path './.git/*' -not -path './extracted*' | sort
+
+      - name: Commit and push
+        run: |
+          git config user.name "Antigravity"
+          git config user.email "antigravity@careeros.ai"
+          git add -A
+          git diff --cached --stat
+          git commit -m "chore: bootstrap CareerOS with build kit + Antigravity setup" || echo "Nothing to commit"
+          git push
