@@ -1,0 +1,92 @@
+name: Unzip Persona Pack
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find and unzip persona pack
+        run: |
+          echo "=== Looking for persona-pack.zip ==="
+          find . -name "persona-pack*" -o -name "*.zip" | grep -v node_modules | grep -v extracted
+          echo ""
+          if [ -f "persona-pack.zip" ]; then
+            echo "Found persona-pack.zip, unzipping..."
+            unzip -o persona-pack.zip -d persona-unzipped/
+            echo "=== Contents ==="
+            find persona-unzipped/ -type f | sort
+          else
+            echo "ERROR: persona-pack.zip not found at root"
+            find . -name "*.zip" | head -20
+            exit 1
+          fi
+
+      - name: Place files in correct locations
+        run: |
+          SRC="persona-unzipped"
+          # Try to find the actual content root (might be nested)
+          # Check if files are directly in SRC or in a subfolder
+          if [ -d "$SRC/persona" ]; then
+            ROOT="$SRC"
+          else
+            # Find the deepest folder that contains persona/ config/ or applications/
+            ROOT=$(find "$SRC" -type d -name "persona" -exec dirname {} \; | head -1)
+            if [ -z "$ROOT" ]; then
+              echo "Could not find persona/ directory in zip"
+              echo "=== Full contents ==="
+              find "$SRC" -type f | sort
+              # Try flat structure: files might be directly in root
+              ROOT="$SRC"
+            fi
+          fi
+          echo "Content root: $ROOT"
+          echo ""
+
+          # Copy persona files
+          if [ -d "$ROOT/persona" ]; then
+            echo "=== Copying persona/ ==="
+            cp -rv "$ROOT/persona/"* persona/ 2>/dev/null || true
+            # Handle nested dirs
+            for d in resumes cover-letters; do
+              if [ -d "$ROOT/persona/$d" ]; then
+                mkdir -p "persona/$d"
+                cp -rv "$ROOT/persona/$d/"* "persona/$d/" 2>/dev/null || true
+              fi
+            done
+          fi
+
+          # Copy config files
+          if [ -d "$ROOT/config" ]; then
+            echo "=== Copying config/ ==="
+            cp -rv "$ROOT/config/"* config/ 2>/dev/null || true
+          fi
+
+          # Copy applications
+          if [ -d "$ROOT/applications" ]; then
+            echo "=== Copying applications/ ==="
+            cp -rv "$ROOT/applications/"* applications/ 2>/dev/null || true
+          fi
+
+          echo ""
+          echo "=== VERIFICATION ==="
+          echo "--- persona/ ---"
+          find persona/ -type f | sort
+          echo "--- config/ ---"
+          find config/ -type f | sort
+          echo "--- applications/ ---"
+          find applications/ -type f | sort
+
+      - name: Commit and push
+        run: |
+          git config user.name "Antigravity"
+          git config user.email "antigravity@careeros.ai"
+          git add -A
+          git diff --cached --stat
+          git commit -m "feat(persona): unzip and place persona pack files" || echo "Nothing to commit"
+          git push
