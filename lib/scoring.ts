@@ -1,121 +1,111 @@
-"use client";
 import { TargetBucket } from "./store";
 
-interface ScoreResult {
-  totalScore: number;
-  bucket: string;
-  bucketName: string;
-  breakdown: ScoreBreakdown;
-  recommendation: string;
+export async function scoreJobWithAI(jdText: string, company: string, role: string, location: string, seniority: string, sector: string, buckets: TargetBucket[], apiKey: string) {
+  if (!apiKey) throw new Error("Missing OpenAI API Key");
+
+  // Step 1: Extract structured data from JD using OpenAI
+  const prompt = `
+You are an expert technical recruiter analyzing a Job Description.
+Job: ${role} at ${company}
+Location: ${location}
+Seniority: ${seniority}
+Sector: ${sector}
+
+Job Description:
+${jdText.substring(0, 4000)}
+
+Extract the following and return ONLY raw JSON (no markdown formatting or backticks):
+{
+  "keyRequirements": ["string"],
+  "technicalSkills": ["string"],
+  "softSkills": ["string"],
+  "yearsExperienceRequired": number or null,
+  "redFlags": ["string"]
 }
+`;
 
-interface ScoreBreakdown {
-  titleMatch: { score: number; weight: number; weighted: number; details: string };
-  sectorMatch: { score: number; weight: number; weighted: number; details: string };
-  seniorityMatch: { score: number; weight: number; weighted: number; details: string };
-  keywordRequired: { score: number; weight: number; weighted: number; details: string };
-  keywordBoost: { score: number; weight: number; weighted: number; details: string };
-  geographyMatch: { score: number; weight: number; weighted: number; details: string };
-  targetCompany: { score: number; weight: number; weighted: number; details: string };
-}
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1
+    })
+  });
 
-const WEIGHTS = {
-  titleMatch: 0.20,
-  sectorMatch: 0.15,
-  seniorityMatch: 0.15,
-  keywordRequired: 0.20,
-  keywordBoost: 0.10,
-  geographyMatch: 0.10,
-  targetCompany: 0.10,
-};
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI Error: ${response.status} ${err}`);
+  }
 
-const THRESHOLDS = {
-  applyImmediately: 8.5,
-  tailorAndApply: 7.0,
-  reviewManually: 5.5,
-  archiveLowFit: 4.0,
-};
+  const result = await response.json();
+  let parsed;
+  try {
+    let cleanText = result.choices[0].message.content.trim();
+    if (cleanText.startsWith("```json")) {
+      cleanText = cleanText.substring(7, cleanText.length - 3);
+    }
+    parsed = JSON.parse(cleanText);
+  } catch (e) {
+    console.error("Failed to parse OpenAI JSON:", result.choices[0].message.content);
+    throw new Error("Failed to parse OpenAI response");
+  }
 
-function fuzzyMatch(text: string, patterns: string[]): { matched: boolean; matchedPatterns: string[] } {
-  const lower = text.toLowerCase();
-  const matched = patterns.filter(p => lower.includes(p.toLowerCase()));
-  return { matched: matched.length > 0, matchedPatterns: matched };
-}
+  // Combine extracted skills with our metadata for scoring
+  const fullText = `${jdText} ${parsed.technicalSkills?.join(" ")} ${parsed.keyRequirements?.join(" ")}`.toLowerCase();
 
-function scoreBucket(jdText: string, company: string, role: string, location: string, seniority: string, sector: string, bucket: TargetBucket): { score: number; breakdown: ScoreBreakdown } {
-  const fullText = `${jdText} ${company} ${role} ${location} ${seniority} ${sector}`.toLowerCase();
-
-  // Title match
-  const titleResult = fuzzyMatch(role, bucket.titlesMatch);
-  const titleExcluded = fuzzyMatch(role, bucket.titlesExclude || []);
-  const titleScore = titleExcluded.matched ? 0 : titleResult.matched ? 1.0 : 0;
-
-  // Sector match
-  const sectorResult = fuzzyMatch(sector, bucket.sectorsPreferred);
-  const sectorScore = sectorResult.matched ? 0.9 : (fuzzyMatch(fullText, bucket.sectorsPreferred).matched ? 0.5 : 0);
-
-  // Seniority match
-  const seniorityResult = fuzzyMatch(seniority, bucket.seniority);
-  const seniorityScore = seniorityResult.matched ? 1.0 : 0.3;
-
-  // Required keywords (OR logic)
-  const reqKeywords = bucket.keywordsRequired.flatMap(k => k.split(" OR ").map(s => s.trim()));
-  const reqResult = fuzzyMatch(fullText, reqKeywords);
-  const reqScore = reqResult.matched ? 1.0 : 0;
-
-  // Boost keywords
-  const boostResult = fuzzyMatch(fullText, bucket.keywordsBoost);
-  const boostScore = bucket.keywordsBoost.length > 0 ? boostResult.matchedPatterns.length / bucket.keywordsBoost.length : 0;
-
-  // Geography match
-  const geoResult = fuzzyMatch(location, bucket.geographies);
-  const geoScore = geoResult.matched ? 1.0 : (location.toLowerCase().includes("remote") ? 0.8 : 0);
-
-  // Target company match
-  const companyResult = fuzzyMatch(company, bucket.targetCompanies);
-  const companyScore = companyResult.matched ? 1.0 : 0;
-
-  const breakdown: ScoreBreakdown = {
-    titleMatch: { score: titleScore, weight: WEIGHTS.titleMatch, weighted: titleScore * WEIGHTS.titleMatch, details: titleResult.matchedPatterns.join(", ") || "no match" },
-    sectorMatch: { score: sectorScore, weight: WEIGHTS.sectorMatch, weighted: sectorScore * WEIGHTS.sectorMatch, details: sectorResult.matchedPatterns.join(", ") || "partial/no match" },
-    seniorityMatch: { score: seniorityScore, weight: WEIGHTS.seniorityMatch, weighted: seniorityScore * WEIGHTS.seniorityMatch, details: seniorityResult.matchedPatterns.join(", ") || "partial" },
-    keywordRequired: { score: reqScore, weight: WEIGHTS.keywordRequired, weighted: reqScore * WEIGHTS.keywordRequired, details: reqResult.matchedPatterns.join(", ") || "no match" },
-    keywordBoost: { score: boostScore, weight: WEIGHTS.keywordBoost, weighted: boostScore * WEIGHTS.keywordBoost, details: boostResult.matchedPatterns.join(", ") || "none" },
-    geographyMatch: { score: geoScore, weight: WEIGHTS.geographyMatch, weighted: geoScore * WEIGHTS.geographyMatch, details: geoResult.matchedPatterns.join(", ") || (location.includes("remote") ? "remote" : "no match") },
-    targetCompany: { score: companyScore, weight: WEIGHTS.targetCompany, weighted: companyScore * WEIGHTS.targetCompany, details: companyResult.matchedPatterns.join(", ") || "not in target list" },
-  };
-
-  const total = Object.values(breakdown).reduce((sum, b) => sum + b.weighted, 0);
-  return { score: Math.round(total * 100) / 10, breakdown };
-}
-
-export function scoreJob(jdText: string, company: string, role: string, location: string, seniority: string, sector: string, buckets: TargetBucket[]): ScoreResult {
-  let bestScore = 0;
+  // Find best matching bucket
   let bestBucket = buckets[0];
-  let bestBreakdown: ScoreBreakdown | null = null;
+  let highestScore = 0;
+  let bestBreakdown = {};
 
   for (const bucket of buckets) {
-    const result = scoreBucket(jdText, company, role, location, seniority, sector, bucket);
-    if (result.score > bestScore) {
-      bestScore = result.score;
+    let score = 0;
+    const breakdown: any = {};
+
+    // 1. Title Match (0-3)
+    const titleLower = role.toLowerCase();
+    const titleMatch = bucket.titlesMatch.some(t => titleLower.includes(t));
+    const titleExclude = bucket.titlesExclude.some(t => titleLower.includes(t));
+    let titleScore = titleExclude ? 0 : titleMatch ? 3 : 1;
+    score += titleScore;
+    breakdown.titleMatch = { score: titleScore, weighted: titleScore };
+
+    // 2. Sector Match (0-1.5)
+    const sectorMatch = bucket.sectorsPreferred.some(s => sector.toLowerCase().includes(s));
+    let sectorScore = sectorMatch ? 1.5 : 0;
+    score += sectorScore;
+    breakdown.sectorMatch = { score: sectorScore, weighted: sectorScore };
+
+    // 3. Keywords Required (0-3)
+    const reqMatches = bucket.keywordsRequired.filter(k => fullText.includes(k.toLowerCase()));
+    let reqScore = (reqMatches.length / Math.max(1, bucket.keywordsRequired.length)) * 3;
+    score += reqScore;
+    breakdown.keywordsRequired = { score: reqScore, weighted: reqScore };
+
+    // 4. Keywords Boost (0-2.5)
+    const boostMatches = bucket.keywordsBoost.filter(k => fullText.includes(k.toLowerCase()));
+    let boostScore = Math.min(2.5, boostMatches.length * 0.8);
+    score += boostScore;
+    breakdown.keywordsBoost = { score: boostScore, weighted: boostScore };
+
+    if (score > highestScore) {
+      highestScore = score;
       bestBucket = bucket;
-      bestBreakdown = result.breakdown;
+      bestBreakdown = breakdown;
     }
   }
 
-  let recommendation: string;
-  if (bestScore >= THRESHOLDS.applyImmediately) recommendation = "APPLY IMMEDIATELY";
-  else if (bestScore >= THRESHOLDS.tailorAndApply) recommendation = "TAILOR AND APPLY";
-  else if (bestScore >= THRESHOLDS.reviewManually) recommendation = "REVIEW MANUALLY";
-  else recommendation = "LOW FIT, CONSIDER ARCHIVING";
-
   return {
-    totalScore: bestScore,
+    totalScore: Math.min(10, highestScore),
     bucket: bestBucket.id,
     bucketName: bestBucket.name,
-    breakdown: bestBreakdown!,
-    recommendation,
+    recommendation: highestScore >= 8.5 ? "Apply Immediately" : highestScore >= 7.0 ? "Tailor and Apply" : "Review Manually",
+    breakdown: bestBreakdown,
+    parsed
   };
 }
-
-export { THRESHOLDS };

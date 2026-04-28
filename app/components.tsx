@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 export function ScoreBar({ score }: { score: number }) {
   const filled = Math.round(score);
@@ -25,13 +26,14 @@ export function Header() {
   return (
     <header className="header">
       <div className="container header-inner">
-        <div className="logo"><a href="/TheWhiteKnight/" style={{color:"inherit",textDecoration:"none"}}>CAREER<span>OS</span></a></div>
+        <div className="logo"><Link href="/TheWhiteKnight/" style={{color:"inherit",textDecoration:"none"}}>CAREER<span>OS</span></Link></div>
         <nav>
           <ul className="nav">
-            <li><a href="/TheWhiteKnight/">PIPELINE</a></li>
-            <li><a href="/TheWhiteKnight/applications/">APPLICATIONS</a></li>
-            <li><a href="/TheWhiteKnight/persona/">PERSONA</a></li>
-            <li><a href="/TheWhiteKnight/config/">CONFIG</a></li>
+            <li><Link href="/TheWhiteKnight/">PIPELINE</Link></li>
+            <li><Link href="/TheWhiteKnight/applications/">APPLICATIONS</Link></li>
+            <li><Link href="/TheWhiteKnight/persona/">PERSONA</Link></li>
+            <li><Link href="/TheWhiteKnight/config/">CONFIG</Link></li>
+            <li><Link href="/TheWhiteKnight/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
           </ul>
         </nav>
       </div>
@@ -42,7 +44,7 @@ export function Header() {
 export function Footer() {
   return (
     <footer style={{ borderTop: "1px solid var(--border)", padding: "16px 0", textAlign: "center", marginTop: "auto" }}>
-      <span className="label">CAREEROS v0.1.0 {"\u00B7"} SPEC-DRIVEN DEVELOPMENT {"\u00B7"} TEENAGE ENGINEERING DESIGN</span>
+      <span className="label">CAREEROS v0.1.0 {"\u00B7"} SERVERLESS EDITION {"\u00B7"} TEENAGE ENGINEERING DESIGN</span>
     </footer>
   );
 }

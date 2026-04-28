@@ -1,13 +1,11 @@
-"use client";
-
-export interface Application {
+export type Application = {
   id: string;
   slug: string;
   company: string;
   role: string;
   location: string;
   remote: boolean;
-  status: "sourced" | "reviewed" | "applied" | "interview" | "offer" | "rejected" | "archived";
+  status: "sourced" | "reviewed" | "applied" | "interview" | "offer" | "rejected";
   score: number;
   bucket: string;
   sector: string;
@@ -15,87 +13,20 @@ export interface Application {
   sourceUrl: string;
   capturedAt: string;
   jdRaw: string;
-  jdParsed: ParsedJD | null;
+  jdParsed: any;
   nextAction: string;
-  contacts: Contact[];
-  interviews: Interview[];
-  reminders: Reminder[];
-  resumeVersions: ResumeVersion[];
+  contacts: any[];
+  interviews: any[];
+  reminders: any[];
+  resumeVersions: any[];
   notes: string;
-  emailEvents: EmailEvent[];
+  emailEvents: any[];
   createdAt: string;
   updatedAt: string;
-}
+  days?: number;
+};
 
-export interface ParsedJD {
-  overview: string;
-  requirements: string[];
-  keywords: string[];
-  signals: Record<string, string>;
-}
-
-export interface Contact {
-  name: string;
-  role: string;
-  linkedin: string;
-  email: string;
-}
-
-export interface Interview {
-  id: string;
-  round: number;
-  type: string;
-  date: string;
-  interviewer: string;
-  notes: string;
-  outcome: "pending" | "passed" | "failed" | "rescheduled";
-  prepNotes: string;
-}
-
-export interface Reminder {
-  id: string;
-  type: "follow-up" | "interview-prep" | "stale-warning" | "custom";
-  message: string;
-  dueDate: string;
-  done: boolean;
-}
-
-export interface ResumeVersion {
-  id: string;
-  version: number;
-  createdAt: string;
-  content: string;
-  bucket: string;
-}
-
-export interface EmailEvent {
-  id: string;
-  date: string;
-  type: "confirmation" | "interview-invite" | "rejection" | "follow-up" | "other";
-  subject: string;
-  snippet: string;
-}
-
-export interface UserPersona {
-  name: string;
-  email: string;
-  phone: string;
-  location: string;
-  linkedin: string;
-  portfolio: string;
-  github: string;
-  masterCv: string;
-  voiceSamples: string;
-  certifications: string;
-  publications: string;
-  githubProjects: string;
-  websiteContent: string;
-  targetBuckets: TargetBucket[];
-  preferences: Record<string, string>;
-  updatedAt: string;
-}
-
-export interface TargetBucket {
+export type TargetBucket = {
   id: string;
   name: string;
   description: string;
@@ -108,100 +39,50 @@ export interface TargetBucket {
   targetCompanies: string[];
   seniority: string[];
   weight: number;
-}
-
-export interface Notification {
-  id: string;
-  type: "info" | "warning" | "action" | "success";
-  title: string;
-  message: string;
-  applicationId?: string;
-  createdAt: string;
-  read: boolean;
-}
-
-const STORAGE_KEYS = {
-  APPLICATIONS: "careeros_applications",
-  PERSONA: "careeros_persona",
-  NOTIFICATIONS: "careeros_notifications",
-  SETTINGS: "careeros_settings",
 };
 
-// ── Applications ──
 export function getApplications(): Application[] {
   if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(STORAGE_KEYS.APPLICATIONS);
-  return raw ? JSON.parse(raw) : [];
+  const data = localStorage.getItem("careeros_apps");
+  if (!data) return [];
+  try {
+    const apps = JSON.parse(data);
+    return apps.map((app: any) => ({
+      ...app,
+      days: Math.floor((Date.now() - new Date(app.capturedAt).getTime()) / (1000 * 60 * 60 * 24))
+    }));
+  } catch {
+    return [];
+  }
 }
 
-export function saveApplication(app: Application): void {
+export function saveApplication(app: Application) {
+  if (typeof window === "undefined") return;
   const apps = getApplications();
-  const idx = apps.findIndex(a => a.id === app.id);
-  app.updatedAt = new Date().toISOString();
-  if (idx >= 0) apps[idx] = app;
-  else apps.push(app);
-  localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(apps));
+  const existingIndex = apps.findIndex(a => a.id === app.id);
+  if (existingIndex >= 0) {
+    apps[existingIndex] = app;
+  } else {
+    apps.push(app);
+  }
+  localStorage.setItem("careeros_apps", JSON.stringify(apps));
   window.dispatchEvent(new Event("careeros-data-change"));
 }
 
-export function deleteApplication(id: string): void {
-  const apps = getApplications().filter(a => a.id !== id);
-  localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(apps));
-  window.dispatchEvent(new Event("careeros-data-change"));
+export function generateSlug(company: string, role: string) {
+  return `${company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${role.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 }
 
-export function getApplication(id: string): Application | undefined {
-  return getApplications().find(a => a.id === id);
+export function generateId() {
+  return Math.random().toString(36).substr(2, 9);
 }
 
-// ── Persona ──
-export function getPersona(): UserPersona | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(STORAGE_KEYS.PERSONA);
-  return raw ? JSON.parse(raw) : null;
+export function getApiKey(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("careeros_openai_key") || "";
 }
 
-export function savePersona(persona: UserPersona): void {
-  persona.updatedAt = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEYS.PERSONA, JSON.stringify(persona));
-  window.dispatchEvent(new Event("careeros-data-change"));
-}
-
-// ── Notifications ──
-export function getNotifications(): Notification[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-  return raw ? JSON.parse(raw) : [];
-}
-
-export function addNotification(n: Omit<Notification, "id" | "createdAt" | "read">): void {
-  const notifs = getNotifications();
-  notifs.unshift({
-    ...n,
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    read: false,
-  });
-  localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs.slice(0, 100)));
-  window.dispatchEvent(new Event("careeros-data-change"));
-}
-
-export function markNotificationRead(id: string): void {
-  const notifs = getNotifications();
-  const n = notifs.find(x => x.id === id);
-  if (n) n.read = true;
-  localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifs));
-}
-
-export function clearNotifications(): void {
-  localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify([]));
-}
-
-// ── Generate ID ──
-export function generateSlug(company: string, role: string): string {
-  return `${company}-${role}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-}
-
-export function generateId(): string {
-  return crypto.randomUUID();
+export function setApiKey(key: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("careeros_openai_key", key);
 }
