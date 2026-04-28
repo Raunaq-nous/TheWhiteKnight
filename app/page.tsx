@@ -1,32 +1,59 @@
-import { applications, STATUSES } from "./data";
-import { ScoreBar, StatusPill, Header, Footer } from "./components";
+"use client";
 
-function AppCard({ app }: { app: typeof applications[0] }) {
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { applications as sampleData, STATUSES } from "./data";
+import { ScoreBar, StatusPill, Header, Footer } from "./components";
+import { getApplications, saveApplication, Application } from "../lib/store";
+
+function AppCard({ app }: { app: Application | typeof sampleData[0] }) {
   return (
-    <a href={`/TheWhiteKnight/application/${app.slug}/`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+    <Link href={`/application/${app.slug}/`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
       <div className="card-company">{app.company}</div>
       <div className="card-role">{app.role}</div>
       <div className="card-meta">
         <span className="card-location">{app.location}{app.remote ? " \u00B7 REMOTE" : ""}</span>
-        <StatusPill status={app.status} days={app.days} />
+        <StatusPill status={app.status as any} days={('days' in app) ? app.days : 0} />
       </div>
       <div style={{ marginTop: 8 }}>
         <ScoreBar score={app.score} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
         <span className="label">{app.bucket}</span>
-        <span className="label" style={{ color: "var(--text-tertiary)", fontSize: "0.625rem" }}>{app.capturedAt}</span>
+        <span className="label" style={{ color: "var(--text-tertiary)", fontSize: "0.625rem" }}>
+          {("capturedAt" in app) ? app.capturedAt : ""}
+        </span>
       </div>
-    </a>
+    </Link>
   );
 }
 
 export default function Dashboard() {
+  const [apps, setApps] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Load from local store, fallback to sample data if empty
+    let stored = getApplications();
+    if (stored.length === 0) {
+      stored = sampleData as any[];
+      // Optionally pre-populate store with sample data
+      // stored.forEach(a => saveApplication(a as any));
+    }
+    setApps(stored);
+
+    const handleUpdate = () => {
+      const updated = getApplications();
+      setApps(updated.length > 0 ? updated : sampleData);
+    };
+    window.addEventListener("careeros-data-change", handleUpdate);
+    return () => window.removeEventListener("careeros-data-change", handleUpdate);
+  }, []);
+
   const counts: Record<string, number> = {};
-  STATUSES.forEach(s => { counts[s] = applications.filter(a => a.status === s).length; });
-  const totalActive = applications.filter(a => a.status !== "rejected").length;
-  const avgScore = (applications.reduce((sum, a) => sum + a.score, 0) / applications.length).toFixed(1);
-  const interviewRate = Math.round((applications.filter(a => ["interview", "offer"].includes(a.status)).length / applications.length) * 100);
+  STATUSES.forEach(s => { counts[s] = apps.filter(a => a.status === s).length; });
+  const totalActive = apps.filter(a => a.status !== "rejected").length;
+  const avgScore = apps.length > 0 ? (apps.reduce((sum, a) => sum + a.score, 0) / apps.length).toFixed(1) : "0.0";
+  const interviewRate = apps.length > 0 ? Math.round((apps.filter(a => ["interview", "offer"].includes(a.status)).length / apps.length) * 100) : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -63,7 +90,7 @@ export default function Dashboard() {
           <span className="section-title">APPLICATION PIPELINE</span>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn">SCAN PORTALS</button>
-            <button className="btn btn-primary">+ INGEST JD</button>
+            <Link href="/ingest" className="btn btn-primary" style={{ textDecoration: "none" }}>+ INGEST JD</Link>
           </div>
         </div>
 
@@ -76,7 +103,7 @@ export default function Dashboard() {
                 <span className="column-count">{counts[status]}</span>
               </div>
               <div className="column-body">
-                {applications.filter(a => a.status === status).map((app, i) => (
+                {apps.filter(a => a.status === status).map((app, i) => (
                   <AppCard app={app} key={i} />
                 ))}
                 {counts[status] === 0 && (
