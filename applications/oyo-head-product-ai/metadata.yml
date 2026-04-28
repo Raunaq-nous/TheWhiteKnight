@@ -1,0 +1,20 @@
+company: OYO
+role: Head of Product, AI
+seniority: senior
+function: product
+sector: hospitality
+location: Gurgaon
+remote: false
+source_url: oyo.com/careers
+captured_at: 2026-03-28
+status: rejected
+score: 7.1
+bucket: ai-product
+killed: true
+created_by: ingest-jd
+next_action: "Request feedback email"
+contacts:
+  - name: "Ritesh Agarwal"
+    role: HR
+    linkedin: ""
+    email: ""
