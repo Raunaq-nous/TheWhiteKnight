@@ -1,23 +1,34 @@
+import fs from "fs";
+import path from "path";
 import { Header, Footer } from "../components";
 
-const personaFiles = [
-  { name: "master-cv.md", status: "pending", desc: "Your canonical career data, all roles and achievements" },
-  { name: "voice-samples.md", status: "pending", desc: "Examples of your actual writing tone for outreach" },
-  { name: "github-projects.md", status: "pending", desc: "AI builds and open-source projects" },
-  { name: "certifications.md", status: "pending", desc: "Professional certifications" },
-  { name: "publications.md", status: "pending", desc: "IEEE papers and research publications" },
-  { name: "website-content.md", status: "pending", desc: "Portfolio site content snapshot" },
-];
-
-const resumeArchive = [
-  "Resume_Bain_ProjectLeader.md",
-  "Resume_OliverWyman_EngagementManager.md",
-  "Resume_talabat_SeniorPM_AI.md",
-  "Resume_KernelDAO_ChiefOfStaff.md",
-  "Resume_GE_Aerospace.md",
-];
-
 export default function PersonaPage() {
+  // Read persona files at build time
+  const personaDir = path.join(process.cwd(), "persona");
+  let coreFiles: string[] = [];
+  let resumes: string[] = [];
+  
+  try {
+    if (fs.existsSync(personaDir)) {
+      coreFiles = fs.readdirSync(personaDir).filter(f => f.endsWith(".md"));
+    }
+    const resumesDir = path.join(personaDir, "resumes");
+    if (fs.existsSync(resumesDir)) {
+      resumes = fs.readdirSync(resumesDir).filter(f => f.endsWith(".md") || f.endsWith(".docx") || f.endsWith(".pdf"));
+    }
+  } catch (e) {
+    console.error(e);
+  }
+
+  const expectedFiles = [
+    { name: "master-cv.md", desc: "Your canonical career data, all roles and achievements" },
+    { name: "voice-samples.md", desc: "Examples of your actual writing tone for outreach" },
+    { name: "github-projects.md", desc: "AI builds and open-source projects" },
+    { name: "certifications.md", desc: "Professional certifications" },
+    { name: "publications.md", desc: "IEEE papers and research publications" },
+    { name: "website-content.md", desc: "Portfolio site content snapshot" },
+  ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <Header />
@@ -33,20 +44,23 @@ export default function PersonaPage() {
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
               <div className="label" style={{ marginBottom: 16 }}>CORE PERSONA FILES</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {personaFiles.map(f => (
-                  <div key={f.name} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--border-light)" }}>
-                    <span style={{ color: f.status === "ready" ? "var(--success)" : "var(--text-tertiary)", fontSize: "0.75rem", marginTop: 2 }}>
-                      {f.status === "ready" ? "\u2713" : "\u25CB"}
-                    </span>
-                    <div>
-                      <div className="mono" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>{f.name}</div>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>{f.desc}</div>
+                {expectedFiles.map(f => {
+                  const isReady = coreFiles.includes(f.name);
+                  return (
+                    <div key={f.name} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--border-light)" }}>
+                      <span style={{ color: isReady ? "var(--success)" : "var(--text-tertiary)", fontSize: "0.75rem", marginTop: 2 }}>
+                        {isReady ? "\u2713" : "\u25CB"}
+                      </span>
+                      <div>
+                        <div className="mono" style={{ fontSize: "0.8125rem", marginBottom: 2 }}>{f.name}</div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>{f.desc}</div>
+                      </div>
+                      <span className={`pill ${isReady ? "pill-offer" : "pill-sourced"}`} style={{ marginLeft: "auto" }}>
+                        {isReady ? "READY" : "PENDING"}
+                      </span>
                     </div>
-                    <span className={`pill ${f.status === "ready" ? "pill-offer" : "pill-sourced"}`} style={{ marginLeft: "auto" }}>
-                      {f.status === "ready" ? "READY" : "PENDING"}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -55,23 +69,18 @@ export default function PersonaPage() {
           <div>
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
               <div className="label" style={{ marginBottom: 16 }}>RESUME ARCHIVE</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {resumeArchive.map(r => (
-                  <div key={r} className="mono" style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", padding: "4px 0" }}>
-                    {r}
-                  </div>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: "300px", overflowY: "auto" }}>
+                {resumes.length === 0 ? (
+                  <div className="mono" style={{ fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>No resumes found</div>
+                ) : (
+                  resumes.map(r => (
+                    <div key={r} className="mono" style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", padding: "4px 0" }}>
+                      {r}
+                    </div>
+                  ))
+                )}
               </div>
-              <div className="label" style={{ marginTop: 12, color: "var(--text-tertiary)" }}>{resumeArchive.length} VARIANTS</div>
-            </div>
-
-            <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 24 }}>
-              <div className="label" style={{ color: "var(--accent)", marginBottom: 12 }}>HOW TO POPULATE</div>
-              <div style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                <p style={{ marginBottom: 8 }}>Send your master CV to Antigravity and it will format it into <span className="mono">master-cv.md</span>.</p>
-                <p style={{ marginBottom: 8 }}>Define your target role buckets and contact info for <span className="mono">config/profile.yml</span>.</p>
-                <p>All persona files are User Layer: they are never overwritten by system updates.</p>
-              </div>
+              <div className="label" style={{ marginTop: 12, color: "var(--text-tertiary)" }}>{resumes.length} VARIANTS</div>
             </div>
           </div>
         </div>
