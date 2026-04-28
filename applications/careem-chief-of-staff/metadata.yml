@@ -1,0 +1,16 @@
+company: Careem
+role: Chief of Staff
+seniority: senior
+function: chief-of-staff
+sector: technology
+location: Dubai
+remote: true
+source_url: careem.com/careers
+captured_at: 2026-04-25
+status: sourced
+score: 7.8
+bucket: chief-of-staff
+killed: false
+created_by: ingest-jd
+next_action: "Review JD, decide to tailor"
+contacts: []
