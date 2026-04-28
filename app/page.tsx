@@ -13,7 +13,7 @@ function AppCard({ app }: { app: Application | typeof sampleData[0] }) {
       <div className="card-role">{app.role}</div>
       <div className="card-meta">
         <span className="card-location">{app.location}{app.remote ? " \u00B7 REMOTE" : ""}</span>
-        <StatusPill status={app.status as any} days={('days' in app) ? app.days : 0} />
+        <StatusPill status={app.status as any} days={app.days ?? 0} />
       </div>
       <div style={{ marginTop: 8 }}>
         <ScoreBar score={app.score} />
