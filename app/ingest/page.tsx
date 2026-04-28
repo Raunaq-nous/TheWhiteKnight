@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Header, Footer } from "../components";
 import { saveApplication, generateSlug, generateId, TargetBucket } from "../../lib/store";
 import { scoreJob } from "../../lib/scoring";
