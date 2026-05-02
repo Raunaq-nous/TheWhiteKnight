@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
 import { getApplications, Application } from "../../lib/store";
+import { STATUSES } from "../data";
 
 export default function ApplicationsPage() {
   const [apps, setApps] = useState<Application[]>([]);
@@ -30,6 +31,7 @@ export default function ApplicationsPage() {
         </div>
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", overflow: "hidden" }}>
+          {/* Header row */}
           <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 120px 100px", gap: 0, padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
             <span className="label">COMPANY</span>
             <span className="label">ROLE</span>

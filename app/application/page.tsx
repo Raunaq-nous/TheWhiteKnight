@@ -23,6 +23,7 @@ function ApplicationDetail() {
 
   useEffect(() => {
     if (!slug) return;
+    // Try localStorage first, fall back to sample data
     let found = getApplication(slug);
     if (!found) {
       const sample = (sampleData as any[]).find(a => a.slug === slug);
@@ -71,12 +72,14 @@ function ApplicationDetail() {
 
   return (
     <main className="container" style={{ paddingTop: 32, paddingBottom: 64, flex: 1 }}>
+      {/* Breadcrumb */}
       <div style={{ marginBottom: 24 }}>
         <Link href="/" className="label" style={{ color: "var(--text-tertiary)", textDecoration: "none" }}>
           {"←"} PIPELINE
         </Link>
       </div>
 
+      {/* Title block */}
       <div style={{ borderBottom: "1px solid var(--border)", paddingBottom: 24, marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
@@ -92,6 +95,7 @@ function ApplicationDetail() {
               <span className="label">{app.bucket}</span>
             </div>
           </div>
+          {/* Status changer */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {STATUSES.map(s => (
               <button
@@ -112,8 +116,11 @@ function ApplicationDetail() {
         </div>
       </div>
 
+      {/* Two-column layout */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+        {/* Left */}
         <div>
+          {/* Score */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 12 }}>MATCH SCORE</div>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -130,6 +137,7 @@ function ApplicationDetail() {
             </div>
           </div>
 
+          {/* Next action */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div className="label">NEXT ACTION</div>
@@ -139,8 +147,12 @@ function ApplicationDetail() {
             </div>
             {editingNextAction ? (
               <div style={{ display: "flex", gap: 8 }}>
-                <input type="text" value={nextActionText} onChange={e => setNextActionText(e.target.value)}
-                  style={{ flex: 1, padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }} />
+                <input
+                  type="text"
+                  value={nextActionText}
+                  onChange={e => setNextActionText(e.target.value)}
+                  style={{ flex: 1, padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}
+                />
                 <button className="btn btn-primary" style={{ padding: "8px 16px" }} onClick={handleSaveNextAction}>SAVE</button>
               </div>
             ) : (
@@ -148,6 +160,7 @@ function ApplicationDetail() {
             )}
           </div>
 
+          {/* Actions */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 16 }}>ACTIONS</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -161,6 +174,7 @@ function ApplicationDetail() {
             </div>
           </div>
 
+          {/* Notes */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <div className="label">NOTES</div>
@@ -173,8 +187,12 @@ function ApplicationDetail() {
             </div>
             {editingNote ? (
               <div>
-                <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={6}
-                  style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem", resize: "vertical" }} />
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  rows={6}
+                  style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem", resize: "vertical" }}
+                />
                 <button className="btn btn-primary" style={{ marginTop: 8, padding: "8px 16px" }} onClick={handleSaveNote}>SAVE NOTES</button>
               </div>
             ) : (
@@ -184,6 +202,7 @@ function ApplicationDetail() {
             )}
           </div>
 
+          {/* JD extract */}
           {app.jdParsed && (
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
               <div className="label" style={{ marginBottom: 12 }}>AI-EXTRACTED JD INSIGHTS</div>
@@ -206,13 +225,16 @@ function ApplicationDetail() {
             </div>
           )}
 
+          {/* Timeline */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
             <div className="label" style={{ marginBottom: 16 }}>TIMELINE</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", gap: 12 }}>
                 <span className="mono" style={{ color: "var(--text-tertiary)", minWidth: 90, fontSize: "0.75rem" }}>{app.capturedAt}</span>
                 <span className="mono" style={{ color: "var(--status-sourced)", fontSize: "0.75rem" }}>SOURCED</span>
-                <span style={{ color: "var(--text-secondary)", fontSize: "0.75rem" }}>{app.sourceUrl ? `from ${app.sourceUrl}` : "JD ingested"}</span>
+                <span style={{ color: "var(--text-secondary)", fontSize: "0.75rem" }}>
+                  {app.sourceUrl ? `from ${app.sourceUrl}` : "JD ingested"}
+                </span>
               </div>
               {app.status !== "sourced" && (
                 <div style={{ display: "flex", gap: 12 }}>
@@ -225,7 +247,9 @@ function ApplicationDetail() {
           </div>
         </div>
 
+        {/* Right */}
         <div>
+          {/* Metadata */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 16 }}>METADATA</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -246,6 +270,7 @@ function ApplicationDetail() {
             </div>
           </div>
 
+          {/* Contacts */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 12 }}>CONTACTS</div>
             {(app.contacts ?? []).length > 0 ? (
@@ -259,6 +284,7 @@ function ApplicationDetail() {
             )}
           </div>
 
+          {/* Source URL */}
           {app.sourceUrl && (
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
               <div className="label" style={{ marginBottom: 8 }}>SOURCE</div>
