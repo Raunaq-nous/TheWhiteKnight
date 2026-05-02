@@ -26,14 +26,14 @@ export function Header() {
   return (
     <header className="header">
       <div className="container header-inner">
-        <div className="logo"><Link href="/TheWhiteKnight/" style={{color:"inherit",textDecoration:"none"}}>CAREER<span>OS</span></Link></div>
+        <div className="logo"><Link href="/" style={{color:"inherit",textDecoration:"none"}}>CAREER<span>OS</span></Link></div>
         <nav>
           <ul className="nav">
-            <li><Link href="/TheWhiteKnight/">PIPELINE</Link></li>
-            <li><Link href="/TheWhiteKnight/applications/">APPLICATIONS</Link></li>
-            <li><Link href="/TheWhiteKnight/persona/">PERSONA</Link></li>
-            <li><Link href="/TheWhiteKnight/config/">CONFIG</Link></li>
-            <li><Link href="/TheWhiteKnight/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
+            <li><Link href="/">PIPELINE</Link></li>
+            <li><Link href="/applications/">APPLICATIONS</Link></li>
+            <li><Link href="/persona/">PERSONA</Link></li>
+            <li><Link href="/config/">CONFIG</Link></li>
+            <li><Link href="/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
           </ul>
         </nav>
       </div>
