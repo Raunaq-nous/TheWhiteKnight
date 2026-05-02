@@ -50,7 +50,17 @@ html, body {
 
 .mono { font-family: var(--font-mono); font-size: 0.875rem; }
 
-.container { max-width: 1200px; margin: 0 auto; padding: 0 32px; }
+.container { max-width: 1800px; margin: 0 auto; padding: 0 48px; }
+.container-narrow { max-width: 880px; margin: 0 auto; padding: 0 32px; }
+.container-wide { max-width: none; margin: 0; padding: 0 48px; }
+
+@media (max-width: 1024px) {
+  .container { padding: 0 32px; }
+  .container-wide { padding: 0 32px; }
+}
+@media (max-width: 640px) {
+  .container, .container-narrow, .container-wide { padding: 0 16px; }
+}
 
 .header {
   border-bottom: 1px solid var(--border);
@@ -297,5 +307,73 @@ html, body {
 @media (max-width: 768px) {
   .stats-bar { grid-template-columns: repeat(3, 1fr); }
   .pipeline { grid-template-columns: 1fr; }
-  .container { padding: 0 16px; }
+}
+
+/* Full-width section helpers */
+.page-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.page-main { flex: 1; padding-top: 32px; padding-bottom: 64px; }
+
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.surface-card-accent {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+/* Skill builder visualization */
+.skill-bar-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.skill-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease-out;
+}
+.skill-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: border-color var(--transition), background var(--transition);
+}
+.skill-card:hover {
+  border-color: var(--text-tertiary);
+}
+.priority-critical { border-left: 3px solid var(--error); }
+.priority-high { border-left: 3px solid var(--accent); }
+.priority-medium { border-left: 3px solid var(--info); }
+.priority-low { border-left: 3px solid var(--border); }
+
+.level-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+}
+.level-badge-novice { color: var(--text-tertiary); border-color: var(--border); }
+.level-badge-intermediate { color: var(--info); border-color: var(--info); }
+.level-badge-advanced { color: var(--accent); border-color: var(--accent); }
+.level-badge-expert { color: var(--success); border-color: var(--success); }
+
+/* Pipeline layout — wider */
+.pipeline-wide {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
-import { getApplication, updateApplication, deleteApplication, getApiKey, Application } from "../../lib/store";
+import { getApplication, updateApplication, deleteApplication, Application } from "../../lib/store";
 import { getProfile } from "../../lib/profile";
 import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { applications as sampleData } from "../data";
@@ -72,11 +72,6 @@ function ApplicationDetail() {
   };
 
   const handleGenerate = async (action: GenerationAction) => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setGenError("OpenAI API Key is missing. Add it in Settings.");
-      return;
-    }
     const profile = getProfile();
     if (!profile) {
       setGenError("No profile found. Set up your profile first.");
@@ -88,17 +83,17 @@ function ApplicationDetail() {
     setAiOutput(null);
     try {
       if (action === "skill-gap") {
-        const result = await generateSkillGap(profile, app, apiKey);
+        const result = await generateSkillGap(profile, app);
         setSkillGap(result);
         setAiOutput(null);
       } else {
         let content = "";
-        if (action === "resume") content = await generateTailoredResume(profile, app, apiKey);
-        else if (action === "cover-letter") content = await generateCoverLetter(profile, app, apiKey);
-        else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app, apiKey);
-        else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app, apiKey);
-        else if (action === "outreach-hm") content = await generateHMOutreach(profile, app, apiKey);
-        else if (action === "linkedin-dm") content = await generateLinkedInDM(profile, app, apiKey);
+        if (action === "resume") content = await generateTailoredResume(profile, app);
+        else if (action === "cover-letter") content = await generateCoverLetter(profile, app);
+        else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app);
+        else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app);
+        else if (action === "outreach-hm") content = await generateHMOutreach(profile, app);
+        else if (action === "linkedin-dm") content = await generateLinkedInDM(profile, app);
         setSkillGap(null);
         setAiOutput({ action, content });
       }

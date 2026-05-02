@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "../components";
-import { saveApplication, generateSlug, generateId, TargetBucket, getApiKey } from "../../lib/store";
+import { saveApplication, generateSlug, generateId, TargetBucket } from "../../lib/store";
 import { scoreJobWithAI } from "../../lib/scoring";
 
 const MOCK_BUCKETS: TargetBucket[] = [
@@ -38,39 +38,18 @@ const MOCK_BUCKETS: TargetBucket[] = [
   }
 ];
 
-async function extractTextFromImage(base64: string, mimeType: string, apiKey: string): Promise<string> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+async function extractTextFromImage(base64: string, mimeType: string): Promise<string> {
+  const response = await fetch("/api/extract-jd", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [{
-        role: "user",
-        content: [
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64}`, detail: "high" }
-          },
-          {
-            type: "text",
-            text: "Extract the full text content of this job description image exactly as written. Output only the raw text, no commentary."
-          }
-        ]
-      }],
-      max_tokens: 3000
-    })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base64, mimeType }),
   });
-
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Vision extraction failed: ${response.status} — ${err.slice(0, 200)}`);
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Vision extraction failed: ${response.status}`);
   }
-
-  const result = await response.json();
-  return result.choices[0].message.content.trim();
+  const { text } = await response.json();
+  return text;
 }
 
 function readFileAsText(file: File): Promise<string> {
@@ -129,15 +108,10 @@ export default function IngestPage() {
     }
 
     if (IMAGE_TYPES.includes(file.type)) {
-      const apiKey = getApiKey();
-      if (!apiKey) {
-        setErrorMsg("OpenAI API Key needed to extract text from images. Add it in Settings.");
-        return;
-      }
       setIsExtracting(true);
       try {
         const base64 = await readFileAsBase64(file);
-        const text = await extractTextFromImage(base64, file.type, apiKey);
+        const text = await extractTextFromImage(base64, file.type);
         setJdText(text);
       } catch (e: any) {
         setErrorMsg(e.message || "Image extraction failed.");
@@ -165,16 +139,10 @@ export default function IngestPage() {
   };
 
   const handleScore = async () => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setErrorMsg("OpenAI API Key is missing. Please add it in Settings.");
-      return;
-    }
-
     setIsScoring(true);
     setErrorMsg("");
     try {
-      const result = await scoreJobWithAI(jdText, company, role, location, seniority, sector, MOCK_BUCKETS, apiKey);
+      const result = await scoreJobWithAI(jdText, company, role, location, seniority, sector, MOCK_BUCKETS);
       setScoreResult(result);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to score job.");

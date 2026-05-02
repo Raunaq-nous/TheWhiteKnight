@@ -32,6 +32,7 @@ export function Header() {
             <li><Link href="/">PIPELINE</Link></li>
             <li><Link href="/profile/">PROFILE</Link></li>
             <li><Link href="/applications/">APPLICATIONS</Link></li>
+            <li><Link href="/skills/">SKILL BUILDER</Link></li>
             <li><Link href="/persona/">PERSONA</Link></li>
             <li><Link href="/config/">CONFIG</Link></li>
             <li><Link href="/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
