@@ -30,6 +30,7 @@ export function Header() {
         <nav>
           <ul className="nav">
             <li><Link href="/">PIPELINE</Link></li>
+            <li><Link href="/profile/">PROFILE</Link></li>
             <li><Link href="/applications/">APPLICATIONS</Link></li>
             <li><Link href="/persona/">PERSONA</Link></li>
             <li><Link href="/config/">CONFIG</Link></li>
