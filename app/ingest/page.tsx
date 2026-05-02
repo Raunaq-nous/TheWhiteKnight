@@ -103,7 +103,7 @@ export default function IngestPage() {
     };
     
     saveApplication(newApp);
-    router.push(`/TheWhiteKnight/`);
+    router.push(`/`);
   };
 
   return (
@@ -112,14 +112,14 @@ export default function IngestPage() {
       <main className="container" style={{ paddingTop: 24, paddingBottom: 64, flex: 1, maxWidth: 800 }}>
         <div className="section-header">
           <span className="section-title">INGEST NEW JOB</span>
-          <Link href="/TheWhiteKnight/" className="btn" style={{ textDecoration: "none" }}>CANCEL</Link>
+          <Link href="/" className="btn" style={{ textDecoration: "none" }}>CANCEL</Link>
         </div>
 
         {errorMsg && (
           <div style={{ background: "rgba(255,50,50,0.1)", border: "1px solid var(--error)", padding: 16, borderRadius: "var(--radius)", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>{errorMsg}</span>
             {errorMsg.includes("API Key") && (
-              <Link href="/TheWhiteKnight/settings/" className="btn" style={{ borderColor: "var(--error)", color: "var(--error)", textDecoration: "none" }}>GO TO SETTINGS</Link>
+              <Link href="/settings/" className="btn" style={{ borderColor: "var(--error)", color: "var(--error)", textDecoration: "none" }}>GO TO SETTINGS</Link>
             )}
           </div>
         )}
