@@ -77,6 +77,30 @@ export function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
 
+export function getApplication(slug: string): Application | undefined {
+  return getApplications().find(a => a.slug === slug);
+}
+
+export function updateApplication(id: string, changes: Partial<Application>) {
+  if (typeof window === "undefined") return;
+  const raw = localStorage.getItem("careeros_apps");
+  const apps: Application[] = raw ? JSON.parse(raw) : [];
+  const idx = apps.findIndex(a => a.id === id);
+  if (idx >= 0) {
+    apps[idx] = { ...apps[idx], ...changes, updatedAt: new Date().toISOString() };
+    localStorage.setItem("careeros_apps", JSON.stringify(apps));
+    window.dispatchEvent(new Event("careeros-data-change"));
+  }
+}
+
+export function deleteApplication(id: string) {
+  if (typeof window === "undefined") return;
+  const raw = localStorage.getItem("careeros_apps");
+  const apps: Application[] = raw ? JSON.parse(raw) : [];
+  localStorage.setItem("careeros_apps", JSON.stringify(apps.filter(a => a.id !== id)));
+  window.dispatchEvent(new Event("careeros-data-change"));
+}
+
 export function getApiKey(): string {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("careeros_openai_key") || "";

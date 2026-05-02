@@ -8,7 +8,7 @@ import { getApplications, saveApplication, Application } from "../lib/store";
 
 function AppCard({ app }: { app: Application | typeof sampleData[0] }) {
   return (
-    <Link href={`/application/${app.slug}/`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+    <Link href={`/application/?slug=${app.slug}`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
       <div className="card-company">{app.company}</div>
       <div className="card-role">{app.role}</div>
       <div className="card-meta">
