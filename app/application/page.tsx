@@ -4,7 +4,9 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
-import { getApplication, updateApplication, deleteApplication, Application } from "../../lib/store";
+import { getApplication, updateApplication, deleteApplication, getApiKey, Application } from "../../lib/store";
+import { getProfile } from "../../lib/profile";
+import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, GenerationAction } from "../../lib/generate";
 import { applications as sampleData } from "../data";
 
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -20,6 +22,10 @@ function ApplicationDetail() {
   const [editingNextAction, setEditingNextAction] = useState(false);
   const [nextActionText, setNextActionText] = useState("");
   const [saved, setSaved] = useState(false);
+  const [generating, setGenerating] = useState<GenerationAction | null>(null);
+  const [aiOutput, setAiOutput] = useState<{ action: GenerationAction; content: string } | null>(null);
+  const [genError, setGenError] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -62,6 +68,42 @@ function ApplicationDetail() {
     updateApplication(app.id, { nextAction: nextActionText });
     setApp(prev => prev ? { ...prev, nextAction: nextActionText } : prev);
     setEditingNextAction(false);
+  };
+
+  const handleGenerate = async (action: GenerationAction) => {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      setGenError("OpenAI API Key is missing. Add it in Settings.");
+      return;
+    }
+    const profile = getProfile();
+    if (!profile) {
+      setGenError("No profile found. Set up your profile first.");
+      return;
+    }
+    if (!app) return;
+    setGenerating(action);
+    setGenError("");
+    setAiOutput(null);
+    try {
+      let content = "";
+      if (action === "resume") content = await generateTailoredResume(profile, app, apiKey);
+      else if (action === "cover-letter") content = await generateCoverLetter(profile, app, apiKey);
+      else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app, apiKey);
+      else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app, apiKey);
+      setAiOutput({ action, content });
+    } catch (e: any) {
+      setGenError(e.message || "Generation failed.");
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!aiOutput) return;
+    navigator.clipboard.writeText(aiOutput.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleArchive = () => {
@@ -164,15 +206,55 @@ function ApplicationDetail() {
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 16 }}>ACTIONS</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <button className="btn btn-primary">TAILOR RESUME</button>
-              <button className="btn">COVER LETTER</button>
-              <button className="btn">EXECUTIVE SUMMARY</button>
-              <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>PROBLEM SOLVER PITCH</button>
-              <button className="btn">OUTREACH: HM</button>
-              <button className="btn">LINKEDIN DM</button>
+              <button className="btn btn-primary" onClick={() => handleGenerate("resume")} disabled={!!generating}>
+                {generating === "resume" ? "GENERATING..." : "TAILOR RESUME"}
+              </button>
+              <button className="btn" onClick={() => handleGenerate("cover-letter")} disabled={!!generating}>
+                {generating === "cover-letter" ? "GENERATING..." : "COVER LETTER"}
+              </button>
+              <button className="btn" onClick={() => handleGenerate("executive-summary")} disabled={!!generating}>
+                {generating === "executive-summary" ? "GENERATING..." : "EXECUTIVE SUMMARY"}
+              </button>
+              <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => handleGenerate("problem-solver")} disabled={!!generating}>
+                {generating === "problem-solver" ? "GENERATING..." : "PROBLEM SOLVER PITCH"}
+              </button>
               <button className="btn" style={{ borderColor: "var(--error)", color: "var(--error)" }} onClick={handleArchive}>ARCHIVE</button>
             </div>
+            {genError && (
+              <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{genError}</span>
+                {genError.includes("Settings") && (
+                  <Link href="/settings/" className="btn" style={{ borderColor: "var(--error)", color: "var(--error)", textDecoration: "none", fontSize: "0.625rem", padding: "4px 8px" }}>SETTINGS</Link>
+                )}
+                {genError.includes("profile") && (
+                  <Link href="/profile/" className="btn" style={{ textDecoration: "none", fontSize: "0.625rem", padding: "4px 8px" }}>SET UP PROFILE</Link>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* AI Output Panel */}
+          {aiOutput && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div className="label" style={{ color: "var(--accent)" }}>
+                  {aiOutput.action === "resume" && "TAILORED RESUME"}
+                  {aiOutput.action === "cover-letter" && "COVER LETTER"}
+                  {aiOutput.action === "executive-summary" && "EXECUTIVE SUMMARY"}
+                  {aiOutput.action === "problem-solver" && "PROBLEM SOLVER PITCH"}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={handleCopy}>
+                    {copied ? "COPIED!" : "COPY"}
+                  </button>
+                  <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={() => setAiOutput(null)}>CLOSE</button>
+                </div>
+              </div>
+              <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.7, margin: 0, maxHeight: 600, overflowY: "auto" }}>
+                {aiOutput.content}
+              </pre>
+            </div>
+          )}
 
           {/* Notes */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
