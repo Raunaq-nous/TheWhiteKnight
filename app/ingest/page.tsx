@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "../components";
@@ -38,8 +38,67 @@ const MOCK_BUCKETS: TargetBucket[] = [
   }
 ];
 
+async function extractTextFromImage(base64: string, mimeType: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "image_url",
+            image_url: { url: `data:${mimeType};base64,${base64}`, detail: "high" }
+          },
+          {
+            type: "text",
+            text: "Extract the full text content of this job description image exactly as written. Output only the raw text, no commentary."
+          }
+        ]
+      }],
+      max_tokens: 3000
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Vision extraction failed: ${response.status} — ${err.slice(0, 200)}`);
+  }
+
+  const result = await response.json();
+  return result.choices[0].message.content.trim();
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target?.result as string ?? "");
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsText(file);
+  });
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target?.result as string ?? "";
+      // Strip the data URL prefix, keep only base64 payload
+      resolve(result.split(",")[1] ?? "");
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function IngestPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [jdText, setJdText] = useState("");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
@@ -48,10 +107,62 @@ export default function IngestPage() {
   const [sector, setSector] = useState("");
   const [remote, setRemote] = useState(false);
   const [sourceUrl, setSourceUrl] = useState("");
-  
+
   const [scoreResult, setScoreResult] = useState<any>(null);
   const [isScoring, setIsScoring] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedFileName, setExtractedFileName] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [dragOver, setDragOver] = useState(false);
+
+  const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+  const TEXT_TYPES = ["text/plain", "text/markdown"];
+
+  const handleFile = async (file: File) => {
+    setErrorMsg("");
+    setExtractedFileName(file.name);
+
+    if (TEXT_TYPES.includes(file.type) || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
+      const text = await readFileAsText(file);
+      setJdText(text);
+      return;
+    }
+
+    if (IMAGE_TYPES.includes(file.type)) {
+      const apiKey = getApiKey();
+      if (!apiKey) {
+        setErrorMsg("OpenAI API Key needed to extract text from images. Add it in Settings.");
+        return;
+      }
+      setIsExtracting(true);
+      try {
+        const base64 = await readFileAsBase64(file);
+        const text = await extractTextFromImage(base64, file.type, apiKey);
+        setJdText(text);
+      } catch (e: any) {
+        setErrorMsg(e.message || "Image extraction failed.");
+        setExtractedFileName("");
+      } finally {
+        setIsExtracting(false);
+      }
+      return;
+    }
+
+    setErrorMsg(`Unsupported file type: ${file.type || file.name.split(".").pop()}. Use .txt, .md, or an image (PNG, JPG, WEBP).`);
+    setExtractedFileName("");
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
 
   const handleScore = async () => {
     const apiKey = getApiKey();
@@ -74,7 +185,7 @@ export default function IngestPage() {
 
   const handleSave = () => {
     if (!scoreResult) return;
-    
+
     const newApp = {
       id: generateId(),
       slug: generateSlug(company, role),
@@ -101,7 +212,7 @@ export default function IngestPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    
+
     saveApplication(newApp);
     router.push(`/`);
   };
@@ -118,20 +229,19 @@ export default function IngestPage() {
         {errorMsg && (
           <div style={{ background: "rgba(255,50,50,0.1)", border: "1px solid var(--error)", padding: 16, borderRadius: "var(--radius)", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>{errorMsg}</span>
-            {errorMsg.includes("API Key") && (
+            {errorMsg.includes("Settings") && (
               <Link href="/settings/" className="btn" style={{ borderColor: "var(--error)", color: "var(--error)", textDecoration: "none" }}>GO TO SETTINGS</Link>
             )}
           </div>
         )}
 
         <div style={{ background: "var(--surface)", padding: 24, borderRadius: "var(--radius)", border: "1px solid var(--border)" }}>
-          
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <label className="label" style={{ display: "block", marginBottom: 8 }}>COMPANY</label>
               <input type="text" className="input" value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Anthropic" style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} />
             </div>
-            
+
             <div>
               <label className="label" style={{ display: "block", marginBottom: 8 }}>ROLE TITLE</label>
               <input type="text" className="input" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. AI Product Manager" style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} />
@@ -156,11 +266,76 @@ export default function IngestPage() {
             </div>
 
             <div>
-              <label className="label" style={{ display: "block", marginBottom: 8 }}>JOB DESCRIPTION (PASTE FULL TEXT)</label>
-              <textarea value={jdText} onChange={e => setJdText(e.target.value)} rows={10} style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical" }} />
+              <label className="label" style={{ display: "block", marginBottom: 8 }}>SOURCE URL (OPTIONAL)</label>
+              <input type="text" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://..." style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} />
             </div>
 
-            <button className="btn btn-primary" onClick={handleScore} disabled={!company || !role || !jdText || isScoring} style={{ width: "100%", padding: 12, justifyContent: "center" }}>
+            {/* JD Input — upload or paste */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <label className="label">JOB DESCRIPTION</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {extractedFileName && (
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--accent)" }}>
+                      {isExtracting ? "EXTRACTING..." : `FROM: ${extractedFileName}`}
+                    </span>
+                  )}
+                  <button
+                    className="btn"
+                    style={{ fontSize: "0.625rem", padding: "4px 10px" }}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isExtracting}
+                  >
+                    UPLOAD FILE
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,.md,image/png,image/jpeg,image/webp,image/gif"
+                    onChange={handleFileInput}
+                    style={{ display: "none" }}
+                  />
+                </div>
+              </div>
+
+              {/* Drop zone */}
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                style={{
+                  border: `1px dashed ${dragOver ? "var(--accent)" : "var(--border)"}`,
+                  borderRadius: "var(--radius)",
+                  padding: isExtracting ? 24 : 0,
+                  transition: "border-color 0.15s",
+                  background: dragOver ? "rgba(var(--accent-rgb, 255,165,0), 0.05)" : "transparent"
+                }}
+              >
+                {isExtracting ? (
+                  <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+                    EXTRACTING TEXT FROM IMAGE VIA AI...
+                  </div>
+                ) : (
+                  <textarea
+                    value={jdText}
+                    onChange={e => setJdText(e.target.value)}
+                    rows={10}
+                    placeholder="Paste JD text here, or drag and drop a .txt file or screenshot above"
+                    style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical", display: "block" }}
+                  />
+                )}
+              </div>
+              <div className="label" style={{ marginTop: 6, fontSize: "0.6rem", color: "var(--text-tertiary)" }}>
+                Supports: .txt, .md, PNG, JPG, WEBP (screenshots). Images require OpenAI API key.
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={handleScore}
+              disabled={!company || !role || !jdText || isScoring || isExtracting}
+              style={{ width: "100%", padding: 12, justifyContent: "center" }}
+            >
               {isScoring ? "AI IS ANALYZING & SCORING..." : "SCORE JOB AGAINST PERSONA WITH AI"}
             </button>
           </div>
@@ -168,7 +343,7 @@ export default function IngestPage() {
           {scoreResult && (
             <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
               <div className="section-title" style={{ marginBottom: 16 }}>AI SCORE RESULT</div>
-              
+
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border)", marginBottom: 16 }}>
                 <div>
                   <div style={{ fontSize: "2rem", fontWeight: 700, color: scoreResult.totalScore >= 8.5 ? "var(--success)" : scoreResult.totalScore >= 7.0 ? "var(--accent)" : "var(--text-secondary)" }}>
@@ -181,12 +356,12 @@ export default function IngestPage() {
                   <div style={{ color: "var(--text-primary)" }}>{scoreResult.bucketName}</div>
                 </div>
               </div>
-              
+
               {scoreResult.parsed && (
                 <div style={{ background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border-light)", marginBottom: 16 }}>
                   <div className="label" style={{ marginBottom: 8 }}>AI EXTRACTED REQUIREMENTS</div>
                   <ul style={{ fontSize: "0.875rem", margin: 0, paddingLeft: 20, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                    {scoreResult.parsed.keyRequirements?.slice(0,3).map((r: string, i: number) => <li key={i}>{r}</li>)}
+                    {scoreResult.parsed.keyRequirements?.slice(0, 3).map((r: string, i: number) => <li key={i}>{r}</li>)}
                   </ul>
                   {scoreResult.parsed.redFlags?.length > 0 && (
                     <div style={{ marginTop: 8 }}>
@@ -211,7 +386,6 @@ export default function IngestPage() {
               </button>
             </div>
           )}
-
         </div>
       </main>
       <Footer />

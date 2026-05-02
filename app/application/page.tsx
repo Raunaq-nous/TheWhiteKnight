@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
 import { getApplication, updateApplication, deleteApplication, getApiKey, Application } from "../../lib/store";
 import { getProfile } from "../../lib/profile";
-import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, GenerationAction } from "../../lib/generate";
+import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { applications as sampleData } from "../data";
 
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -24,6 +24,7 @@ function ApplicationDetail() {
   const [saved, setSaved] = useState(false);
   const [generating, setGenerating] = useState<GenerationAction | null>(null);
   const [aiOutput, setAiOutput] = useState<{ action: GenerationAction; content: string } | null>(null);
+  const [skillGap, setSkillGap] = useState<SkillGapResult | null>(null);
   const [genError, setGenError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -86,12 +87,19 @@ function ApplicationDetail() {
     setGenError("");
     setAiOutput(null);
     try {
-      let content = "";
-      if (action === "resume") content = await generateTailoredResume(profile, app, apiKey);
-      else if (action === "cover-letter") content = await generateCoverLetter(profile, app, apiKey);
-      else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app, apiKey);
-      else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app, apiKey);
-      setAiOutput({ action, content });
+      if (action === "skill-gap") {
+        const result = await generateSkillGap(profile, app, apiKey);
+        setSkillGap(result);
+        setAiOutput(null);
+      } else {
+        let content = "";
+        if (action === "resume") content = await generateTailoredResume(profile, app, apiKey);
+        else if (action === "cover-letter") content = await generateCoverLetter(profile, app, apiKey);
+        else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app, apiKey);
+        else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app, apiKey);
+        setSkillGap(null);
+        setAiOutput({ action, content });
+      }
     } catch (e: any) {
       setGenError(e.message || "Generation failed.");
     } finally {
@@ -218,6 +226,9 @@ function ApplicationDetail() {
               <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => handleGenerate("problem-solver")} disabled={!!generating}>
                 {generating === "problem-solver" ? "GENERATING..." : "PROBLEM SOLVER PITCH"}
               </button>
+              <button className="btn" onClick={() => handleGenerate("skill-gap")} disabled={!!generating}>
+                {generating === "skill-gap" ? "ANALYZING..." : "SKILL GAP"}
+              </button>
               <button className="btn" style={{ borderColor: "var(--error)", color: "var(--error)" }} onClick={handleArchive}>ARCHIVE</button>
             </div>
             {genError && (
@@ -283,6 +294,79 @@ function ApplicationDetail() {
               </p>
             )}
           </div>
+
+          {/* Skill Gap Panel */}
+          {skillGap && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div className="label">SKILL GAP ANALYSIS</div>
+                <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={() => setSkillGap(null)}>CLOSE</button>
+              </div>
+
+              {/* Readiness bar */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span className="label" style={{ fontSize: "0.625rem" }}>ROLE READINESS</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", color: skillGap.overallReadiness >= 75 ? "var(--success)" : skillGap.overallReadiness >= 50 ? "var(--accent)" : "var(--error)" }}>
+                    {skillGap.overallReadiness}%
+                  </span>
+                </div>
+                <div style={{ height: 4, background: "var(--border)", borderRadius: 2 }}>
+                  <div style={{ height: "100%", borderRadius: 2, width: `${skillGap.overallReadiness}%`, background: skillGap.overallReadiness >= 75 ? "var(--success)" : skillGap.overallReadiness >= 50 ? "var(--accent)" : "var(--error)", transition: "width 0.5s ease" }} />
+                </div>
+                <p style={{ marginTop: 8, fontSize: "0.8125rem", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{skillGap.headline}</p>
+              </div>
+
+              {skillGap.strongMatches.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div className="label" style={{ fontSize: "0.625rem", color: "var(--success)", marginBottom: 8 }}>STRONG MATCHES ({skillGap.strongMatches.length})</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {skillGap.strongMatches.map((m, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, fontSize: "0.8125rem" }}>
+                        <span style={{ color: "var(--success)", flexShrink: 0 }}>✓</span>
+                        <div>
+                          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{m.skill}</span>
+                          <span style={{ color: "var(--text-tertiary)" }}> — {m.evidence}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {skillGap.partialMatches.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div className="label" style={{ fontSize: "0.625rem", color: "var(--accent)", marginBottom: 8 }}>PARTIAL MATCHES ({skillGap.partialMatches.length})</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {skillGap.partialMatches.map((m, i) => (
+                      <div key={i} style={{ borderLeft: "2px solid var(--accent)", paddingLeft: 10, fontSize: "0.8125rem" }}>
+                        <div style={{ color: "var(--text-primary)", fontWeight: 500 }}>{m.skill}</div>
+                        <div style={{ color: "var(--text-tertiary)", fontSize: "0.75rem" }}>Gap: {m.gap}</div>
+                        <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem" }}>Fix: {m.suggestion}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {skillGap.missingSkills.length > 0 && (
+                <div>
+                  <div className="label" style={{ fontSize: "0.625rem", color: "var(--error)", marginBottom: 8 }}>GAPS TO ADDRESS ({skillGap.missingSkills.length})</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {skillGap.missingSkills.map((m, i) => (
+                      <div key={i} style={{ borderLeft: `2px solid ${m.priority === "high" ? "var(--error)" : m.priority === "medium" ? "var(--accent)" : "var(--border)"}`, paddingLeft: 10, fontSize: "0.8125rem" }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>{m.skill}</span>
+                          <span className="label" style={{ fontSize: "0.5rem", color: m.priority === "high" ? "var(--error)" : "var(--text-tertiary)" }}>{m.priority.toUpperCase()}</span>
+                        </div>
+                        <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", marginTop: 2 }}>{m.suggestion}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* JD extract */}
           {app.jdParsed && (

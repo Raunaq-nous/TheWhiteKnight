@@ -1,7 +1,15 @@
 import { Profile } from "./profile";
 import { Application } from "./store";
 
-export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver";
+export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap";
+
+export type SkillGapResult = {
+  strongMatches: { skill: string; evidence: string }[];
+  partialMatches: { skill: string; gap: string; suggestion: string }[];
+  missingSkills: { skill: string; priority: "high" | "medium" | "low"; suggestion: string }[];
+  overallReadiness: number;
+  headline: string;
+};
 
 async function callOpenAI(prompt: string, apiKey: string, temperature = 0.7): Promise<string> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -271,4 +279,47 @@ Generate now:
 `;
 
   return callOpenAI(prompt, apiKey, 0.75);
+}
+
+export async function generateSkillGap(profile: Profile, app: Application, apiKey: string): Promise<SkillGapResult> {
+  const profileCtx = buildProfileContext(profile);
+  const jdCtx = buildJDContext(app);
+
+  const prompt = `
+You are a career coach doing a skill gap analysis for ${profile.name} applying to the ${app.role} role at ${app.company}.
+
+${profileCtx}
+
+---
+
+${jdCtx}
+
+---
+
+TASK: Analyze how well this candidate's skills and experience match this specific role. Produce a structured JSON skill gap report.
+
+Return ONLY raw JSON (no markdown, no backticks):
+{
+  "strongMatches": [
+    { "skill": "string — the JD requirement or skill", "evidence": "string — specific experience entry or project that proves this" }
+  ],
+  "partialMatches": [
+    { "skill": "string — the requirement", "gap": "string — what is missing or shallow", "suggestion": "string — how to address or frame it" }
+  ],
+  "missingSkills": [
+    { "skill": "string — the requirement not met", "priority": "high|medium|low", "suggestion": "string — how to acquire or work around it" }
+  ],
+  "overallReadiness": number between 0 and 100,
+  "headline": "string — one sentence summary of fit, direct and honest"
+}
+
+Be honest and specific. Use actual data from the profile, not generic statements. Limit to the most important 3-5 items per category.
+`;
+
+  const raw = await callOpenAI(prompt, apiKey, 0.2);
+  let cleaned = raw.trim();
+  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+  if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+  return JSON.parse(cleaned.trim()) as SkillGapResult;
 }
