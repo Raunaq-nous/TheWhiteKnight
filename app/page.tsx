@@ -8,11 +8,11 @@ import { getApplications, saveApplication, Application } from "../lib/store";
 
 function AppCard({ app }: { app: Application | typeof sampleData[0] }) {
   return (
-    <Link href={`/application/${app.slug}/`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+    <Link href={`/application/?slug=${app.slug}`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
       <div className="card-company">{app.company}</div>
       <div className="card-role">{app.role}</div>
       <div className="card-meta">
-        <span className="card-location">{app.location}{app.remote ? " \u00B7 REMOTE" : ""}</span>
+        <span className="card-location">{app.location}{app.remote ? " · REMOTE" : ""}</span>
         <StatusPill status={app.status as any} days={app.days ?? 0} />
       </div>
       <div style={{ marginTop: 8 }}>
@@ -32,12 +32,9 @@ export default function Dashboard() {
   const [apps, setApps] = useState<any[]>([]);
 
   useEffect(() => {
-    // Load from local store, fallback to sample data if empty
     let stored = getApplications();
     if (stored.length === 0) {
       stored = sampleData as any[];
-      // Optionally pre-populate store with sample data
-      // stored.forEach(a => saveApplication(a as any));
     }
     setApps(stored);
 
@@ -59,7 +56,6 @@ export default function Dashboard() {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <Header />
       <main className="container" style={{ paddingTop: 24, paddingBottom: 64, flex: 1 }}>
-        {/* Hero metrics */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: "var(--radius)", marginBottom: 24, overflow: "hidden" }}>
           <div className="stat">
             <div className="stat-value" style={{ color: "var(--accent)" }}>{totalActive}</div>
@@ -75,7 +71,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Status breakdown */}
         <div className="stats-bar">
           {STATUSES.map(s => (
             <div className="stat" key={s}>
@@ -85,7 +80,6 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Pipeline header */}
         <div className="section-header">
           <span className="section-title">APPLICATION PIPELINE</span>
           <div style={{ display: "flex", gap: 8 }}>
@@ -94,7 +88,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Kanban columns */}
         <div className="pipeline">
           {STATUSES.map(status => (
             <div className="column" key={status}>

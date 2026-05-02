@@ -58,7 +58,8 @@ export function getApplications(): Application[] {
 
 export function saveApplication(app: Application) {
   if (typeof window === "undefined") return;
-  const apps = getApplications();
+  const raw = localStorage.getItem("careeros_apps");
+  const apps: Application[] = raw ? JSON.parse(raw) : [];
   const existingIndex = apps.findIndex(a => a.id === app.id);
   if (existingIndex >= 0) {
     apps[existingIndex] = app;
@@ -66,6 +67,30 @@ export function saveApplication(app: Application) {
     apps.push(app);
   }
   localStorage.setItem("careeros_apps", JSON.stringify(apps));
+  window.dispatchEvent(new Event("careeros-data-change"));
+}
+
+export function getApplication(slug: string): Application | undefined {
+  return getApplications().find(a => a.slug === slug);
+}
+
+export function updateApplication(id: string, changes: Partial<Application>) {
+  if (typeof window === "undefined") return;
+  const raw = localStorage.getItem("careeros_apps");
+  const apps: Application[] = raw ? JSON.parse(raw) : [];
+  const idx = apps.findIndex(a => a.id === id);
+  if (idx >= 0) {
+    apps[idx] = { ...apps[idx], ...changes, updatedAt: new Date().toISOString() };
+    localStorage.setItem("careeros_apps", JSON.stringify(apps));
+    window.dispatchEvent(new Event("careeros-data-change"));
+  }
+}
+
+export function deleteApplication(id: string) {
+  if (typeof window === "undefined") return;
+  const raw = localStorage.getItem("careeros_apps");
+  const apps: Application[] = raw ? JSON.parse(raw) : [];
+  localStorage.setItem("careeros_apps", JSON.stringify(apps.filter(a => a.id !== id)));
   window.dispatchEvent(new Event("careeros-data-change"));
 }
 
