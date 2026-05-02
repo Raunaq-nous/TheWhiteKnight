@@ -1,7 +1,7 @@
 import { Profile } from "./profile";
 import { Application } from "./store";
 
-export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap";
+export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm";
 
 export type SkillGapResult = {
   strongMatches: { skill: string; evidence: string }[];
@@ -322,4 +322,92 @@ Be honest and specific. Use actual data from the profile, not generic statements
   if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
   if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
   return JSON.parse(cleaned.trim()) as SkillGapResult;
+}
+
+export async function generateHMOutreach(profile: Profile, app: Application, apiKey: string): Promise<string> {
+  const profileCtx = buildProfileContext(profile);
+  const jdCtx = buildJDContext(app);
+
+  const prompt = `
+You are writing a cold outreach email for ${profile.name} to the Hiring Manager at ${app.company} for the ${app.role} role.
+
+${profileCtx}
+
+---
+
+${jdCtx}
+
+---
+
+TASK: Write a cold outreach email to the hiring manager. This email should get a response. It is NOT a cover letter.
+
+HARD RULES:
+1. No em dashes anywhere.
+2. Never use: "excited", "passionate", "synergy", "leverage" as verb, "cutting-edge", "innovative", "self-starter", "proven track record".
+3. Subject line: specific, intriguing, not generic. Reference something about the role or company.
+4. Body: 3 short paragraphs maximum. 150 words max for the body.
+5. Lead with the most differentiated thing about the candidate — not their title.
+6. One specific ask at the end. Make it easy to say yes.
+7. Tone: warm but direct, peer-to-peer. Not supplicating.
+
+FORMAT:
+Subject: [subject line]
+
+Hi [First Name],
+
+[Opening — one sentence hook that isn't "I'm applying for X role"]
+
+[Middle — most compelling match between their experience and what this company needs right now]
+
+[Closing — specific, low-friction ask]
+
+${profile.name}
+${profile.email}
+${profile.phone}
+
+Generate now:
+`;
+
+  return callOpenAI(prompt, apiKey, 0.7);
+}
+
+export async function generateLinkedInDM(profile: Profile, app: Application, apiKey: string): Promise<string> {
+  const profileCtx = buildProfileContext(profile);
+  const jdCtx = buildJDContext(app);
+
+  const prompt = `
+You are writing a LinkedIn DM for ${profile.name} to someone at ${app.company} — either the hiring manager, a recruiter, or a relevant team member — about the ${app.role} role.
+
+${profileCtx}
+
+---
+
+${jdCtx}
+
+---
+
+TASK: Write a LinkedIn DM. LinkedIn DMs need to be short, human, and not salesy.
+
+HARD RULES:
+1. No em dashes.
+2. No "excited", "passionate", "innovative", "synergy", "leverage" as verb.
+3. 75 words maximum. LinkedIn attention spans are short.
+4. Sound like a human reaching out, not a recruiter template.
+5. One clear ask: a 15-minute call, or a question they can answer easily.
+6. No attachments or links mentioned — just a conversation starter.
+7. Warm but not gushing. Confident without being arrogant.
+
+FORMAT:
+Hi [Name],
+
+[2-3 sentences: who you are, why you're reaching out to them specifically, one thing that makes you worth responding to]
+
+[One sentence ask]
+
+[Sign-off]
+
+Generate now:
+`;
+
+  return callOpenAI(prompt, apiKey, 0.75);
 }

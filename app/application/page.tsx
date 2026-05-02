@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
 import { getApplication, updateApplication, deleteApplication, getApiKey, Application } from "../../lib/store";
 import { getProfile } from "../../lib/profile";
-import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, GenerationAction, SkillGapResult } from "../../lib/generate";
+import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { applications as sampleData } from "../data";
 
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -97,6 +97,8 @@ function ApplicationDetail() {
         else if (action === "cover-letter") content = await generateCoverLetter(profile, app, apiKey);
         else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app, apiKey);
         else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app, apiKey);
+        else if (action === "outreach-hm") content = await generateHMOutreach(profile, app, apiKey);
+        else if (action === "linkedin-dm") content = await generateLinkedInDM(profile, app, apiKey);
         setSkillGap(null);
         setAiOutput({ action, content });
       }
@@ -229,6 +231,12 @@ function ApplicationDetail() {
               <button className="btn" onClick={() => handleGenerate("skill-gap")} disabled={!!generating}>
                 {generating === "skill-gap" ? "ANALYZING..." : "SKILL GAP"}
               </button>
+              <button className="btn" onClick={() => handleGenerate("outreach-hm")} disabled={!!generating}>
+                {generating === "outreach-hm" ? "GENERATING..." : "OUTREACH: HM"}
+              </button>
+              <button className="btn" onClick={() => handleGenerate("linkedin-dm")} disabled={!!generating}>
+                {generating === "linkedin-dm" ? "GENERATING..." : "LINKEDIN DM"}
+              </button>
               <button className="btn" style={{ borderColor: "var(--error)", color: "var(--error)" }} onClick={handleArchive}>ARCHIVE</button>
             </div>
             {genError && (
@@ -253,6 +261,8 @@ function ApplicationDetail() {
                   {aiOutput.action === "cover-letter" && "COVER LETTER"}
                   {aiOutput.action === "executive-summary" && "EXECUTIVE SUMMARY"}
                   {aiOutput.action === "problem-solver" && "PROBLEM SOLVER PITCH"}
+                  {aiOutput.action === "outreach-hm" && "OUTREACH EMAIL — HIRING MANAGER"}
+                  {aiOutput.action === "linkedin-dm" && "LINKEDIN DM"}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={handleCopy}>
