@@ -169,19 +169,72 @@ function ApplicationDetail() {
         <div>
           {/* Score */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
-            <div className="label" style={{ marginBottom: 12 }}>MATCH SCORE</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "3rem", fontWeight: 300, color: "var(--accent)", lineHeight: 1 }}>
-                {app.score.toFixed(1)}
-              </span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.25rem", letterSpacing: 2 }}>
-                  <span style={{ color: "var(--accent)" }}>{"█".repeat(filled)}</span>
-                  <span style={{ color: "var(--border)" }}>{"░".repeat(empty)}</span>
+            {app.afScore ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+                  <div>
+                    <div className="label" style={{ marginBottom: 4 }}>A-F EVALUATION</div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "3rem", fontWeight: 300, lineHeight: 1, color: app.afScore.global >= 4.5 ? "var(--success)" : app.afScore.global >= 4.0 ? "var(--accent)" : app.afScore.global >= 3.5 ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                        {app.afScore.global?.toFixed(1)}
+                      </span>
+                      <span style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>/5</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="label" style={{ marginBottom: 4 }}>ARCHETYPE</div>
+                    <div style={{ color: "var(--text-primary)", fontSize: "0.875rem" }}>{app.afScore.archetype?.primary}</div>
+                    {app.afScore.archetype?.secondary && (
+                      <div style={{ color: "var(--text-tertiary)", fontSize: "0.75rem" }}>+ {app.afScore.archetype.secondary}</div>
+                    )}
+                  </div>
                 </div>
-                <div className="label" style={{ marginTop: 4 }}>{app.bucket} BUCKET</div>
-              </div>
-            </div>
+                {[
+                  { key: "cv_match" as const, label: "CV MATCH" },
+                  { key: "north_star" as const, label: "NORTH STAR" },
+                  { key: "comp" as const, label: "COMP" },
+                  { key: "culture" as const, label: "CULTURE" },
+                  { key: "red_flags" as const, label: "RED FLAGS (5=NONE)" },
+                ].map(({ key, label }) => {
+                  const block = app.afScore!.scores[key];
+                  if (!block) return null;
+                  const color = block.score >= 4 ? "var(--success)" : block.score >= 3 ? "var(--accent)" : "var(--error)";
+                  return (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border-light)", fontSize: "0.75rem" }}>
+                      <span style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "0.625rem", letterSpacing: "0.05em" }}>{label}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ color: "var(--text-tertiary)", maxWidth: 220, textAlign: "right", fontSize: "0.7rem" }}>{block.reasoning}</span>
+                        <span style={{ color, fontFamily: "var(--font-mono)", fontWeight: 600, minWidth: 28, textAlign: "right" }}>{block.score}/5</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {app.afScore.legitimacy && (
+                  <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span className="label" style={{ fontSize: "0.625rem" }}>LEGITIMACY</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", textTransform: "uppercase", color: app.afScore.legitimacy.tier === "high_confidence" ? "var(--success)" : app.afScore.legitimacy.tier === "suspicious" ? "var(--error)" : "var(--accent)" }}>
+                      {app.afScore.legitimacy.tier?.replace(/_/g, " ")}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="label" style={{ marginBottom: 12 }}>MATCH SCORE</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "3rem", fontWeight: 300, color: "var(--accent)", lineHeight: 1 }}>
+                    {app.score.toFixed(1)}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.25rem", letterSpacing: 2 }}>
+                      <span style={{ color: "var(--accent)" }}>{"█".repeat(filled)}</span>
+                      <span style={{ color: "var(--border)" }}>{"░".repeat(empty)}</span>
+                    </div>
+                    <div className="label" style={{ marginTop: 4 }}>{app.bucket} BUCKET</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Next action */}

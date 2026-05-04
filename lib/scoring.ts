@@ -1,5 +1,7 @@
-// Client wrapper. AI scoring runs on /api/score so the Portkey key stays server-side.
-import { TargetBucket } from "./store";
+// Client wrapper. AI scoring runs on /api/score so the API key stays server-side.
+import { Profile } from "./profile";
+
+export type ScoringBucket = { id: string; name: string; description: string };
 
 export async function scoreJobWithAI(
   jdText: string,
@@ -8,12 +10,14 @@ export async function scoreJobWithAI(
   location: string,
   seniority: string,
   sector: string,
-  buckets: TargetBucket[]
+  remote: boolean,
+  buckets: ScoringBucket[],
+  profile: Profile
 ) {
   const res = await fetch("/api/score", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jdText, company, role, location, seniority, sector, buckets }),
+    body: JSON.stringify({ jdText, company, role, location, seniority, sector, remote, buckets, profile }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

@@ -3,6 +3,48 @@ import { Application } from "./store";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm";
 
+export type AFScoreBlock = {
+  score: number;
+  reasoning: string;
+  evidence?: string[];
+  gaps?: string[];
+  signals?: string[];
+};
+
+export type LegitimacySignal = {
+  signal: string;
+  finding: string;
+  weight: "positive" | "neutral" | "concerning";
+};
+
+export type AFScoreResult = {
+  archetype: { primary: string; secondary?: string };
+  scores: {
+    cv_match: AFScoreBlock;
+    north_star: AFScoreBlock;
+    comp: AFScoreBlock;
+    culture: AFScoreBlock;
+    red_flags: AFScoreBlock;
+  };
+  global: number;
+  recommendation: "apply_immediately" | "apply" | "review_manually" | "skip";
+  legitimacy: {
+    tier: "high_confidence" | "proceed_with_caution" | "suspicious";
+    signals: LegitimacySignal[];
+    notes?: string;
+  };
+  jdParsed: {
+    keyRequirements: string[];
+    technicalSkills: string[];
+    softSkills: string[];
+    yearsExperienceRequired: number | null;
+    redFlags: string[];
+    keywords: string[];
+  };
+  bucket: string;
+  bucketName: string;
+};
+
 export type SkillGapResult = {
   strongMatches: { skill: string; evidence: string }[];
   partialMatches: { skill: string; gap: string; suggestion: string }[];
@@ -317,6 +359,157 @@ Hi [Name],
 [2-3 sentences: who, why them specifically, why worth responding]
 [One sentence ask]
 [Sign-off]`;
+}
+
+export function afScoringPrompt(
+  profile: Profile,
+  jdText: string,
+  meta: { company: string; role: string; location: string; seniority: string; sector: string; remote: boolean },
+  buckets: { id: string; name: string; description: string }[]
+): string {
+  const profileContext = buildProfileContext(profile);
+  const bucketDesc = buckets.map(b => `- ${b.name} (id: ${b.id}): ${b.description}`).join("\n");
+  return `You are an expert career coach evaluating a job opportunity for ${profile.name}.
+
+${profileContext}
+
+CANDIDATE'S TARGET ARCHETYPES (North Star — the kinds of roles they want):
+${bucketDesc}
+
+JOB DETAILS:
+Company: ${meta.company}
+Role: ${meta.role}
+Location: ${meta.location}${meta.remote ? " (Remote)" : ""}
+Seniority: ${meta.seniority}
+Sector: ${meta.sector}
+
+JOB DESCRIPTION:
+${jdText.slice(0, 6000)}
+
+---
+
+TASK: Score this opportunity across 5 dimensions (each 1-5), compute a weighted Global score (1-5), assess posting legitimacy, classify the role archetype, and extract structured JD data.
+
+SCORING RUBRIC (qualitative, mirror career-ops framework):
+
+**CV Match (1-5)** — How well do the candidate's actual skills, experience, and proof points match the JD requirements?
+- 5: Direct line-by-line match across most requirements with strong evidence
+- 4: Strong match on most key requirements, minor gaps
+- 3: Match on half the requirements, notable gaps
+- 2: Some overlap, multiple hard gaps
+- 1: Almost no match
+
+**North Star Alignment (1-5)** — How well does this role fit the candidate's target archetypes (above)?
+- 5: Perfect fit for the primary archetype
+- 4: Strong fit for primary OR perfect fit for secondary
+- 3: Hybrid that touches at least one target archetype
+- 2: Adjacent but not aligned with their stated targets
+- 1: Off-target
+
+**Compensation (1-5)** — Salary vs market for this role/location/seniority. If JD doesn't list comp, infer from company tier and role:
+- 5: Top quartile for the market
+- 4: Above market
+- 3: At market
+- 2: Below market
+- 1: Well below market
+
+**Cultural Signals (1-5)** — Remote policy, stability, growth signals, team dynamics, transparency:
+- 5: All positive signals (remote-first or candidate-aligned, growing, transparent)
+- 4: Mostly positive
+- 3: Mixed
+- 2: Several concerning signals
+- 1: Red flags throughout
+
+**Red Flags (1-5)** — INVERTED: 5 = no red flags, 1 = many red flags. Penalties for: vague compensation in regulated jurisdictions, contradictory requirements (entry-level title with staff requirements), suspiciously generic JD, unrealistic experience asks, recent layoff news in same department, repost patterns, suspicious apply flow.
+
+**Global (1-5)** — Weighted average. Weights are qualitative (use judgment): CV Match and North Star matter most, Comp and Culture moderate, Red Flags can pull the score down significantly when severe.
+
+**Recommendation thresholds:**
+- 4.5+ → "apply_immediately"
+- 4.0-4.4 → "apply"
+- 3.5-3.9 → "review_manually"
+- Below 3.5 → "skip"
+
+---
+
+ARCHETYPE: Classify the role as one of:
+- AI Platform / LLMOps
+- Agentic / Automation
+- Technical AI PM
+- AI Solutions Architect
+- AI Forward Deployed
+- AI Transformation
+- Strategy / Consulting (MBB-style)
+- General Product Management
+- Other (specify)
+
+If hybrid, give primary + secondary.
+
+---
+
+LEGITIMACY ASSESSMENT (Block G):
+
+Analyze the JD for ghost-job signals. Output one of three tiers:
+- **high_confidence** — Multiple positive signals, real active opening
+- **proceed_with_caution** — Mixed signals worth noting
+- **suspicious** — Multiple ghost-job indicators
+
+Signals to evaluate (each: signal description, finding, weight as positive/neutral/concerning):
+1. Description Quality — does it name specific technologies, tools, team size?
+2. Realism — are requirements vs years of experience plausible?
+3. Specificity — what % is role-specific vs boilerplate?
+4. Internal Contradictions — entry-level title + staff requirements?
+5. Compensation Transparency — context-dependent (legitimate omissions exist)
+6. Scope Clarity — clear first 6-12 months?
+
+NEVER default to "suspicious" without evidence. Default to "proceed_with_caution" when data is limited.
+NEVER present findings as accusations — observations only.
+
+---
+
+ALSO EXTRACT structured JD data (for downstream ATS optimization and skill analysis):
+- keyRequirements: top 5-8 must-haves
+- technicalSkills: explicit tools/frameworks/languages
+- softSkills: collaboration/leadership signals
+- yearsExperienceRequired: number or null
+- redFlags: any concerning items found
+- keywords: 15-20 ATS-relevant keywords from the JD
+
+Pick the SINGLE best-matching bucket (id and name) from the candidate's archetypes. If none matches well, pick the closest.
+
+---
+
+Return ONLY raw JSON (no markdown fences):
+
+{
+  "archetype": { "primary": "string", "secondary": "string or null" },
+  "scores": {
+    "cv_match": { "score": number, "reasoning": "string", "evidence": ["string"], "gaps": ["string"] },
+    "north_star": { "score": number, "reasoning": "string" },
+    "comp": { "score": number, "reasoning": "string" },
+    "culture": { "score": number, "reasoning": "string", "signals": ["string"] },
+    "red_flags": { "score": number, "reasoning": "string", "signals": ["string"] }
+  },
+  "global": number,
+  "recommendation": "apply_immediately" | "apply" | "review_manually" | "skip",
+  "legitimacy": {
+    "tier": "high_confidence" | "proceed_with_caution" | "suspicious",
+    "signals": [{ "signal": "string", "finding": "string", "weight": "positive" | "neutral" | "concerning" }],
+    "notes": "string or null"
+  },
+  "jdParsed": {
+    "keyRequirements": ["string"],
+    "technicalSkills": ["string"],
+    "softSkills": ["string"],
+    "yearsExperienceRequired": number | null,
+    "redFlags": ["string"],
+    "keywords": ["string"]
+  },
+  "bucket": "string (id of best-matching bucket)",
+  "bucketName": "string (display name of best-matching bucket)"
+}
+
+Be honest. Cite specific evidence from the candidate's profile. Don't invent metrics. Use the actual archetype names from the JD context.`;
 }
 
 export function jdScoringPrompt(jdText: string, role: string, company: string, location: string, seniority: string, sector: string): string {

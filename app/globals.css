@@ -60,6 +60,7 @@ html, body {
 }
 @media (max-width: 640px) {
   .container, .container-narrow, .container-wide { padding: 0 16px; }
+  .ingest-grid { grid-template-columns: 1fr !important; }
 }
 
 .header {

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Header, Footer } from "../components";
 import { saveApplication, generateSlug, generateId, TargetBucket } from "../../lib/store";
 import { scoreJobWithAI } from "../../lib/scoring";
+import { getProfile, getSeedProfile } from "../../lib/profile";
 
 const MOCK_BUCKETS: TargetBucket[] = [
   {
@@ -77,6 +78,7 @@ function readFileAsBase64(file: File): Promise<string> {
 export default function IngestPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [jdText, setJdText] = useState("");
   const [company, setCompany] = useState("");
@@ -142,7 +144,9 @@ export default function IngestPage() {
     setIsScoring(true);
     setErrorMsg("");
     try {
-      const result = await scoreJobWithAI(jdText, company, role, location, seniority, sector, MOCK_BUCKETS);
+      const profile = getProfile() ?? getSeedProfile();
+      const bucketsForScoring = MOCK_BUCKETS.map(b => ({ id: b.id, name: b.name, description: b.description }));
+      const result = await scoreJobWithAI(jdText, company, role, location, seniority, sector, remote, bucketsForScoring, profile);
       setScoreResult(result);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to score job.");
@@ -164,13 +168,23 @@ export default function IngestPage() {
       status: "sourced" as const,
       score: scoreResult.totalScore,
       bucket: scoreResult.bucket,
+      bucketName: scoreResult.bucketName,
       sector,
       seniority,
       sourceUrl,
       capturedAt: new Date().toISOString().split("T")[0],
       jdRaw: jdText,
       jdParsed: scoreResult.parsed,
-      nextAction: "Review and Tailor",
+      afScore: {
+        archetype: scoreResult.archetype,
+        scores: scoreResult.scores,
+        global: scoreResult.global,
+        recommendation: scoreResult.recommendation,
+        legitimacy: scoreResult.legitimacy,
+      },
+      nextAction: scoreResult.recommendation === "apply_immediately" ? "Apply now" :
+                  scoreResult.recommendation === "apply" ? "Tailor and apply" :
+                  scoreResult.recommendation === "review_manually" ? "Review JD, decide" : "Likely skip",
       contacts: [],
       interviews: [],
       reminders: [],
@@ -215,7 +229,7 @@ export default function IngestPage() {
               <input type="text" className="input" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. AI Product Manager" style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div className="ingest-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
                 <label className="label" style={{ display: "block", marginBottom: 8 }}>LOCATION</label>
                 <input type="text" className="input" value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. San Francisco" style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit" }} />
@@ -251,6 +265,14 @@ export default function IngestPage() {
                   <button
                     className="btn"
                     style={{ fontSize: "0.625rem", padding: "4px 10px" }}
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={isExtracting}
+                  >
+                    TAKE PHOTO
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ fontSize: "0.625rem", padding: "4px 10px" }}
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isExtracting}
                   >
@@ -259,7 +281,15 @@ export default function IngestPage() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".txt,.md,image/png,image/jpeg,image/webp,image/gif"
+                    accept=".txt,.md,image/*"
+                    onChange={handleFileInput}
+                    style={{ display: "none" }}
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
                     onChange={handleFileInput}
                     style={{ display: "none" }}
                   />
@@ -294,7 +324,7 @@ export default function IngestPage() {
                 )}
               </div>
               <div className="label" style={{ marginTop: 6, fontSize: "0.6rem", color: "var(--text-tertiary)" }}>
-                Supports: .txt, .md, PNG, JPG, WEBP (screenshots). Images require OpenAI API key.
+                Supports: .txt, .md, PNG, JPG, WEBP. Take a photo of a JD or upload a screenshot from your phone.
               </div>
             </div>
 
@@ -310,46 +340,95 @@ export default function IngestPage() {
 
           {scoreResult && (
             <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
-              <div className="section-title" style={{ marginBottom: 16 }}>AI SCORE RESULT</div>
+              <div className="section-title" style={{ marginBottom: 16 }}>A-F EVALUATION</div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border)", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border)", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontSize: "2rem", fontWeight: 700, color: scoreResult.totalScore >= 8.5 ? "var(--success)" : scoreResult.totalScore >= 7.0 ? "var(--accent)" : "var(--text-secondary)" }}>
-                    {scoreResult.totalScore.toFixed(1)} / 10
+                  <div style={{ fontSize: "2rem", fontWeight: 700, color: scoreResult.global >= 4.5 ? "var(--success)" : scoreResult.global >= 4.0 ? "var(--accent)" : scoreResult.global >= 3.5 ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                    {scoreResult.global?.toFixed(1)} / 5
                   </div>
-                  <div className="label">{scoreResult.recommendation}</div>
+                  <div className="label">{scoreResult.recommendationLabel}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div className="label">TARGET BUCKET</div>
-                  <div style={{ color: "var(--text-primary)" }}>{scoreResult.bucketName}</div>
+                  <div className="label">ARCHETYPE</div>
+                  <div style={{ color: "var(--text-primary)" }}>{scoreResult.archetype?.primary}</div>
+                  {scoreResult.archetype?.secondary && (
+                    <div style={{ color: "var(--text-tertiary)", fontSize: "0.75rem" }}>+ {scoreResult.archetype.secondary}</div>
+                  )}
                 </div>
               </div>
 
-              {scoreResult.parsed && (
-                <div style={{ background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border-light)", marginBottom: 16 }}>
-                  <div className="label" style={{ marginBottom: 8 }}>AI EXTRACTED REQUIREMENTS</div>
-                  <ul style={{ fontSize: "0.875rem", margin: 0, paddingLeft: 20, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                    {scoreResult.parsed.keyRequirements?.slice(0, 3).map((r: string, i: number) => <li key={i}>{r}</li>)}
-                  </ul>
-                  {scoreResult.parsed.redFlags?.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <span className="label" style={{ color: "var(--error)" }}>RED FLAGS FOUND:</span>
-                      <span style={{ fontSize: "0.875rem", marginLeft: 8, color: "var(--error)" }}>{scoreResult.parsed.redFlags.join(", ")}</span>
+              {/* Score breakdown */}
+              <div style={{ marginBottom: 16 }}>
+                {[
+                  { key: "cv_match", label: "CV MATCH" },
+                  { key: "north_star", label: "NORTH STAR" },
+                  { key: "comp", label: "COMPENSATION" },
+                  { key: "culture", label: "CULTURE" },
+                  { key: "red_flags", label: "RED FLAGS (5=NONE)" },
+                ].map(({ key, label }) => {
+                  const block = scoreResult.scores?.[key];
+                  if (!block) return null;
+                  const color = block.score >= 4 ? "var(--success)" : block.score >= 3 ? "var(--accent)" : "var(--error)";
+                  return (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontSize: "0.875rem", padding: "8px 0", borderBottom: "1px solid var(--border-light)", gap: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <div className="label" style={{ color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
+                        <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", lineHeight: 1.5 }}>{block.reasoning}</div>
+                      </div>
+                      <div style={{ color, fontFamily: "var(--font-mono)", fontSize: "1rem", fontWeight: 600, minWidth: 40, textAlign: "right" }}>{block.score}/5</div>
                     </div>
+                  );
+                })}
+              </div>
+
+              {/* Legitimacy */}
+              {scoreResult.legitimacy && (
+                <div style={{ background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border-light)", marginBottom: 16 }}>
+                  <div className="label" style={{ marginBottom: 8 }}>POSTING LEGITIMACY</div>
+                  <div style={{
+                    color: scoreResult.legitimacy.tier === "high_confidence" ? "var(--success)" : scoreResult.legitimacy.tier === "suspicious" ? "var(--error)" : "var(--accent)",
+                    fontFamily: "var(--font-mono)", fontSize: "0.875rem", marginBottom: 8, textTransform: "uppercase"
+                  }}>
+                    {scoreResult.legitimacy.tier?.replace(/_/g, " ")}
+                  </div>
+                  {scoreResult.legitimacy.signals?.length > 0 && (
+                    <ul style={{ fontSize: "0.75rem", margin: 0, paddingLeft: 16, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                      {scoreResult.legitimacy.signals.slice(0, 5).map((s: any, i: number) => (
+                        <li key={i}>
+                          <strong style={{ color: s.weight === "positive" ? "var(--success)" : s.weight === "concerning" ? "var(--error)" : "var(--text-primary)" }}>
+                            {s.signal}:
+                          </strong> {s.finding}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               )}
 
-              <div style={{ marginTop: 16 }}>
-                {Object.entries(scoreResult.breakdown).map(([key, data]: [string, any]) => (
-                  <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.875rem", padding: "4px 0", borderBottom: "1px solid var(--border-light)" }}>
-                    <span style={{ color: "var(--text-secondary)" }}>{key.replace(/([A-Z])/g, ' $1').toUpperCase()}</span>
-                    <span>{data.score > 0 ? "✅" : "❌"} {(data.weighted).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
+              {/* CV Match evidence + gaps */}
+              {scoreResult.scores?.cv_match && (scoreResult.scores.cv_match.evidence?.length || scoreResult.scores.cv_match.gaps?.length) && (
+                <div style={{ background: "var(--bg-primary)", padding: 16, border: "1px solid var(--border-light)", marginBottom: 16 }}>
+                  {scoreResult.scores.cv_match.evidence?.length > 0 && (
+                    <>
+                      <div className="label" style={{ marginBottom: 8, color: "var(--success)" }}>EVIDENCE OF MATCH</div>
+                      <ul style={{ fontSize: "0.75rem", margin: 0, paddingLeft: 16, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 8 }}>
+                        {scoreResult.scores.cv_match.evidence.slice(0, 5).map((e: string, i: number) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </>
+                  )}
+                  {scoreResult.scores.cv_match.gaps?.length > 0 && (
+                    <>
+                      <div className="label" style={{ marginBottom: 8, color: "var(--error)" }}>GAPS</div>
+                      <ul style={{ fontSize: "0.75rem", margin: 0, paddingLeft: 16, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                        {scoreResult.scores.cv_match.gaps.slice(0, 5).map((g: string, i: number) => <li key={i}>{g}</li>)}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
 
-              <button className="btn" onClick={handleSave} style={{ width: "100%", padding: 12, justifyContent: "center", marginTop: 24, borderColor: "var(--accent)", color: "var(--accent)" }}>
+              <button className="btn" onClick={handleSave} style={{ width: "100%", padding: 12, justifyContent: "center", marginTop: 16, borderColor: "var(--accent)", color: "var(--accent)" }}>
                 ADD TO PIPELINE
               </button>
             </div>

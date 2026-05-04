@@ -14,6 +14,24 @@ export type Application = {
   capturedAt: string;
   jdRaw: string;
   jdParsed: any;
+  bucketName?: string;
+  afScore?: {
+    archetype: { primary: string; secondary?: string };
+    scores: {
+      cv_match: { score: number; reasoning: string; evidence?: string[]; gaps?: string[] };
+      north_star: { score: number; reasoning: string };
+      comp: { score: number; reasoning: string };
+      culture: { score: number; reasoning: string; signals?: string[] };
+      red_flags: { score: number; reasoning: string; signals?: string[] };
+    };
+    global: number;
+    recommendation: "apply_immediately" | "apply" | "review_manually" | "skip";
+    legitimacy: {
+      tier: "high_confidence" | "proceed_with_caution" | "suspicious";
+      signals: { signal: string; finding: string; weight: "positive" | "neutral" | "concerning" }[];
+      notes?: string;
+    };
+  };
   nextAction: string;
   contacts: any[];
   interviews: any[];
