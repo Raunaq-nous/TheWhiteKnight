@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 export function ScoreBar({ score }: { score: number }) {
   const filled = Math.round(score);
@@ -23,6 +24,19 @@ export function StatusPill({ status, days }: { status: string; days: number }) {
 }
 
 export function Header() {
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => {
+      if (d.user?.email) setUserEmail(d.user.email);
+    }).catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
+
   return (
     <header className="header">
       <div className="container header-inner">
@@ -36,6 +50,20 @@ export function Header() {
             <li><Link href="/persona/">PERSONA</Link></li>
             <li><Link href="/config/">CONFIG</Link></li>
             <li><Link href="/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
+            {userEmail && (
+              <li style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, paddingLeft: 8, borderLeft: "1px solid var(--border)" }}>
+                <span style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                  {userEmail.split("@")[0].toUpperCase()}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="btn"
+                  style={{ fontSize: "0.625rem", padding: "3px 8px", color: "var(--text-tertiary)", borderColor: "var(--border-light)" }}
+                >
+                  OUT
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
       </div>
