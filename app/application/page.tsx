@@ -7,6 +7,7 @@ import { Header, Footer, ScoreBar, StatusPill } from "../components";
 import { getApplication, updateApplication, deleteApplication, Application } from "../../lib/store";
 import { getProfile } from "../../lib/profile";
 import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, GenerationAction, SkillGapResult } from "../../lib/generate";
+import { queueDM, queueOutreach, scheduleFollowUp } from "../../lib/notifications";
 import { applications as sampleData } from "../data";
 
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -53,6 +54,9 @@ function ApplicationDetail() {
     if (!app.id) return;
     updateApplication(app.id, { status: newStatus });
     setApp(prev => prev ? { ...prev, status: newStatus } : prev);
+    if (newStatus === "applied") {
+      scheduleFollowUp(app.slug, app.company, app.role, 7);
+    }
   };
 
   const handleSaveNote = () => {
@@ -92,8 +96,13 @@ function ApplicationDetail() {
         else if (action === "cover-letter") content = await generateCoverLetter(profile, app);
         else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app);
         else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app);
-        else if (action === "outreach-hm") content = await generateHMOutreach(profile, app);
-        else if (action === "linkedin-dm") content = await generateLinkedInDM(profile, app);
+        else if (action === "outreach-hm") {
+          content = await generateHMOutreach(profile, app);
+          queueOutreach(app.slug, app.company, app.role, content);
+        } else if (action === "linkedin-dm") {
+          content = await generateLinkedInDM(profile, app);
+          queueDM(app.slug, app.company, app.role, content);
+        }
         setSkillGap(null);
         setAiOutput({ action, content });
       }

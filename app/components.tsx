@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { NotificationBell } from "./notifications";
 
 export function ScoreBar({ score }: { score: number }) {
   const filled = Math.round(score);
@@ -50,6 +51,7 @@ export function Header() {
             <li><Link href="/persona/">PERSONA</Link></li>
             <li><Link href="/config/">CONFIG</Link></li>
             <li><Link href="/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
+            <li><NotificationBell /></li>
             {userEmail && (
               <li style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, paddingLeft: 8, borderLeft: "1px solid var(--border)" }}>
                 <span style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
