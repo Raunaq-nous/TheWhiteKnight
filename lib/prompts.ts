@@ -136,7 +136,11 @@ ${app.jdRaw ? app.jdRaw.slice(0, 3000) : "(Not available, using structured data 
 }
 
 export function resumePrompt(profile: Profile, app: Application): string {
-  return `You are a professional resume writer helping ${profile.name} apply for a specific role.
+  const atsKeywords = app.jdParsed?.keywords?.join(", ") ?? "";
+  const keyReqs = app.jdParsed?.keyRequirements?.join("; ") ?? "";
+  const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
+
+  return `You are an expert ATS-optimized resume writer. You are helping ${profile.name} apply for the ${app.role} role at ${app.company}.
 
 ${buildProfileContext(profile)}
 
@@ -144,33 +148,47 @@ ${buildProfileContext(profile)}
 
 ${buildJDContext(app)}
 
+${atsKeywords ? `ATS KEYWORDS FROM JD (must appear naturally in resume): ${atsKeywords}` : ""}
+
 ---
 
-TASK: Write a tailored, one-page resume for this specific application.
+TASK: Write a tailored, ATS-optimized one-page resume following this 15-step pipeline exactly:
 
-HARD RULES:
-1. No em dashes anywhere. Use commas, semicolons, or restructure.
-2. One page maximum. Prioritize bullets that match the JD.
-3. Lead bullets with strong verbs and concrete outcomes.
-4. Weave "first principles" naturally into the summary.
-5. Match the writing voice from VOICE AND TONE NOTES.
-6. Highlight AI/agentic work prominently if relevant.
-7. Output clean markdown.
+**Step 1 — Extract keywords:** Use these JD keywords (already extracted): ${atsKeywords || "extract from requirements above"}
+**Step 2 — Rewrite Professional Summary:** 2-3 sentences. Inject 3-5 keywords naturally. Lead with years + domain + distinctive angle. Weave "first principles" naturally. No em dashes.
+**Step 3 — Reorder bullets by relevance:** Put the most JD-relevant bullets first in each role. Cut weakly matching bullets if needed to stay one page.
+**Step 4 — Inject keywords into Skills section:** Match the exact terminology from the JD (e.g. if JD says "LLMOps" not "LLM operations", use "LLMOps").
+**Step 5 — Verify requirements coverage:** Every key requirement (${keyReqs}) should appear somewhere in the resume — bullet, skill, or summary.
+**Step 6 — Tech skills alignment:** Required tech skills (${techSkills}) should appear in Skills section if the candidate has them.
+**Step 7 — Seniority calibration:** Match seniority signals to the role level (${app.seniority}). Use appropriate scope language.
+**Step 8 — Quantify everything possible:** Use actual metrics from the profile. Never invent numbers.
+**Step 9 — No clichés:** Never use "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions".
+**Step 10 — Vary sentence structure:** Don't start every bullet with the same verb. Mix lengths.
+**Step 11 — ATS normalization:** No em dashes (use commas/semicolons). No smart quotes. No zero-width chars. No special unicode bullets — use standard hyphens.
+**Step 12 — Location line:** Include ${profile.location} — if remote open, add "Open to remote".
+**Step 13 — One page enforcement:** Max ~28-32 content lines total. Ruthlessly prioritize relevance over completeness.
+**Step 14 — First principles in summary:** Weave "approaches problems from first principles" naturally — not as a buzzword.
+**Step 15 — Final check:** Every bullet starts with a strong past-tense action verb. Contact info complete. No placeholders.
 
-STRUCTURE:
+OUTPUT FORMAT — clean markdown, exactly this structure:
 # ${profile.name}
-[Contact line]
+${profile.email} | ${profile.phone} | ${profile.location} | ${profile.linkedin ?? ""} | ${profile.github ?? ""}
 
 ## Summary
-[2-3 sentences]
+[2-3 sentences, keywords injected naturally]
 
 ## Experience
-[Most relevant entries]
+### [Role] | [Company] | [Tenure]
+- [Most JD-relevant bullet first]
+- [...]
 
 ## Skills
-## Education
+**[Category]:** [comma-separated, JD terminology matched]
 
-Generate the resume now.`;
+## Education
+[Degree | Institution | Year]
+
+Generate the complete ATS-optimized resume now.`;
 }
 
 export function coverLetterPrompt(profile: Profile, app: Application): string {
