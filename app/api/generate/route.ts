@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chat, chatJSON } from "../../../lib/ai-client";
+import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import {
   GenerationAction,
   resumePrompt,
@@ -15,10 +15,11 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, profile, app } = await req.json() as {
+    const { action, profile, app, providerSettings } = await req.json() as {
       action: GenerationAction;
       profile: any;
       app: any;
+      providerSettings?: ProviderSettings;
     };
 
     if (!action || !profile || !app) {
@@ -28,7 +29,8 @@ export async function POST(req: NextRequest) {
     if (action === "skill-gap") {
       const data = await chatJSON(
         [{ role: "user", content: skillGapPrompt(profile, app) }],
-        { temperature: 0.2 }
+        { temperature: 0.2 },
+        providerSettings
       );
       return NextResponse.json({ data });
     }
@@ -45,7 +47,8 @@ export async function POST(req: NextRequest) {
 
     const content = await chat(
       [{ role: "user", content: prompt }],
-      { temperature, maxTokens: 2000 }
+      { temperature, maxTokens: 2000 },
+      providerSettings
     );
     return NextResponse.json({ content });
   } catch (e: any) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chatJSON } from "../../../lib/ai-client";
+import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { afScoringPrompt, AFScoreResult } from "../../../lib/prompts";
 import type { Profile } from "../../../lib/profile";
 
@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    const { jdText, company, role, location, seniority, sector, remote, buckets, profile } = await req.json() as {
+    const { jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings } = await req.json() as {
       jdText: string;
       company: string;
       role: string;
@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
       remote: boolean;
       buckets: { id: string; name: string; description: string }[];
       profile: Profile;
+      providerSettings?: ProviderSettings;
     };
 
     if (!profile) {
@@ -28,7 +29,8 @@ export async function POST(req: NextRequest) {
 
     const result = await chatJSON<AFScoreResult>(
       [{ role: "user", content: afScoringPrompt(profile, jdText, { company, role, location, seniority, sector, remote }, buckets) }],
-      { temperature: 0.2, maxTokens: 3000 }
+      { temperature: 0.2, maxTokens: 3000 },
+      providerSettings
     );
 
     const totalScore10 = Math.max(0, Math.min(10, result.global * 2));

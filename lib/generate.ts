@@ -1,15 +1,20 @@
-// Client-side wrapper. All AI calls go through /api/generate so the Portkey key stays server-side.
+// Client-side wrapper. All AI calls go through /api/generate so the API key stays server-side.
 import { Profile } from "./profile";
 import { Application } from "./store";
+import { getModelSettings } from "./model-settings";
 
 export type { GenerationAction, SkillGapResult, SkillBuilderResult } from "./prompts";
 import type { GenerationAction, SkillGapResult } from "./prompts";
 
 async function callGenerate<T = any>(action: GenerationAction, profile: Profile, app: Application): Promise<T> {
+  const settings = getModelSettings();
+  const providerSettings = settings.provider !== "together"
+    ? { provider: settings.provider, model: settings.model, apiKey: settings.apiKey }
+    : undefined;
   const res = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, profile, app }),
+    body: JSON.stringify({ action, profile, app, providerSettings }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

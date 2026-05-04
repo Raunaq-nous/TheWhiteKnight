@@ -120,12 +120,3 @@ export function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
 
-export function getApiKey(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem("careeros_openai_key") || "";
-}
-
-export function setApiKey(key: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("careeros_openai_key", key);
-}
