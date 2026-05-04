@@ -50,6 +50,7 @@ export function Header() {
             <li><Link href="/skills/">SKILL BUILDER</Link></li>
             <li><Link href="/contacts/">CONTACTS</Link></li>
             <li><Link href="/companies/">COMPANIES</Link></li>
+            <li><Link href="/batch/">BATCH</Link></li>
             <li><Link href="/persona/">PERSONA</Link></li>
             <li><Link href="/config/">CONFIG</Link></li>
             <li><Link href="/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
