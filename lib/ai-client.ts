@@ -5,7 +5,7 @@ const TOGETHER_BASE = "https://api.together.xyz/v1";
 
 // Primary: Kimi K2 — 1T param MoE, 32B active, best open-source for agentic generation tasks
 // Fallback: DeepSeek V3 — strong general-purpose, widely available
-const DEFAULT_MODEL = "moonshotai/Kimi-K2-Instruct";
+const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4-Pro";
 const DEFAULT_VISION_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
 
 type ChatMessage = {

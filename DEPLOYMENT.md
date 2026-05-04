@@ -7,18 +7,16 @@ Go to your Vercel project → **Settings → Environment Variables** and add:
 | Variable | Value |
 |---|---|
 | `TOGETHER_API_KEY` | Your Together AI API key |
-| `AI_MODEL` | `moonshotai/Kimi-K2-Instruct` |
+| `AI_MODEL` | `deepseek-ai/DeepSeek-V4-Pro` |
 | `AI_VISION_MODEL` | `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` |
 
 Get a Together AI key: https://api.together.ai → Sign up → API Keys
 
 After adding the vars, click **Redeploy** in Vercel.
 
-## Model: Kimi K2
+## Model: DeepSeek V4 Pro
 
-Default model is `moonshotai/Kimi-K2-Instruct` — Moonshot AI's 1T parameter MoE model (32B active), released July 2025. Best open-source model for agentic instruction-following and long-form generation.
-
-If Kimi K2 isn't available on your Together plan, set `AI_MODEL=deepseek-ai/DeepSeek-V3` instead.
+Default model is `deepseek-ai/DeepSeek-V4-Pro` — available on Together AI with Chat, JSON Mode, and Tool Calling support.
 
 ## Vercel deploy steps
 
