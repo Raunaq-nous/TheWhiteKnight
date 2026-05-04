@@ -1,25 +1,12 @@
-// Server-only Portkey gateway client.
-// Routes all AI traffic through Portkey so the underlying provider key never touches the browser.
-//
-// Recommended model: deepseek-ai/DeepSeek-V3 via Together AI — open-source, Opus-class reasoning.
-// Set AI_MODEL + AI_PROVIDER in your env, or configure a virtual key in the Portkey dashboard.
-//
-// Model options by provider:
-//   Together AI (AI_PROVIDER=together-ai):
-//     deepseek-ai/DeepSeek-V3                         ← best overall, Opus-class
-//     meta-llama/Llama-4-Maverick-17B-128E-Instruct   ← best for structured outputs
-//     Qwen/Qwen3-235B-A22B                            ← strong reasoning, MoE
-//   Groq (AI_PROVIDER=groq):
-//     deepseek-r1-distill-llama-70b                   ← fast reasoning
-//     llama-4-maverick-17b-128e-instruct              ← fast, good quality
-//   Fireworks (AI_PROVIDER=fireworks-ai):
-//     accounts/fireworks/models/deepseek-v3           ← DeepSeek V3
+// Server-only Together AI client. No Portkey.
+// Together AI is OpenAI-API-compatible — same request/response format, different base URL.
 
-const PORTKEY_BASE = "https://api.portkey.ai/v1";
+const TOGETHER_BASE = "https://api.together.xyz/v1";
 
-// Default: DeepSeek V3 via Together AI
-const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V3";
-const DEFAULT_PROVIDER = "together-ai";
+// Primary: Kimi K2 — 1T param MoE, 32B active, best open-source for agentic generation tasks
+// Fallback: DeepSeek V3 — strong general-purpose, widely available
+const DEFAULT_MODEL = "moonshotai/Kimi-K2-Instruct";
+const DEFAULT_VISION_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
 
 type ChatMessage = {
   role: "user" | "system" | "assistant";
@@ -33,34 +20,10 @@ type ChatOptions = {
   jsonMode?: boolean;
 };
 
-function getAuthHeaders(): Record<string, string> {
-  const apiKey = process.env.PORTKEY_API_KEY;
-  if (!apiKey) {
-    throw new Error("PORTKEY_API_KEY is not set. Add it to your Vercel environment variables.");
-  }
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "x-portkey-api-key": apiKey,
-  };
-
-  // If a virtual key is set, it contains all provider routing — no other headers needed.
-  const virtualKey = process.env.PORTKEY_VIRTUAL_KEY;
-  if (virtualKey) {
-    headers["x-portkey-virtual-key"] = virtualKey;
-    return headers;
-  }
-
-  // Otherwise route explicitly by provider.
-  const provider = process.env.AI_PROVIDER ?? DEFAULT_PROVIDER;
-  headers["x-portkey-provider"] = provider;
-
-  // Provider-specific auth headers
-  const providerKey = process.env.AI_PROVIDER_KEY;
-  if (providerKey) {
-    headers["Authorization"] = `Bearer ${providerKey}`;
-  }
-
-  return headers;
+function getApiKey(): string {
+  const key = process.env.TOGETHER_API_KEY;
+  if (!key) throw new Error("TOGETHER_API_KEY is not set. Add it to your Vercel environment variables.");
+  return key;
 }
 
 export async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
@@ -71,20 +34,22 @@ export async function chat(messages: ChatMessage[], opts: ChatOptions = {}): Pro
     temperature: opts.temperature ?? 0.7,
     max_tokens: opts.maxTokens ?? 2000,
   };
-  // DeepSeek and Llama support JSON mode; enable it only when explicitly requested
   if (opts.jsonMode) {
     body.response_format = { type: "json_object" };
   }
 
-  const response = await fetch(`${PORTKEY_BASE}/chat/completions`, {
+  const response = await fetch(`${TOGETHER_BASE}/chat/completions`, {
     method: "POST",
-    headers: getAuthHeaders(),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${getApiKey()}`,
+    },
     body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`AI gateway error ${response.status}: ${errText.slice(0, 400)}`);
+    throw new Error(`Together AI error ${response.status}: ${errText.slice(0, 400)}`);
   }
 
   const result = await response.json();
@@ -100,10 +65,8 @@ export async function chatJSON<T>(messages: ChatMessage[], opts: ChatOptions = {
   return JSON.parse(cleaned.trim()) as T;
 }
 
-// Vision is only available on multimodal models (gpt-4o, llama-4-maverick, etc.).
-// Falls back to a text-only extraction prompt if the model doesn't support images.
 export async function visionExtract(base64: string, mimeType: string, instruction: string): Promise<string> {
-  const model = process.env.AI_VISION_MODEL ?? process.env.AI_MODEL ?? DEFAULT_MODEL;
+  const model = process.env.AI_VISION_MODEL ?? DEFAULT_VISION_MODEL;
   return chat([{
     role: "user",
     content: [
