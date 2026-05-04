@@ -5,6 +5,7 @@ import Link from "next/link";
 import { applications as sampleData, STATUSES } from "./data";
 import { ScoreBar, StatusPill, Header, Footer } from "./components";
 import { getApplications, saveApplication, Application } from "../lib/store";
+import { hasProfile } from "../lib/profile";
 
 function AppCard({ app }: { app: Application | typeof sampleData[0] }) {
   return (
@@ -32,6 +33,10 @@ export default function Dashboard() {
   const [apps, setApps] = useState<any[]>([]);
 
   useEffect(() => {
+    if (!hasProfile()) {
+      window.location.href = "/onboard";
+      return;
+    }
     let stored = getApplications();
     if (stored.length === 0) {
       stored = sampleData as any[];
