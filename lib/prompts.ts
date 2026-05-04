@@ -1,7 +1,16 @@
 import { Profile } from "./profile";
 import { Application } from "./store";
 
-export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm";
+export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm";
+
+export type ContactProfile = {
+  name: string;
+  title?: string;
+  company: string;
+  linkedinUrl?: string;
+  location?: string;
+  role?: "hiring_manager" | "referral_candidate" | "ceo" | "executive" | "recruiter" | "other";
+};
 
 export type AFScoreBlock = {
   score: number;
@@ -373,6 +382,171 @@ RULES:
 
 FORMAT:
 Hi [Name],
+
+[2-3 sentences: who, why them specifically, why worth responding]
+[One sentence ask]
+[Sign-off]`;
+}
+
+export function ceoColdEmailPrompt(profile: Profile, app: Application, ceo?: ContactProfile): string {
+  const ceoLine = ceo ? `Recipient: ${ceo.name}${ceo.title ? `, ${ceo.title}` : ", CEO"} at ${app.company}.` : `Recipient: CEO of ${app.company}.`;
+  const firstName = ceo?.name?.split(" ")[0] ?? "[First Name]";
+  return `You are writing a cold email from ${profile.name} to the CEO of ${app.company}. The goal is NOT to apply for a posted role. The goal is to start a conversation about creating value for the company, with a soft pitch toward the ${app.role} space.
+
+${ceoLine}
+
+${buildProfileContext(profile)}
+
+---
+
+${buildJDContext(app)}
+
+---
+
+TASK: A CEO-level cold email. Different from a Hiring Manager outreach.
+
+RULES:
+1. No em dashes anywhere.
+2. Never use: "excited", "passionate", "synergy", "leverage" as verb, "cutting-edge", "innovative", "disrupt", "scale", "10x", "self-starter", "proven track record".
+3. Subject line: provocative or specific, no fluff. Eight words max.
+4. Open with an observation about the company that proves you've done your homework, NOT a compliment.
+5. Second paragraph: a thesis about a problem they likely face, reasoned from first principles, not jargon.
+6. Third paragraph: one specific thing you've done that proves you can help with that thesis.
+7. Close: a 15-minute conversation ask, framed around helping them think, not asking for a job.
+8. 180 words maximum. Tight, sharp, peer-to-peer tone.
+9. Sign off with name + one credibility line + LinkedIn link.
+
+FORMAT:
+Subject: [subject]
+
+${ceo?.name ? firstName : "[First Name]"},
+
+[Opening — observation about ${app.company}]
+
+[Thesis paragraph — first principles]
+
+[Evidence paragraph — your specific proof point]
+
+[Ask — soft 15-min frame]
+
+${profile.name}
+${profile.headline ?? ""}
+${profile.linkedin ?? ""}`;
+}
+
+// Profile-aware variants — include the discovered contact's name, title, public signals
+export function hmOutreachPromptWithProfile(profile: Profile, app: Application, target: ContactProfile): string {
+  return `You are writing a cold outreach email for ${profile.name} to a likely Hiring Manager at ${app.company} for the ${app.role} role.
+
+RECIPIENT (discovered via people search):
+Name: ${target.name}
+Title: ${target.title ?? "(unknown)"}
+Company: ${target.company}
+LinkedIn: ${target.linkedinUrl ?? "(not provided)"}
+Location: ${target.location ?? "(unknown)"}
+
+${buildProfileContext(profile)}
+
+---
+
+${buildJDContext(app)}
+
+---
+
+TASK: Cold outreach email tailored to this specific person. Reference what their title/seniority signals (e.g. if they are a Director vs VP, the framing differs). Don't fabricate facts about them — use only what's provided.
+
+RULES:
+1. No em dashes.
+2. Never: "excited", "passionate", "synergy", "leverage" as verb, "cutting-edge", "innovative", "self-starter".
+3. Subject line: specific, intriguing.
+4. Body: 3 paragraphs max, 150 words.
+5. Open with the most differentiated thing about ${profile.name} that maps to what ${target.name}'s team likely cares about.
+6. Middle: one specific match.
+7. Close: 15-min call ask.
+8. Tone: warm, peer-to-peer, not supplicating.
+
+FORMAT:
+Subject: [subject]
+
+Hi ${target.name.split(" ")[0]},
+
+[Opening hook]
+[Most compelling match]
+[Specific low-friction ask]
+
+${profile.name}
+${profile.email}
+${profile.phone}`;
+}
+
+export function referralDMPromptWithProfile(profile: Profile, app: Application, target: ContactProfile): string {
+  return `You are writing a LinkedIn DM from ${profile.name} to a potential REFERRAL CONTACT at ${app.company}. The goal is to ask if they'd be willing to refer ${profile.name} for the ${app.role} role, or share what their experience at ${app.company} has been like.
+
+RECIPIENT:
+Name: ${target.name}
+Title: ${target.title ?? "(unknown)"}
+Company: ${target.company}
+${target.linkedinUrl ? `LinkedIn: ${target.linkedinUrl}` : ""}
+
+${buildProfileContext(profile)}
+
+---
+
+${buildJDContext(app)}
+
+---
+
+TASK: Short, human LinkedIn DM. NOT a hiring manager pitch. This is asking a peer or near-peer for a referral or insight.
+
+RULES:
+1. No em dashes.
+2. Never: "excited", "passionate", "innovative", "synergy".
+3. Maximum 70 words.
+4. Lead with a real reason you're reaching out to ${target.name} specifically.
+5. Don't ask for a referral in the first message. Ask for 10 minutes of their time or one specific question about ${app.company}.
+6. Tone: warm, low-stakes, peer-to-peer. NOT supplicating.
+
+FORMAT:
+Hi ${target.name.split(" ")[0]},
+
+[2-3 sentences: who, why them specifically given their role/title, why worth responding]
+[Soft ask: 10-min call or one specific question]
+[Sign-off]
+
+${profile.name.split(" ")[0]}`;
+}
+
+export function linkedInDMPromptWithProfile(profile: Profile, app: Application, target: ContactProfile): string {
+  return `You are writing a LinkedIn DM for ${profile.name} to ${target.name} (${target.title ?? "professional"} at ${app.company}) about the ${app.role} role.
+
+RECIPIENT:
+Name: ${target.name}
+Title: ${target.title ?? "(unknown)"}
+Company: ${target.company}
+${target.linkedinUrl ? `LinkedIn: ${target.linkedinUrl}` : ""}
+
+${buildProfileContext(profile)}
+
+---
+
+${buildJDContext(app)}
+
+---
+
+TASK: Short human DM. Tailored to ${target.name}'s role. NOT salesy.
+
+RULES:
+1. No em dashes.
+2. No "excited", "passionate", "innovative", "synergy".
+3. 75 words maximum.
+4. Sound human, not template.
+5. Address the recipient by first name.
+6. One clear ask: 15-min call or specific question.
+7. No links or attachments.
+8. Warm, not gushing. Confident, not arrogant.
+
+FORMAT:
+Hi ${target.name.split(" ")[0]},
 
 [2-3 sentences: who, why them specifically, why worth responding]
 [One sentence ask]

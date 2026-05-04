@@ -3,23 +3,29 @@ import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { normalizeTextForATS } from "../../../lib/ats";
 import {
   GenerationAction,
+  ContactProfile,
   resumePrompt,
   coverLetterPrompt,
   executiveSummaryPrompt,
   problemSolverPrompt,
   skillGapPrompt,
   hmOutreachPrompt,
+  hmOutreachPromptWithProfile,
   linkedInDMPrompt,
+  linkedInDMPromptWithProfile,
+  referralDMPromptWithProfile,
+  ceoColdEmailPrompt,
 } from "../../../lib/prompts";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, profile, app, providerSettings } = await req.json() as {
+    const { action, profile, app, target, providerSettings } = await req.json() as {
       action: GenerationAction;
       profile: any;
       app: any;
+      target?: ContactProfile;
       providerSettings?: ProviderSettings;
     };
 
@@ -42,8 +48,23 @@ export async function POST(req: NextRequest) {
     else if (action === "cover-letter") { prompt = coverLetterPrompt(profile, app); temperature = 0.7; }
     else if (action === "executive-summary") { prompt = executiveSummaryPrompt(profile, app); temperature = 0.6; }
     else if (action === "problem-solver") { prompt = problemSolverPrompt(profile, app); temperature = 0.75; }
-    else if (action === "outreach-hm") { prompt = hmOutreachPrompt(profile, app); temperature = 0.7; }
-    else if (action === "linkedin-dm") { prompt = linkedInDMPrompt(profile, app); temperature = 0.75; }
+    else if (action === "outreach-hm") {
+      prompt = target ? hmOutreachPromptWithProfile(profile, app, target) : hmOutreachPrompt(profile, app);
+      temperature = 0.7;
+    }
+    else if (action === "linkedin-dm") {
+      prompt = target ? linkedInDMPromptWithProfile(profile, app, target) : linkedInDMPrompt(profile, app);
+      temperature = 0.75;
+    }
+    else if (action === "referral-dm") {
+      if (!target) return NextResponse.json({ error: "referral-dm requires a target contact" }, { status: 400 });
+      prompt = referralDMPromptWithProfile(profile, app, target);
+      temperature = 0.75;
+    }
+    else if (action === "ceo-cold-email") {
+      prompt = ceoColdEmailPrompt(profile, app, target);
+      temperature = 0.7;
+    }
     else return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 
     let content = await chat(

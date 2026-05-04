@@ -4,11 +4,14 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { MODEL_OPTIONS, getModelSettings, saveModelSettings, ModelProvider } from "../../lib/model-settings";
+import { INTEGRATION_OPTIONS, getIntegrationSettings, saveIntegrationSettings, IntegrationSettings } from "../../lib/integration-settings";
 
 export default function SettingsPage() {
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>("together");
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({ anthropic: "", openai: "" });
   const [saved, setSaved] = useState(false);
+  const [integrations, setIntegrations] = useState<IntegrationSettings>({});
+  const [intSaved, setIntSaved] = useState(false);
 
   useEffect(() => {
     const s = getModelSettings();
@@ -16,7 +19,14 @@ export default function SettingsPage() {
     if (s.apiKey) {
       setApiKeys(prev => ({ ...prev, [s.provider]: s.apiKey! }));
     }
+    setIntegrations(getIntegrationSettings());
   }, []);
+
+  const handleIntSave = () => {
+    saveIntegrationSettings(integrations);
+    setIntSaved(true);
+    setTimeout(() => setIntSaved(false), 2000);
+  };
 
   const selectedOption = MODEL_OPTIONS.find(o => o.provider === selectedProvider)!;
 
@@ -133,6 +143,60 @@ export default function SettingsPage() {
                 Enter API key to save
               </span>
             )}
+          </div>
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>
+          <div className="label" style={{ marginBottom: 16 }}>INTEGRATIONS</div>
+          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
+            Optional API keys for contact discovery (Exa, Apollo), email sending (Resend), and email verification (Hunter). All keys are stored only in your browser. Free tiers are sufficient for most users.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {INTEGRATION_OPTIONS.map(opt => (
+              <div key={opt.id} style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 12 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-primary)" }}>{opt.label}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--success)", whiteSpace: "nowrap" }}>{opt.pricing}</span>
+                </div>
+                <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: 8, lineHeight: 1.5 }}>{opt.description}</p>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="password"
+                    value={(integrations[opt.keyField] as string) || ""}
+                    onChange={e => setIntegrations(prev => ({ ...prev, [opt.keyField]: e.target.value }))}
+                    placeholder={opt.keyPlaceholder}
+                    style={{ flex: 1, padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+                  />
+                  <a href={opt.keyLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.625rem", color: "var(--accent)", textDecoration: "none", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>GET KEY →</a>
+                </div>
+              </div>
+            ))}
+            <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 14 }}>
+              <div className="label" style={{ marginBottom: 8 }}>SENDER IDENTITY (FOR EMAIL SEND)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <input
+                  type="text"
+                  value={integrations.senderName || ""}
+                  onChange={e => setIntegrations(prev => ({ ...prev, senderName: e.target.value }))}
+                  placeholder="Your Name"
+                  style={{ padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+                />
+                <input
+                  type="email"
+                  value={integrations.senderEmail || ""}
+                  onChange={e => setIntegrations(prev => ({ ...prev, senderEmail: e.target.value }))}
+                  placeholder="you@yourdomain.com (verified in Resend)"
+                  style={{ padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+                />
+              </div>
+              <p style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.4 }}>
+                Sender domain must be verified in Resend. Verify at resend.com/domains before sending.
+              </p>
+            </div>
+          </div>
+          <div style={{ marginTop: 20, display: "flex", gap: 12, alignItems: "center" }}>
+            <button className="btn btn-primary" onClick={handleIntSave} style={{ padding: "10px 20px" }}>SAVE INTEGRATIONS</button>
+            {intSaved && <span style={{ color: "var(--success)", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>SAVED</span>}
           </div>
         </div>
 

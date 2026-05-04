@@ -6,8 +6,9 @@ import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
 import { getApplication, updateApplication, deleteApplication, Application } from "../../lib/store";
 import { getProfile } from "../../lib/profile";
-import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, GenerationAction, SkillGapResult } from "../../lib/generate";
-import { queueDM, queueOutreach, scheduleFollowUp } from "../../lib/notifications";
+import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, GenerationAction, SkillGapResult } from "../../lib/generate";
+import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
+import { ContactsPanel } from "../contacts-panel";
 import { applications as sampleData } from "../data";
 
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -28,6 +29,7 @@ function ApplicationDetail() {
   const [skillGap, setSkillGap] = useState<SkillGapResult | null>(null);
   const [genError, setGenError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -102,6 +104,9 @@ function ApplicationDetail() {
         } else if (action === "linkedin-dm") {
           content = await generateLinkedInDM(profile, app);
           queueDM(app.slug, app.company, app.role, content);
+        } else if (action === "ceo-cold-email") {
+          content = await generateCEOColdEmail(profile, app);
+          queueCEOEmail(app.slug, app.company, app.role, content);
         }
         setSkillGap(null);
         setAiOutput({ action, content });
@@ -294,6 +299,12 @@ function ApplicationDetail() {
               <button className="btn" onClick={() => handleGenerate("linkedin-dm")} disabled={!!generating}>
                 {generating === "linkedin-dm" ? "GENERATING..." : "LINKEDIN DM"}
               </button>
+              <button className="btn" style={{ borderColor: "#a78bfa", color: "#a78bfa" }} onClick={() => handleGenerate("ceo-cold-email")} disabled={!!generating}>
+                {generating === "ceo-cold-email" ? "GENERATING..." : "CEO COLD EMAIL"}
+              </button>
+              <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => setShowContacts(s => !s)}>
+                {showContacts ? "HIDE CONTACTS" : "FIND CONTACTS"}
+              </button>
               <button className="btn" style={{ borderColor: "var(--error)", color: "var(--error)" }} onClick={handleArchive}>ARCHIVE</button>
             </div>
             {genError && (
@@ -309,6 +320,12 @@ function ApplicationDetail() {
             )}
           </div>
 
+          {/* Contacts Panel */}
+          {showContacts && (() => {
+            const profile = getProfile();
+            return profile ? <ContactsPanel app={app} profile={profile} onClose={() => setShowContacts(false)} /> : null;
+          })()}
+
           {/* AI Output Panel */}
           {aiOutput && (
             <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
@@ -320,6 +337,8 @@ function ApplicationDetail() {
                   {aiOutput.action === "problem-solver" && "PROBLEM SOLVER PITCH"}
                   {aiOutput.action === "outreach-hm" && "OUTREACH EMAIL — HIRING MANAGER"}
                   {aiOutput.action === "linkedin-dm" && "LINKEDIN DM"}
+                  {aiOutput.action === "ceo-cold-email" && "CEO COLD EMAIL"}
+                  {aiOutput.action === "referral-dm" && "REFERRAL DM"}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={handleCopy}>
