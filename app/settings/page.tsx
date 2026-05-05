@@ -6,12 +6,19 @@ import { Header, Footer } from "../components";
 import { MODEL_OPTIONS, getModelSettings, saveModelSettings, ModelProvider } from "../../lib/model-settings";
 import { INTEGRATION_OPTIONS, getIntegrationSettings, saveIntegrationSettings, IntegrationSettings } from "../../lib/integration-settings";
 
+type InviteCode = { code: string; used: boolean; usedBy: string | null; createdAt: string };
+
 export default function SettingsPage() {
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>("together");
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({ anthropic: "", openai: "" });
   const [saved, setSaved] = useState(false);
   const [integrations, setIntegrations] = useState<IntegrationSettings>({});
   const [intSaved, setIntSaved] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [newCode, setNewCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   useEffect(() => {
     const s = getModelSettings();
@@ -20,7 +27,37 @@ export default function SettingsPage() {
       setApiKeys(prev => ({ ...prev, [s.provider]: s.apiKey! }));
     }
     setIntegrations(getIntegrationSettings());
+    fetch("/api/auth/me").then(r => r.json()).then(d => {
+      if (d.user?.isAdmin) {
+        setIsAdmin(true);
+        fetch("/api/admin/invite").then(r => r.json()).then(d2 => {
+          if (d2.codes) setInviteCodes(d2.codes);
+        }).catch(() => {});
+      }
+    }).catch(() => {});
   }, []);
+
+  const handleGenerateInvite = async () => {
+    setInviteLoading(true);
+    setNewCode(null);
+    try {
+      const res = await fetch("/api/admin/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (data.code) {
+        setNewCode(data.code);
+        setInviteCodes(prev => [{ code: data.code, used: false, usedBy: null, createdAt: new Date().toISOString() }, ...prev]);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const copyInviteLink = (code: string) => {
+    const url = `${window.location.origin}/register?invite=${code}`;
+    navigator.clipboard.writeText(url).then(() => { setCopiedCode(code); setTimeout(() => setCopiedCode(null), 2000); }).catch(() => {});
+  };
 
   const handleIntSave = () => {
     saveIntegrationSettings(integrations);
@@ -200,12 +237,63 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: isAdmin ? 24 : 0 }}>
           <div className="label" style={{ marginBottom: 12 }}>DATA</div>
           <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
             All your data (profile, applications, skill plans) is stored in your browser's local storage. Nothing is sent to a server except the content of each AI request.
           </p>
         </div>
+
+        {isAdmin && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div className="label">INVITE CODES</div>
+                <div style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginTop: 2 }}>ADMIN ONLY</div>
+              </div>
+              <button className="btn btn-primary" onClick={handleGenerateInvite} disabled={inviteLoading} style={{ padding: "8px 16px" }}>
+                {inviteLoading ? "GENERATING..." : "GENERATE INVITE"}
+              </button>
+            </div>
+
+            {newCode && (
+              <div style={{ background: "rgba(0,200,100,0.08)", border: "1px solid var(--success)", borderRadius: "var(--radius)", padding: "12px 16px", marginBottom: 16 }}>
+                <div className="label" style={{ fontSize: "0.625rem", color: "var(--success)", marginBottom: 4 }}>NEW INVITE CODE GENERATED</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.25rem", color: "var(--success)", letterSpacing: "0.15em", marginBottom: 8 }}>{newCode}</div>
+                <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px", borderColor: "var(--success)", color: "var(--success)" }} onClick={() => copyInviteLink(newCode)}>
+                  {copiedCode === newCode ? "COPIED!" : "COPY INVITE LINK"}
+                </button>
+                <div style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginTop: 6 }}>
+                  Link: {typeof window !== "undefined" ? window.location.origin : ""}/register?invite={newCode}
+                </div>
+              </div>
+            )}
+
+            <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: 10, lineHeight: 1.5 }}>
+              Share the invite link with the person you want to invite. They use it to register at <code style={{ background: "var(--bg-primary)", padding: "1px 4px", fontSize: "0.7rem" }}>/register</code>. Each code can only be used once.
+            </div>
+
+            {inviteCodes.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {inviteCodes.map(ic => (
+                  <div key={ic.code} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg-primary)", borderRadius: "var(--radius)", border: "1px solid var(--border-light)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.875rem", letterSpacing: "0.1em", color: ic.used ? "var(--text-tertiary)" : "var(--text-primary)", flex: 1 }}>{ic.code}</span>
+                    {ic.used ? (
+                      <span style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>USED by {ic.usedBy}</span>
+                    ) : (
+                      <button className="btn" style={{ fontSize: "0.5rem", padding: "3px 8px" }} onClick={() => copyInviteLink(ic.code)}>
+                        {copiedCode === ic.code ? "COPIED!" : "COPY LINK"}
+                      </button>
+                    )}
+                    <span style={{ fontSize: "0.5rem", color: ic.used ? "var(--error)" : "var(--success)", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>{ic.used ? "USED" : "OPEN"}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>NO INVITE CODES YET. GENERATE ONE TO INVITE A USER.</p>
+            )}
+          </div>
+        )}
       </main>
       <Footer />
     </div>
