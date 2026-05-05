@@ -4,8 +4,28 @@ const TOGETHER_BASE = "https://api.together.xyz/v1";
 const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
 const OPENAI_BASE = "https://api.openai.com/v1";
 
+// DeepSeek V4 Pro is a reasoning model — high quality but it spends tokens on internal
+// chain-of-thought before the final answer. We compensate with a much larger token budget.
 const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4-Pro";
 const DEFAULT_VISION_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
+
+// Models known to wrap output in <think>...</think> blocks (reasoning models).
+const REASONING_MODEL_PATTERNS = [/deepseek-r1/i, /deepseek-v4/i, /qwq/i, /reasoning/i, /thinking/i, /\bo1\b/i, /\bo3\b/i];
+
+function isReasoningModel(model: string): boolean {
+  return REASONING_MODEL_PATTERNS.some(re => re.test(model));
+}
+
+function stripThinkBlocks(content: string): string {
+  let cleaned = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, "").trim();
+  // Some reasoning models output an unclosed <think> if truncated — keep everything after the last </think>
+  if (cleaned.includes("<think>") && !cleaned.includes("</think>")) {
+    const lastThink = cleaned.lastIndexOf("<think>");
+    cleaned = cleaned.slice(0, lastThink).trim();
+  }
+  return cleaned;
+}
 
 export type ChatMessage = {
   role: "user" | "system" | "assistant";
@@ -54,11 +74,18 @@ async function fetchWithRetry(url: string, init: RequestInit, providerName: stri
 
 async function chatTogether(messages: ChatMessage[], opts: ChatOptions): Promise<string> {
   const model = opts.model ?? process.env.AI_MODEL ?? DEFAULT_MODEL;
+  const reasoning = isReasoningModel(model);
+  // Reasoning models burn thousands of tokens on chain-of-thought before the final answer.
+  // For DeepSeek-V4-Pro a typical resume needs ~600 output tokens but ~8-15K reasoning tokens.
+  // Give reasoning models 5x the requested budget with a 12K floor so output is never starved.
+  const requestedTokens = opts.maxTokens ?? 2000;
+  const maxTokens = reasoning ? Math.max(requestedTokens * 5, 12000) : requestedTokens;
+
   const body: any = {
     model,
     messages,
     temperature: opts.temperature ?? 0.7,
-    max_tokens: opts.maxTokens ?? 2000,
+    max_tokens: maxTokens,
   };
   if (opts.jsonMode) body.response_format = { type: "json_object" };
 
@@ -68,7 +95,36 @@ async function chatTogether(messages: ChatMessage[], opts: ChatOptions): Promise
     body: JSON.stringify(body),
   }, "Together AI");
   const result = await response.json();
-  return result.choices?.[0]?.message?.content?.trim() ?? "";
+  const choice = result.choices?.[0];
+  let content = choice?.message?.content ?? "";
+
+  // Some reasoning models return content separately as `reasoning_content` plus `content`.
+  // If `content` is empty but `reasoning_content` exists, the model finished thinking but never
+  // emitted a final answer (usually because max_tokens was hit during reasoning).
+  if (!content && choice?.message?.reasoning_content) {
+    const reasoningPreview = String(choice.message.reasoning_content).slice(-1500);
+    throw new Error(
+      `${model} hit the ${maxTokens}-token budget while reasoning and never produced a final answer. ` +
+      `Reasoning ended with: "...${reasoningPreview}". Try shortening the input or retry — token budget has already been raised to its safe maximum.`
+    );
+  }
+
+  if (!content) {
+    const finishReason = choice?.finish_reason ?? "unknown";
+    const errMsg = result.error?.message ?? result.error ?? JSON.stringify(result).slice(0, 400);
+    throw new Error(
+      `${model} returned empty content. finish_reason="${finishReason}", max_tokens=${maxTokens}. Raw response: ${errMsg}`
+    );
+  }
+
+  if (reasoning) content = stripThinkBlocks(content);
+  // After stripping <think> blocks, content might be empty if the model never closed the block
+  if (!content.trim()) {
+    throw new Error(
+      `${model} returned only <think> reasoning blocks with no final answer. The model likely hit the ${maxTokens}-token budget mid-reasoning. Retry the request.`
+    );
+  }
+  return content.trim();
 }
 
 async function chatAnthropic(messages: ChatMessage[], opts: ChatOptions, apiKey: string): Promise<string> {
