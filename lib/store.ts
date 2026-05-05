@@ -1,3 +1,18 @@
+export type InterviewRound = "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
+
+export type Interview = {
+  id: string;
+  round: InterviewRound;
+  scheduledAt?: string;
+  completedAt?: string;
+  contact?: string;
+  interviewerTitle?: string;
+  format?: "video" | "phone" | "in_person" | "async";
+  notes?: string;
+  outcome?: "pending" | "passed" | "rejected" | "cancelled";
+  createdAt: string;
+};
+
 export type Application = {
   id: string;
   slug: string;
@@ -34,7 +49,7 @@ export type Application = {
   };
   nextAction: string;
   contacts: any[];
-  interviews: any[];
+  interviews: Interview[];
   reminders: any[];
   resumeVersions: any[];
   notes: string;

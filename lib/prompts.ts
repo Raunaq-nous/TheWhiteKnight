@@ -771,5 +771,57 @@ Return ONLY raw JSON:
   "recommendedFocus": "string — one paragraph on where to invest time in next 90 days"
 }
 
-Track at least 8 skills. Order by priority (critical first). Be specific, realistic, and use the candidate's actual past work as evidence.`;
+Track at least 8 skills. Order by priority (critical first). Be specific, realistic, and use the candidate's actual past work as evidence.`;}
+
+export type NLUpdateResult = {
+  summary: string;
+  statusChange: boolean;
+  newStatus: "sourced" | "reviewed" | "applied" | "interview" | "offer" | "rejected" | null;
+  contact: { name: string; title?: string } | null;
+  interview: {
+    round: "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
+    scheduledAt: string | null;
+    format: "video" | "phone" | "in_person" | "async" | null;
+    contact: string | null;
+  } | null;
+  reminderDays: number | null;
+  noteToAppend: string;
+};
+
+export function nlUpdatePrompt(text: string, app: Application): string {
+  const today = new Date().toISOString().split("T")[0];
+  return [
+    "You are parsing a natural-language job search update into structured data.",
+    "",
+    "Today's date: " + today,
+    "Application: " + app.company + " — " + app.role + " (current status: " + app.status + ")",
+    "",
+    "USER UPDATE:",
+    '"' + text + '"',
+    "",
+    "Parse this update and return ONLY raw JSON:",
+    "{",
+    '  "summary": "one sentence human-readable summary of what happened",',
+    '  "statusChange": true/false — should the application status change?,',
+    '  "newStatus": "applied|reviewed|interview|offer|rejected|null" — the new status if changed, else null,',
+    '  "contact": { "name": "full name", "title": "job title if mentioned" } or null if no new person mentioned,',
+    '  "interview": {',
+    '    "round": "phone_screen|first|second|final|case|technical|exec|other",',
+    '    "scheduledAt": "YYYY-MM-DD or null if no specific date",',
+    '    "format": "video|phone|in_person|async|null",',
+    '    "contact": "interviewer name if mentioned, else null"',
+    "  } or null if no interview mentioned,",
+    '  "reminderDays": number of days until next follow-up or null if not relevant,',
+    '  "noteToAppend": "a clean note to append to the application notes, written in past tense, dated today"',
+    "}",
+    "",
+    "Rules:",
+    '- If user says "got a call", "had a call", "phone screen" → round = "phone_screen", status = "interview"',
+    '- If user says "second round", "final round" → set round accordingly',
+    '- If user says "rejected", "didn\'t get it", "passed on" → status = "rejected"',
+    '- If user says "offer" → status = "offer"',
+    "- Extract date references like \"next Tuesday\", \"this Friday\" into YYYY-MM-DD format relative to today (" + today + ")",
+    '- If a name is mentioned with a title (e.g. "Priya, recruiter at Bain") → extract as contact',
+    "- reminderDays: set to 7 if they just applied, 1 if interview is tomorrow, null if no clear follow-up needed",
+  ].join("\n");
 }

@@ -4,8 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer, ScoreBar, StatusPill } from "../components";
-import { getApplication, updateApplication, deleteApplication, Application } from "../../lib/store";
+import { getApplication, updateApplication, deleteApplication, Application, Interview, generateId } from "../../lib/store";
 import { getProfile } from "../../lib/profile";
+import { NLUpdateResult } from "../../lib/prompts";
+import { getModelSettings } from "../../lib/model-settings";
 import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
@@ -30,6 +32,11 @@ function ApplicationDetail() {
   const [genError, setGenError] = useState("");
   const [copied, setCopied] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+  const [nlText, setNlText] = useState("");
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlParsed, setNlParsed] = useState<NLUpdateResult | null>(null);
+  const [nlError, setNlError] = useState("");
+  const [nlApplied, setNlApplied] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -131,6 +138,75 @@ function ApplicationDetail() {
     router.push("/");
   };
 
+  const handleNLUpdate = async () => {
+    if (!nlText.trim() || !app) return;
+    setNlLoading(true);
+    setNlError("");
+    setNlParsed(null);
+    setNlApplied(false);
+    try {
+      const s = getModelSettings();
+      const providerSettings = s.provider !== "together" ? { provider: s.provider, model: s.model, apiKey: s.apiKey } : undefined;
+      const res = await fetch("/api/nl-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: nlText, app, providerSettings }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Parse failed");
+      setNlParsed(data);
+    } catch (e: any) {
+      setNlError(e.message || "Failed to parse update.");
+    } finally {
+      setNlLoading(false);
+    }
+  };
+
+  const applyNLUpdate = () => {
+    if (!nlParsed || !app?.id) return;
+    const changes: Partial<Application> = {};
+
+    if (nlParsed.statusChange && nlParsed.newStatus) {
+      changes.status = nlParsed.newStatus;
+      if (nlParsed.newStatus === "applied") scheduleFollowUp(app.slug, app.company, app.role, nlParsed.reminderDays ?? 7);
+    }
+
+    if (nlParsed.noteToAppend) {
+      const today = new Date().toISOString().split("T")[0];
+      const existing = app.notes ?? "";
+      changes.notes = existing ? `${existing}\n\n[${today}] ${nlParsed.noteToAppend}` : `[${today}] ${nlParsed.noteToAppend}`;
+    }
+
+    if (nlParsed.interview) {
+      const iv = nlParsed.interview;
+      const newInterview: Interview = {
+        id: generateId(),
+        round: iv.round,
+        scheduledAt: iv.scheduledAt ?? undefined,
+        contact: iv.contact ?? undefined,
+        format: iv.format ?? undefined,
+        outcome: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      changes.interviews = [...(app.interviews ?? []), newInterview];
+    }
+
+    if (nlParsed.contact) {
+      changes.contacts = [...(app.contacts ?? []), `${nlParsed.contact.name}${nlParsed.contact.title ? ` (${nlParsed.contact.title})` : ""}`];
+    }
+
+    if (nlParsed.reminderDays && !nlParsed.statusChange) {
+      scheduleFollowUp(app.slug, app.company, app.role, nlParsed.reminderDays);
+    }
+
+    updateApplication(app.id, changes);
+    setApp(prev => prev ? { ...prev, ...changes } : prev);
+    if (changes.notes) setNoteText(changes.notes);
+    setNlApplied(true);
+    setNlText("");
+    setTimeout(() => { setNlParsed(null); setNlApplied(false); }, 3000);
+  };
+
   return (
     <main className="container" style={{ paddingTop: 32, paddingBottom: 64, flex: 1 }}>
       {/* Breadcrumb */}
@@ -175,6 +251,66 @@ function ApplicationDetail() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* NL Update */}
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 20, marginBottom: 24 }}>
+        <div className="label" style={{ marginBottom: 10, fontSize: "0.625rem" }}>LOG UPDATE</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <textarea
+            value={nlText}
+            onChange={e => setNlText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleNLUpdate(); }}
+            placeholder='e.g. "Got a call from Priya at Bain. Second round case interview next Tuesday at 2pm via video."'
+            rows={2}
+            style={{ flex: 1, padding: "8px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", resize: "vertical" }}
+          />
+          <button className="btn btn-primary" onClick={handleNLUpdate} disabled={nlLoading || !nlText.trim()} style={{ alignSelf: "flex-end", padding: "8px 16px", whiteSpace: "nowrap" }}>
+            {nlLoading ? "PARSING..." : "UPDATE"}
+          </button>
+        </div>
+        <div className="label" style={{ marginTop: 4, fontSize: "0.5rem", color: "var(--text-tertiary)" }}>⌘+ENTER TO SUBMIT</div>
+        {nlError && <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{nlError}</div>}
+
+        {nlApplied && (
+          <div style={{ marginTop: 10, color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>APPLIED — APPLICATION UPDATED</div>
+        )}
+
+        {nlParsed && !nlApplied && (
+          <div style={{ marginTop: 12, background: "var(--bg-primary)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 14 }}>
+            <div className="label" style={{ color: "var(--accent)", marginBottom: 8, fontSize: "0.625rem" }}>PARSED UPDATE — CONFIRM TO APPLY</div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-primary)", marginBottom: 10 }}>{nlParsed.summary}</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+              {nlParsed.statusChange && nlParsed.newStatus && (
+                <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>STATUS →</span> <span style={{ color: `var(--status-${nlParsed.newStatus})`, textTransform: "uppercase" }}>{nlParsed.newStatus}</span>
+                </div>
+              )}
+              {nlParsed.interview && (
+                <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>INTERVIEW →</span> {nlParsed.interview.round.replace(/_/g, " ").toUpperCase()}{nlParsed.interview.scheduledAt ? ` on ${nlParsed.interview.scheduledAt}` : ""}{nlParsed.interview.format ? ` via ${nlParsed.interview.format}` : ""}
+                </div>
+              )}
+              {nlParsed.contact && (
+                <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>CONTACT →</span> {nlParsed.contact.name}{nlParsed.contact.title ? ` (${nlParsed.contact.title})` : ""}
+                </div>
+              )}
+              {nlParsed.reminderDays && (
+                <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                  <span style={{ color: "var(--text-tertiary)" }}>REMINDER →</span> in {nlParsed.reminderDays} days
+                </div>
+              )}
+              <div style={{ fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                <span style={{ color: "var(--text-tertiary)" }}>NOTE →</span> {nlParsed.noteToAppend}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" style={{ padding: "6px 14px" }} onClick={applyNLUpdate}>APPLY CHANGES</button>
+              <button className="btn" style={{ padding: "6px 14px" }} onClick={() => setNlParsed(null)}>DISMISS</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}
@@ -477,6 +613,32 @@ function ApplicationDetail() {
             </div>
           )}
 
+          {/* Interview Log */}
+          {(app.interviews ?? []).length > 0 && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
+              <div className="label" style={{ marginBottom: 16 }}>INTERVIEWS ({app.interviews.length})</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {app.interviews.map((iv, i) => {
+                  const outcomeColor = iv.outcome === "passed" ? "var(--success)" : iv.outcome === "rejected" ? "var(--error)" : iv.outcome === "cancelled" ? "var(--text-tertiary)" : "var(--accent)";
+                  return (
+                    <div key={iv.id ?? i} style={{ borderLeft: "2px solid var(--border)", paddingLeft: 12 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", color: "var(--text-primary)" }}>
+                          {iv.round?.replace(/_/g, " ")}
+                        </span>
+                        {iv.format && <span className="label" style={{ fontSize: "0.5rem", borderRadius: 2, padding: "1px 5px", background: "var(--bg-primary)" }}>{iv.format.toUpperCase()}</span>}
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: outcomeColor, marginLeft: "auto", textTransform: "uppercase" }}>{iv.outcome ?? "pending"}</span>
+                      </div>
+                      {iv.scheduledAt && <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>{iv.scheduledAt}</div>}
+                      {iv.contact && <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>with {iv.contact}{iv.interviewerTitle ? ` · ${iv.interviewerTitle}` : ""}</div>}
+                      {iv.notes && <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: 4 }}>{iv.notes}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Timeline */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
             <div className="label" style={{ marginBottom: 16 }}>TIMELINE</div>
@@ -488,6 +650,13 @@ function ApplicationDetail() {
                   {app.sourceUrl ? `from ${app.sourceUrl}` : "JD ingested"}
                 </span>
               </div>
+              {(app.interviews ?? []).map((iv, i) => (
+                <div key={iv.id ?? i} style={{ display: "flex", gap: 12 }}>
+                  <span className="mono" style={{ color: "var(--text-tertiary)", minWidth: 90, fontSize: "0.75rem" }}>{iv.scheduledAt ?? iv.createdAt?.split("T")[0]}</span>
+                  <span className="mono" style={{ color: "var(--status-interview)", fontSize: "0.75rem" }}>INTERVIEW</span>
+                  <span style={{ color: "var(--text-secondary)", fontSize: "0.75rem" }}>{iv.round?.replace(/_/g, " ").toUpperCase()}{iv.contact ? ` with ${iv.contact}` : ""}</span>
+                </div>
+              ))}
               {app.status !== "sourced" && (
                 <div style={{ display: "flex", gap: 12 }}>
                   <span className="mono" style={{ color: "var(--text-tertiary)", minWidth: 90, fontSize: "0.75rem" }}>{app.updatedAt?.split("T")[0] ?? app.capturedAt}</span>
