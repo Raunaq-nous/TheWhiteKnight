@@ -95,9 +95,17 @@ export default function IngestPage() {
   const [extractedFileName, setExtractedFileName] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [extractedFiles, setExtractedFiles] = useState<string[]>([]);
 
   const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
   const TEXT_TYPES = ["text/plain", "text/markdown"];
+
+  const appendJD = (chunk: string) => {
+    setJdText(prev => {
+      const base = prev.trim();
+      return base ? base + "\n\n" + chunk : chunk;
+    });
+  };
 
   const handleFiles = async (files: File[]) => {
     if (files.length === 0) return;
@@ -107,17 +115,15 @@ export default function IngestPage() {
       setErrorMsg(`Unsupported file types. Use .txt, .md, or images (PNG, JPG, WEBP).`);
       return;
     }
-    setExtractedFileName(valid.length === 1 ? valid[0].name : `${valid.length} files`);
 
     const textFiles = valid.filter(f => TEXT_TYPES.includes(f.type) || f.name.endsWith(".txt") || f.name.endsWith(".md"));
     const imageFiles = valid.filter(f => IMAGE_TYPES.includes(f.type));
 
-    let combined = jdText.trim();
-
     for (const f of textFiles) {
       try {
         const t = await readFileAsText(f);
-        combined = combined ? combined + "\n\n--- " + f.name + " ---\n\n" + t : t;
+        appendJD(`--- ${f.name} ---\n\n${t}`);
+        setExtractedFiles(prev => [...prev, f.name]);
       } catch (e: any) {
         setErrorMsg(`Failed to read ${f.name}: ${e.message}`);
       }
@@ -131,17 +137,22 @@ export default function IngestPage() {
           setExtractedFileName(`Extracting ${i + 1} of ${imageFiles.length}: ${f.name}`);
           const base64 = await readFileAsBase64(f);
           const t = await extractTextFromImage(base64, f.type);
-          combined = combined ? combined + "\n\n" + t : t;
+          appendJD(t);
+          setExtractedFiles(prev => [...prev, f.name]);
         }
-        setExtractedFileName(`Extracted from ${imageFiles.length} image${imageFiles.length > 1 ? "s" : ""}`);
+        setExtractedFileName("");
       } catch (e: any) {
         setErrorMsg(e.message || "Image extraction failed.");
       } finally {
         setIsExtracting(false);
       }
     }
+  };
 
-    setJdText(combined);
+  const clearExtracted = () => {
+    setJdText("");
+    setExtractedFiles([]);
+    setExtractedFileName("");
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -269,21 +280,16 @@ export default function IngestPage() {
 
             {/* JD Input — upload or paste */}
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
                 <label className="label">JOB DESCRIPTION</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {extractedFileName && (
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--accent)" }}>
-                      {isExtracting ? "EXTRACTING..." : `FROM: ${extractedFileName}`}
-                    </span>
-                  )}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <button
                     className="btn"
                     style={{ fontSize: "0.625rem", padding: "4px 10px" }}
                     onClick={() => cameraInputRef.current?.click()}
                     disabled={isExtracting}
                   >
-                    TAKE PHOTO
+                    + PHOTO
                   </button>
                   <button
                     className="btn"
@@ -291,8 +297,13 @@ export default function IngestPage() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isExtracting}
                   >
-                    UPLOAD FILE
+                    + FILE(S)
                   </button>
+                  {(extractedFiles.length > 0 || jdText) && (
+                    <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px", borderColor: "var(--error)", color: "var(--error)" }} onClick={clearExtracted} disabled={isExtracting}>
+                      CLEAR
+                    </button>
+                  )}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -313,6 +324,16 @@ export default function IngestPage() {
                 </div>
               </div>
 
+              {extractedFiles.length > 0 && (
+                <div style={{ marginBottom: 8, padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border-light)", borderRadius: "var(--radius)", fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--text-secondary)" }}>
+                  CAPTURED ({extractedFiles.length}): {extractedFiles.join(", ")}
+                  {isExtracting && extractedFileName && <span style={{ color: "var(--accent)", display: "block", marginTop: 4 }}>{extractedFileName}</span>}
+                </div>
+              )}
+              {extractedFiles.length === 0 && isExtracting && extractedFileName && (
+                <div style={{ marginBottom: 8, padding: "6px 10px", color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "0.625rem" }}>{extractedFileName}</div>
+              )}
+
               {/* Drop zone */}
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -321,27 +342,20 @@ export default function IngestPage() {
                 style={{
                   border: `1px dashed ${dragOver ? "var(--accent)" : "var(--border)"}`,
                   borderRadius: "var(--radius)",
-                  padding: isExtracting ? 24 : 0,
                   transition: "border-color 0.15s",
                   background: dragOver ? "rgba(var(--accent-rgb, 255,165,0), 0.05)" : "transparent"
                 }}
               >
-                {isExtracting ? (
-                  <div style={{ textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
-                    EXTRACTING TEXT FROM IMAGE VIA AI...
-                  </div>
-                ) : (
-                  <textarea
-                    value={jdText}
-                    onChange={e => setJdText(e.target.value)}
-                    rows={10}
-                    placeholder="Paste JD text here, or drag and drop a .txt file or screenshot above"
-                    style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical", display: "block" }}
-                  />
-                )}
+                <textarea
+                  value={jdText}
+                  onChange={e => setJdText(e.target.value)}
+                  rows={10}
+                  placeholder="Paste JD text here, or upload screenshots. Each + PHOTO / + FILE(S) appends to what is already here."
+                  style={{ width: "100%", padding: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical", display: "block" }}
+                />
               </div>
               <div className="label" style={{ marginTop: 6, fontSize: "0.6rem", color: "var(--text-tertiary)" }}>
-                Supports: .txt, .md, PNG, JPG, WEBP. Multi-image upload supported (one JD spread across screenshots gets concatenated). Drop multiple files or hold to select multiple.
+                Supports: .txt, .md, PNG, JPG, WEBP. Upload multiple screenshots in one go (hold to multi-select on mobile) or click + PHOTO repeatedly. Each upload APPENDS to the JD text above; CLEAR resets it.
               </div>
             </div>
 

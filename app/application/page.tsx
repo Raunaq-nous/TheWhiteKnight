@@ -125,6 +125,72 @@ function ApplicationDetail() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleDownloadMd = () => {
+    if (!aiOutput || !app) return;
+    const filename = `${app.company.toLowerCase().replace(/\s+/g, "-")}-${app.role.toLowerCase().replace(/\s+/g, "-")}-${aiOutput.action}.md`;
+    const blob = new Blob([aiOutput.content], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPdf = () => {
+    if (!aiOutput || !app) return;
+    const md = aiOutput.content;
+    // Minimal markdown -> HTML transform tuned for resume/letter outputs
+    const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const lines = md.split("\n");
+    let html = "";
+    let inList = false;
+    const flushList = () => { if (inList) { html += "</ul>"; inList = false; } };
+    for (const raw of lines) {
+      const line = raw.trimEnd();
+      if (!line.trim()) { flushList(); html += ""; continue; }
+      if (line.startsWith("# ")) { flushList(); html += `<h1>${escapeHtml(line.slice(2))}</h1>`; continue; }
+      if (line.startsWith("## ")) { flushList(); html += `<h2>${escapeHtml(line.slice(3))}</h2>`; continue; }
+      if (line.startsWith("### ")) { flushList(); html += `<h3>${escapeHtml(line.slice(4))}</h3>`; continue; }
+      if (/^[-*]\s+/.test(line)) {
+        if (!inList) { html += "<ul>"; inList = true; }
+        let item = escapeHtml(line.replace(/^[-*]\s+/, ""));
+        item = item.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        html += `<li>${item}</li>`;
+        continue;
+      }
+      flushList();
+      let p = escapeHtml(line);
+      p = p.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      html += `<p>${p}</p>`;
+    }
+    flushList();
+    const title = `${app.company} - ${app.role} - ${aiOutput.action}`;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Popup blocked. Allow popups to export PDF."); return; }
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>
+@page { size: letter; margin: 0.5in; }
+body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.35; font-size: 10.5pt; max-width: 7.5in; margin: 0 auto; padding: 0.4in 0.5in; }
+h1 { font-size: 18pt; margin: 0 0 4px; letter-spacing: 0.3px; }
+h2 { font-size: 11pt; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 2px; margin: 12px 0 6px; }
+h3 { font-size: 10.5pt; margin: 8px 0 2px; }
+p { margin: 2px 0; }
+ul { margin: 2px 0 6px; padding-left: 18px; }
+li { margin: 1px 0; }
+strong { font-weight: 600; }
+@media print { body { padding: 0; } .no-print { display: none; } }
+.bar { position: fixed; top: 8px; right: 8px; }
+.bar button { font: 12px -apple-system, sans-serif; padding: 6px 12px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; margin-left: 6px; }
+</style></head><body>
+<div class="bar no-print"><button onclick="window.print()">SAVE AS PDF</button><button onclick="window.close()">CLOSE</button></div>
+${html}
+</body></html>`);
+    win.document.close();
+  };
+
   const handleArchive = () => {
     if (!app.id || !confirm(`Archive ${app.company} — ${app.role}?`)) return;
     deleteApplication(app.id);
@@ -469,16 +535,27 @@ function ApplicationDetail() {
                   {aiOutput.action === "ceo-cold-email" && "CEO COLD EMAIL"}
                   {aiOutput.action === "referral-dm" && "REFERRAL DM"}
                 </div>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={handleCopy}>
                     {copied ? "COPIED!" : "COPY"}
                   </button>
+                  <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={handleDownloadMd}>DOWNLOAD .MD</button>
+                  <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px", borderColor: "var(--accent)", color: "var(--accent)" }} onClick={handleExportPdf}>EXPORT PDF</button>
                   <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={() => setAiOutput(null)}>CLOSE</button>
                 </div>
               </div>
-              <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.7, margin: 0, maxHeight: 600, overflowY: "auto" }}>
-                {aiOutput.content}
-              </pre>
+              {aiOutput.content?.trim() ? (
+                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.7, margin: 0, maxHeight: 600, overflowY: "auto" }}>
+                  {aiOutput.content}
+                </pre>
+              ) : (
+                <div style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.8125rem" }}>
+                  AI returned an empty response. Try regenerating, or switch model in Settings if Together is rate-limited.
+                  <div style={{ marginTop: 12 }}>
+                    <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: "0.75rem" }} onClick={() => handleGenerate(aiOutput.action)}>REGENERATE</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

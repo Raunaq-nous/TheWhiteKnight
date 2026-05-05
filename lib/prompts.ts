@@ -148,8 +148,9 @@ export function resumePrompt(profile: Profile, app: Application): string {
   const atsKeywords = app.jdParsed?.keywords?.join(", ") ?? "";
   const keyReqs = app.jdParsed?.keyRequirements?.join("; ") ?? "";
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
+  const isStrategy = profile.roleType === "strategy-consulting";
 
-  return `You are an expert ATS-optimized resume writer. You are helping ${profile.name} apply for the ${app.role} role at ${app.company}.
+  return `You are a senior resume strategist. Tailor a one-page, ATS-optimized resume for ${profile.name} targeting the ${app.role} role at ${app.company}.
 
 ${buildProfileContext(profile)}
 
@@ -157,47 +158,50 @@ ${buildProfileContext(profile)}
 
 ${buildJDContext(app)}
 
-${atsKeywords ? `ATS KEYWORDS FROM JD (must appear naturally in resume): ${atsKeywords}` : ""}
+${atsKeywords ? `ATS KEYWORDS (weave in naturally, exact wording where possible): ${atsKeywords}` : ""}
+${keyReqs ? `MUST-COVER REQUIREMENTS: ${keyReqs}` : ""}
+${techSkills ? `MUST-LIST TECHNICAL SKILLS (only if candidate has them): ${techSkills}` : ""}
 
 ---
 
-TASK: Write a tailored, ATS-optimized one-page resume following this 15-step pipeline exactly:
+REASONING APPROACH (think before writing):
+1. Identify the 5-7 highest-leverage requirements from the JD.
+2. For each, pick the single strongest piece of evidence in the profile (a bullet, project, or metric).
+3. Choose 3-4 experience entries to feature; cut the rest.
+4. Per entry, select 3-4 bullets that map directly to JD requirements; reorder so most relevant comes first.
+5. Calibrate scope language to ${app.seniority} seniority.
+6. Build a Skills section using JD terminology exactly (e.g. "LLMOps" if JD says LLMOps).
 
-**Step 1 — Extract keywords:** Use these JD keywords (already extracted): ${atsKeywords || "extract from requirements above"}
-**Step 2 — Rewrite Professional Summary:** 2-3 sentences. Inject 3-5 keywords naturally. Lead with years + domain + distinctive angle. Weave "first principles" naturally. No em dashes.
-**Step 3 — Reorder bullets by relevance:** Put the most JD-relevant bullets first in each role. Cut weakly matching bullets if needed to stay one page.
-**Step 4 — Inject keywords into Skills section:** Match the exact terminology from the JD (e.g. if JD says "LLMOps" not "LLM operations", use "LLMOps").
-**Step 5 — Verify requirements coverage:** Every key requirement (${keyReqs}) should appear somewhere in the resume — bullet, skill, or summary.
-**Step 6 — Tech skills alignment:** Required tech skills (${techSkills}) should appear in Skills section if the candidate has them.
-**Step 7 — Seniority calibration:** Match seniority signals to the role level (${app.seniority}). Use appropriate scope language.
-**Step 8 — Quantify everything possible:** Use actual metrics from the profile. Never invent numbers.
-**Step 9 — No clichés:** Never use "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions".
-**Step 10 — Vary sentence structure:** Don't start every bullet with the same verb. Mix lengths.
-**Step 11 — ATS normalization:** No em dashes (use commas/semicolons). No smart quotes. No zero-width chars. No special unicode bullets — use standard hyphens.
-**Step 12 — Location line:** Include ${profile.location} — if remote open, add "Open to remote".
-**Step 13 — One page enforcement:** Max ~28-32 content lines total. Ruthlessly prioritize relevance over completeness.
-**Step 14 — First principles in summary:** Weave "approaches problems from first principles" naturally — not as a buzzword.
-**Step 15 — Final check:** Every bullet starts with a strong past-tense action verb. Contact info complete. No placeholders.
+OUTPUT RULES:
+- Max ~30 content lines total. One page.
+- Every bullet: strong past-tense verb + specific action + quantified outcome (use only metrics from the profile, never invent).
+- No em dashes anywhere. Use commas, semicolons, or restructure.
+- No smart quotes, no fancy unicode bullets — plain hyphens only.
+- Banned phrases: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
+- Vary verbs and sentence lengths. Do not start consecutive bullets with the same word.
+- Summary: 2-3 sentences, lead with years + domain + distinctive angle; weave 3-5 JD keywords naturally.${isStrategy ? '\n- For this strategy/consulting candidate, weave "first principles" into the summary naturally — not as a buzzword.' : ""}
+- Location line: ${profile.location}${profile.locationsOpenTo ? `, open to ${profile.locationsOpenTo}` : ""}.
 
-OUTPUT FORMAT — clean markdown, exactly this structure:
+OUTPUT FORMAT (clean markdown, exactly this structure, nothing else):
 # ${profile.name}
-${profile.email} | ${profile.phone} | ${profile.location} | ${profile.linkedin ?? ""} | ${profile.github ?? ""}
+${profile.email} | ${profile.phone} | ${profile.location}${profile.linkedin ? ` | ${profile.linkedin}` : ""}${profile.github ? ` | ${profile.github}` : ""}
 
 ## Summary
-[2-3 sentences, keywords injected naturally]
+[2-3 sentences]
 
 ## Experience
 ### [Role] | [Company] | [Tenure]
-- [Most JD-relevant bullet first]
+- [Most JD-relevant bullet, quantified]
+- [Next most relevant]
 - [...]
 
 ## Skills
-**[Category]:** [comma-separated, JD terminology matched]
+**[Category]:** [comma-separated, JD terminology]
 
 ## Education
 [Degree | Institution | Year]
 
-Generate the complete ATS-optimized resume now.`;
+Write the resume now. Output the markdown only — no preamble, no explanation.`;
 }
 
 export function coverLetterPrompt(profile: Profile, app: Application): string {
