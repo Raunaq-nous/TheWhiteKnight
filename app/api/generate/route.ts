@@ -18,6 +18,7 @@ import {
 } from "../../../lib/prompts";
 
 export const runtime = "nodejs";
+export const maxDuration = 300; // Vercel Pro: allow up to 5 min for reasoning models
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,32 +45,33 @@ export async function POST(req: NextRequest) {
 
     let prompt = "";
     let temperature = 0.7;
-    if (action === "resume") { prompt = resumePrompt(profile, app); temperature = 0.6; }
-    else if (action === "cover-letter") { prompt = coverLetterPrompt(profile, app); temperature = 0.7; }
-    else if (action === "executive-summary") { prompt = executiveSummaryPrompt(profile, app); temperature = 0.6; }
-    else if (action === "problem-solver") { prompt = problemSolverPrompt(profile, app); temperature = 0.75; }
+    let maxTokens = 2500;
+    if (action === "resume") { prompt = resumePrompt(profile, app); temperature = 0.6; maxTokens = 4000; }
+    else if (action === "cover-letter") { prompt = coverLetterPrompt(profile, app); temperature = 0.7; maxTokens = 2000; }
+    else if (action === "executive-summary") { prompt = executiveSummaryPrompt(profile, app); temperature = 0.6; maxTokens = 3000; }
+    else if (action === "problem-solver") { prompt = problemSolverPrompt(profile, app); temperature = 0.75; maxTokens = 2500; }
     else if (action === "outreach-hm") {
       prompt = target ? hmOutreachPromptWithProfile(profile, app, target) : hmOutreachPrompt(profile, app);
-      temperature = 0.7;
+      temperature = 0.7; maxTokens = 1500;
     }
     else if (action === "linkedin-dm") {
       prompt = target ? linkedInDMPromptWithProfile(profile, app, target) : linkedInDMPrompt(profile, app);
-      temperature = 0.75;
+      temperature = 0.75; maxTokens = 600;
     }
     else if (action === "referral-dm") {
       if (!target) return NextResponse.json({ error: "referral-dm requires a target contact" }, { status: 400 });
       prompt = referralDMPromptWithProfile(profile, app, target);
-      temperature = 0.75;
+      temperature = 0.75; maxTokens = 600;
     }
     else if (action === "ceo-cold-email") {
       prompt = ceoColdEmailPrompt(profile, app, target);
-      temperature = 0.7;
+      temperature = 0.7; maxTokens = 1500;
     }
     else return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 
     let content = await chat(
       [{ role: "user", content: prompt }],
-      { temperature, maxTokens: 2000 },
+      { temperature, maxTokens },
       providerSettings
     );
     if (action === "resume") content = normalizeTextForATS(content);

@@ -663,19 +663,80 @@ ${html}
           {/* JD extract */}
           {app.jdParsed && (
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
-              <div className="label" style={{ marginBottom: 12 }}>AI-EXTRACTED JD INSIGHTS</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+                <div className="label">AI-EXTRACTED JD INSIGHTS</div>
+                {app.jdParsed.yearsExperienceRequired && (
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--accent)", border: "1px solid var(--accent)", padding: "2px 8px", borderRadius: 2 }}>
+                    {app.jdParsed.yearsExperienceRequired}+ YRS REQUIRED
+                  </div>
+                )}
+              </div>
+
+              {/* ATS Keywords cloud */}
+              {app.jdParsed.keywords?.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div className="label" style={{ fontSize: "0.625rem", color: "var(--accent)" }}>ATS KEYWORDS — use these exact phrases in your resume</div>
+                    <button
+                      className="btn"
+                      style={{ fontSize: "0.5rem", padding: "2px 8px" }}
+                      onClick={() => navigator.clipboard.writeText(app.jdParsed!.keywords.join(", "))}
+                    >COPY ALL</button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {app.jdParsed.keywords.map((kw: string, i: number) => (
+                      <span
+                        key={i}
+                        onClick={() => navigator.clipboard.writeText(kw)}
+                        style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", padding: "3px 8px", background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.3)", borderRadius: 2, color: "var(--text-primary)", cursor: "pointer", userSelect: "none" }}
+                        title="Click to copy"
+                      >{kw}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Technical skills */}
+              {app.jdParsed.technicalSkills?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div className="label" style={{ fontSize: "0.625rem", marginBottom: 8 }}>TECHNICAL SKILLS REQUIRED</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {app.jdParsed.technicalSkills.map((s: string, i: number) => (
+                      <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", padding: "3px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: 2, color: "var(--text-secondary)" }}>{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Soft skills */}
+              {app.jdParsed.softSkills?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div className="label" style={{ fontSize: "0.625rem", marginBottom: 8 }}>SOFT SKILLS / BEHAVIOURS</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {app.jdParsed.softSkills.map((s: string, i: number) => (
+                      <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", padding: "3px 8px", background: "var(--bg-primary)", border: "1px solid var(--border-light)", borderRadius: 2, color: "var(--text-tertiary)" }}>{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Key requirements */}
               {app.jdParsed.keyRequirements?.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div className="label" style={{ fontSize: "0.625rem", marginBottom: 6 }}>KEY REQUIREMENTS</div>
-                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                    {app.jdParsed.keyRequirements.map((r: string, i: number) => <li key={i}>{r}</li>)}
+                <div style={{ marginBottom: 16 }}>
+                  <div className="label" style={{ fontSize: "0.625rem", marginBottom: 8 }}>KEY REQUIREMENTS</div>
+                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.8 }}>
+                    {app.jdParsed.keyRequirements.map((r: string, i: number) => (
+                      <li key={i} style={{ paddingLeft: 4 }}>{r}</li>
+                    ))}
                   </ul>
                 </div>
               )}
+
+              {/* Red flags */}
               {app.jdParsed.redFlags?.length > 0 && (
-                <div>
+                <div style={{ padding: "10px 14px", background: "rgba(255,50,50,0.06)", border: "1px solid rgba(255,50,50,0.2)", borderRadius: "var(--radius)" }}>
                   <div className="label" style={{ fontSize: "0.625rem", color: "var(--error)", marginBottom: 6 }}>RED FLAGS</div>
-                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: "0.8125rem", color: "var(--error)", lineHeight: 1.6 }}>
+                  <ul style={{ margin: 0, paddingLeft: 20, fontSize: "0.8125rem", color: "var(--error)", lineHeight: 1.6, opacity: 0.85 }}>
                     {app.jdParsed.redFlags.map((r: string, i: number) => <li key={i}>{r}</li>)}
                   </ul>
                 </div>

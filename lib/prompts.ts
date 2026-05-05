@@ -237,7 +237,8 @@ ${profile.name}`;
 }
 
 export function executiveSummaryPrompt(profile: Profile, app: Application): string {
-  return `You are creating an executive summary for ${profile.name} targeting the ${app.role} role at ${app.company}.
+  const keyReqs: string[] = app.jdParsed?.keyRequirements?.slice(0, 6) ?? [];
+  return `You are creating a complete executive summary document for ${profile.name} targeting the ${app.role} role at ${app.company}.
 
 ${buildProfileContext(profile)}
 
@@ -247,30 +248,47 @@ ${buildJDContext(app)}
 
 ---
 
-TASK: Tight executive summary profile, 3-5 sentences, plus a capability match.
+TASK: Produce a complete, untruncated executive summary document with four sections. This will be read by a senior hiring decision-maker — it must be tight, substantive, and specific.
 
 RULES:
-1. No em dashes.
-2. Lead with years + domain + distinctive angle.
-3. Weave "approaches each engagement from first principles" naturally.
-4. Mention AI/agentic work concretely if relevant.
-5. End with what role you're looking for.
-6. Match voice notes: direct, non-corporate.
+1. No em dashes anywhere. Use commas, semicolons, or restructure.
+2. No corporate filler: "passionate", "results-oriented", "driven", "synergy", "leverage" as verb, "self-starter", "proven track record".
+3. Every claim must be backed by something real from the profile. No invented metrics.
+4. Write in third person for the summary, first person for the pitch.
+5. Be direct and specific about ${app.company}. Do not be generic.
+6. Complete all four sections fully. Do not cut off mid-section.
 
-Then 5-7 capability bullets mapping your experience to JD requirements.
+---
 
-OUTPUT:
+COMPLETE OUTPUT (all four sections, unabridged):
+
 EXECUTIVE SUMMARY
-[3-5 sentences]
+[4-5 sentences in third person. Lead with: years of experience + domain + one distinctive angle that makes ${profile.name} unusual. Reference one concrete quantified achievement. State what kind of role they are targeting and why ${app.company} specifically makes sense. Do not use em dashes.]
 
-CAPABILITY MATCH
-- [Capability]: [Evidence]`;
+---
+
+CAPABILITY MAP
+[For each of the following ${app.role} requirements, write one bullet: [Requirement] → [Specific evidence from ${profile.name}'s career].
+Requirements to cover: ${keyReqs.length > 0 ? keyReqs.map(r => `"${r}"`).join(", ") : "extract from the JD above"}
+Format each bullet exactly as: - [Requirement]: [Evidence — specific, quantified where possible]]
+
+---
+
+WHAT I BRING TO ${app.company.toUpperCase()}
+[3-4 sentences, first person. Be specific about ${app.company}'s sector, stage, or known challenges. Explain what the candidate would actually do differently or better in this role. Connect at least one project or past achievement directly to ${app.company}'s context. No platitudes.]
+
+---
+
+AREAS FOR GROWTH
+[2-3 honest sentences. Identify 1-2 areas where the candidate is not a perfect fit and what they are doing about it. Hiring managers respect self-awareness. Do not hide weaknesses behind spin.]
+
+Output all four sections completely. Do not stop early.`;
 }
 
 export function problemSolverPrompt(profile: Profile, app: Application): string {
   return `You are crafting a "Problem Solver Pitch" for ${profile.name} applying to ${app.company} for the ${app.role} role.
 
-A Problem Solver Pitch identifies a specific real problem this company faces, reasons about it from first principles, proposes a specific approach, and demonstrates relevant past work.
+A Problem Solver Pitch is a structured argument that (1) names a specific real problem the company faces, (2) reasons about its structural difficulty, (3) proposes a concrete approach grounded in first principles, and (4) shows proven capability through past work. It is NOT a cover letter. It is a thinking document.
 
 ${buildProfileContext(profile)}
 
@@ -281,24 +299,34 @@ ${buildJDContext(app)}
 ---
 
 RULES:
-1. No em dashes.
-2. Be specific about ${app.company} — their sector, their actual challenges.
-3. Don't be sycophantic. No "I'm excited."
-4. Use evidence from the profile.
-5. 300-400 words. Tight.
+1. No em dashes anywhere.
+2. Be specific about ${app.company} — their business model, competitive position, sector dynamics, or known operational challenges. Do not be generic.
+3. No sycophancy. No "I'm excited to", "I admire your", "I've been following".
+4. Every section must reference something real from ${profile.name}'s profile or ${app.company}'s known context.
+5. The "How I'd Approach It" section must be genuinely actionable — not abstract frameworks or buzzwords.
+6. 450-550 words total. Write all six sections completely.
 
 OUTPUT:
-THE PROBLEM AT ${app.company.toUpperCase()}
-[2-3 sentences]
 
-WHY IT'S HARDER THAN IT LOOKS
-[2-3 sentences, first principles]
+THE CORE PROBLEM AT ${app.company.toUpperCase()}
+[3-4 sentences. Name a specific, non-obvious problem. Connect it to the JD — what challenge does this ${app.role} role exist to solve? Be precise about the sector dynamic or operational gap. No clichés.]
 
-HOW I'D APPROACH IT
-[3-4 sentences]
+WHY THIS IS STRUCTURALLY HARD
+[3-4 sentences. Reason from first principles. What makes this hard to solve even with good intent and resources? Identify the underlying tension, constraint, or tradeoff — not just the surface symptom.]
 
-WHY THIS IS FAMILIAR TERRITORY
-[2-3 sentences from past work]`;
+THE CONVENTIONAL APPROACH (AND ITS FLAW)
+[2-3 sentences. Describe how most companies or teams try to solve this. Identify the specific failure mode — what does the conventional approach miss?]
+
+HOW I WOULD APPROACH IT DIFFERENTLY
+[4-5 sentences. Lay out a concrete, specific approach. What would you do in the first 90 days? What data would you look for? What assumption would you pressure-test first? Be specific enough that a skeptical hiring manager can evaluate it.]
+
+PROOF FROM PAST WORK
+[3-4 sentences. Reference a specific past situation from ${profile.name}'s career that is most analogous — same underlying problem structure, similar constraints, comparable stakes. Include an outcome or metric if available.]
+
+WHY NOW, WHY ${app.company.toUpperCase()}
+[2-3 sentences. Why is this the right moment for this problem at this company? What makes ${app.company}'s context specifically suited to the approach above?]
+
+Write all six sections completely. Do not truncate.`;
 }
 
 export function skillGapPrompt(profile: Profile, app: Application): string {
@@ -327,7 +355,8 @@ Be honest and specific. Use actual profile data. Limit 3-5 items per category.`;
 }
 
 export function hmOutreachPrompt(profile: Profile, app: Application): string {
-  return `You are writing a cold outreach email for ${profile.name} to the Hiring Manager at ${app.company} for the ${app.role} role.
+  const topReq = app.jdParsed?.keyRequirements?.[0] ?? "";
+  return `You are writing a cold outreach email from ${profile.name} to the Hiring Manager at ${app.company} for the ${app.role} role.
 
 ${buildProfileContext(profile)}
 
@@ -337,33 +366,55 @@ ${buildJDContext(app)}
 
 ---
 
-TASK: Write a cold outreach email that gets a response. NOT a cover letter.
+TASK: Write a cold outreach email that earns a response. This is NOT a cover letter or a mass-blast template. A real person will read this and decide in 10 seconds whether to reply.
+
+THE WINNING FORMULA:
+- Hook: Lead with the single most unusual or specific thing about ${profile.name} that maps to what the HM cares about. Not the most impressive resume line — the most relevant one.
+- Match: One concrete past achievement that directly addresses a key challenge this role exists to solve${topReq ? ` (e.g. "${topReq}")` : ""}.
+- Ask: One low-friction, time-bounded ask. Not "I'd love to connect." Not "Happy to send my resume." Offer something specific: a brief insight, a question, a 15-min call with a clear agenda.
 
 RULES:
-1. No em dashes.
-2. Never: "excited", "passionate", "synergy", "leverage" as verb, "cutting-edge", "innovative", "self-starter".
-3. Subject line: specific, intriguing.
-4. Body: 3 paragraphs max, 150 words.
-5. Lead with the most differentiated thing.
-6. One specific low-friction ask.
-7. Tone: warm, peer-to-peer, not supplicating.
+1. No em dashes. No smart quotes.
+2. Never use: "excited to apply", "passionate about", "synergy", "leverage" as verb, "cutting-edge", "innovative solutions", "self-starter", "proven track record", "consumer-facing", "disruptive".
+3. Subject line: 5-8 words, specific to ${app.company} or the role challenge. Not generic. Not "Interested in ${app.role} Role."
+4. Body: maximum 140 words after the greeting.
+5. Tone: peer-to-peer, warm, direct. Not supplicating. Not performatively casual.
+6. Signature includes name, one-line credibility statement, and contact.
+
+Write two versions — Version A (more direct/analytical) and Version B (warmer/narrative). Label each clearly.
 
 FORMAT:
+VERSION A
 Subject: [subject]
 
 Hi [First Name],
 
-[Opening hook]
-[Most compelling match]
-[Specific low-friction ask]
+[Hook — 1-2 sentences]
+[Match — 1-2 sentences with specific evidence]
+[Ask — 1 sentence]
 
 ${profile.name}
-${profile.email}
-${profile.phone}`;
+[One credibility line]
+${profile.email} | ${profile.phone}
+
+---
+
+VERSION B
+Subject: [subject]
+
+Hi [First Name],
+
+[Hook — 1-2 sentences, different angle]
+[Match — 1-2 sentences]
+[Ask — 1 sentence]
+
+${profile.name}
+[One credibility line]
+${profile.email} | ${profile.phone}`;
 }
 
 export function linkedInDMPrompt(profile: Profile, app: Application): string {
-  return `You are writing a LinkedIn DM for ${profile.name} to someone at ${app.company} about the ${app.role} role.
+  return `You are writing a LinkedIn DM for ${profile.name} to a contact at ${app.company} about the ${app.role} role.
 
 ${buildProfileContext(profile)}
 
@@ -373,23 +424,38 @@ ${buildJDContext(app)}
 
 ---
 
-TASK: Short human DM. Not salesy.
+TASK: Write a LinkedIn DM that a real human would actually reply to. Most LinkedIn DMs fail because they are obviously templated, immediately ask for something, or tell the recipient why THEY should care about the sender rather than offering something of value.
+
+A great LinkedIn DM:
+1. Opens with a specific, genuine observation — not a compliment, not "I saw you work at ${app.company}."
+2. Identifies a reason it makes sense to reach out to THIS person (their role, their team, a specific signal).
+3. Closes with a question or micro-ask that requires a one-word answer or a "yes/no." Never ask for "15 minutes" in the first message — too high friction.
 
 RULES:
-1. No em dashes.
-2. No "excited", "passionate", "innovative", "synergy".
-3. 75 words maximum.
-4. Sound human, not template.
-5. One clear ask: 15-min call or simple question.
-6. No links or attachments.
-7. Warm, not gushing. Confident, not arrogant.
+1. No em dashes. No bullet points.
+2. Never: "excited", "passionate", "innovative", "synergy", "thought leader".
+3. Maximum 65 words in the body (not counting greeting/sign-off).
+4. Sound like a peer who happens to be job-seeking, not a job-seeker performing peer-ness.
+5. Do not mention the job posting or that you "applied." Express genuine interest in the company/team.
+
+Write two versions — Version A (question-first, curiosity framing) and Version B (value-first, brief insight).
 
 FORMAT:
+VERSION A
 Hi [Name],
 
-[2-3 sentences: who, why them specifically, why worth responding]
-[One sentence ask]
-[Sign-off]`;
+[65 words max — specific observation, reason for reaching out, low-friction question]
+
+[First name sign-off]
+
+---
+
+VERSION B
+Hi [Name],
+
+[65 words max — different angle, brief insight or value offer, soft ask]
+
+[First name sign-off]`;
 }
 
 export function ceoColdEmailPrompt(profile: Profile, app: Application, ceo?: ContactProfile): string {
@@ -440,14 +506,18 @@ ${profile.linkedin ?? ""}`;
 
 // Profile-aware variants — include the discovered contact's name, title, public signals
 export function hmOutreachPromptWithProfile(profile: Profile, app: Application, target: ContactProfile): string {
-  return `You are writing a cold outreach email for ${profile.name} to a likely Hiring Manager at ${app.company} for the ${app.role} role.
+  const firstName = target.name.split(" ")[0];
+  const topReq = app.jdParsed?.keyRequirements?.[0] ?? "";
+  return `You are writing a cold outreach email from ${profile.name} to ${target.name} at ${app.company} for the ${app.role} role.
 
-RECIPIENT (discovered via people search):
+RECIPIENT (found via people search — treat as verified):
 Name: ${target.name}
 Title: ${target.title ?? "(unknown)"}
 Company: ${target.company}
 LinkedIn: ${target.linkedinUrl ?? "(not provided)"}
 Location: ${target.location ?? "(unknown)"}
+
+Adjust your framing based on their seniority. A Director cares about team output and execution. A VP cares about org impact and talent strategy. A C-suite cares about business results and strategic bets.
 
 ${buildProfileContext(profile)}
 
@@ -457,30 +527,33 @@ ${buildJDContext(app)}
 
 ---
 
-TASK: Cold outreach email tailored to this specific person. Reference what their title/seniority signals (e.g. if they are a Director vs VP, the framing differs). Don't fabricate facts about them — use only what's provided.
+TASK: A personalized cold outreach email to ${target.name} specifically — not a generic HM email. Make it clear you know who they are and what their team likely needs.
+
+THE WINNING FORMULA:
+- Hook: The single most relevant thing about ${profile.name} for what ${firstName}'s team is trying to accomplish. Tie to ${target.title ?? "their seniority"} concerns.
+- Match: One specific past achievement that maps to a real challenge in this role${topReq ? ` — e.g. "${topReq}"` : ""}.
+- Ask: One clear, low-friction 15-min call ask with a specific agenda ("I'd like to share how I approached X — curious if that maps to what you're building").
 
 RULES:
-1. No em dashes.
-2. Never: "excited", "passionate", "synergy", "leverage" as verb, "cutting-edge", "innovative", "self-starter".
-3. Subject line: specific, intriguing.
-4. Body: 3 paragraphs max, 150 words.
-5. Open with the most differentiated thing about ${profile.name} that maps to what ${target.name}'s team likely cares about.
-6. Middle: one specific match.
-7. Close: 15-min call ask.
-8. Tone: warm, peer-to-peer, not supplicating.
+1. No em dashes. No smart quotes.
+2. Never: "excited to apply", "passionate", "synergy", "leverage" as verb, "innovative", "self-starter", "proven track record".
+3. Subject: 5-8 words, specific to ${app.company} or the role.
+4. Body: max 140 words after greeting.
+5. Tone: peer-to-peer, warm, direct. Not supplicating.
+6. Do not invent facts about ${target.name}. Use only what's in the RECIPIENT block above.
 
 FORMAT:
 Subject: [subject]
 
-Hi ${target.name.split(" ")[0]},
+Hi ${firstName},
 
-[Opening hook]
-[Most compelling match]
-[Specific low-friction ask]
+[Hook — 1-2 sentences]
+[Match — 1-2 sentences with specific evidence from profile]
+[Ask — 1 sentence, specific agenda]
 
 ${profile.name}
-${profile.email}
-${profile.phone}`;
+${profile.headline ?? ""}
+${profile.email} | ${profile.phone}`;
 }
 
 export function referralDMPromptWithProfile(profile: Profile, app: Application, target: ContactProfile): string {
@@ -521,7 +594,8 @@ ${profile.name.split(" ")[0]}`;
 }
 
 export function linkedInDMPromptWithProfile(profile: Profile, app: Application, target: ContactProfile): string {
-  return `You are writing a LinkedIn DM for ${profile.name} to ${target.name} (${target.title ?? "professional"} at ${app.company}) about the ${app.role} role.
+  const firstName = target.name.split(" ")[0];
+  return `You are writing a LinkedIn DM from ${profile.name} to ${target.name} (${target.title ?? "professional"} at ${app.company}).
 
 RECIPIENT:
 Name: ${target.name}
@@ -537,24 +611,24 @@ ${buildJDContext(app)}
 
 ---
 
-TASK: Short human DM. Tailored to ${target.name}'s role. NOT salesy.
+TASK: Write a LinkedIn DM that feels like it was written specifically for ${target.name}, not from a template. Use their title to infer what they care about and what their typical week looks like. Find the intersection with ${profile.name}'s background.
+
+KEY INSIGHT: The reason most LinkedIn DMs fail is that they center the sender. Center the recipient — what's in it for them to reply?
 
 RULES:
-1. No em dashes.
-2. No "excited", "passionate", "innovative", "synergy".
-3. 75 words maximum.
-4. Sound human, not template.
-5. Address the recipient by first name.
-6. One clear ask: 15-min call or specific question.
-7. No links or attachments.
-8. Warm, not gushing. Confident, not arrogant.
+1. No em dashes. No bullet points in the message itself.
+2. Never: "excited", "passionate", "innovative", "synergy", "thought leader".
+3. Maximum 65 words in the body.
+4. Open with something specific to ${firstName}'s role or context, not a generic compliment.
+5. Do not mention you "applied." Express interest in ${app.company}'s work or their team's direction.
+6. Close with a question or micro-ask that has a low cost to answer.
 
 FORMAT:
-Hi ${target.name.split(" ")[0]},
+Hi ${firstName},
 
-[2-3 sentences: who, why them specifically, why worth responding]
-[One sentence ask]
-[Sign-off]`;
+[65 words max — specific to their role, genuine connection, soft ask]
+
+${profile.name.split(" ")[0]}`;
 }
 
 export function afScoringPrompt(
