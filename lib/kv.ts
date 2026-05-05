@@ -2,10 +2,10 @@
 import { Redis } from "@upstash/redis";
 
 function getRedis(): Redis {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
-    throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set. Provision an Upstash Redis database in Vercel → Integrations → Upstash.");
+    throw new Error("Redis credentials not found. Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN, or use the Vercel Upstash integration which provides KV_REST_API_URL + KV_REST_API_TOKEN.");
   }
   return new Redis({ url, token });
 }
