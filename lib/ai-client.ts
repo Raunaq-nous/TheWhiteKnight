@@ -31,6 +31,27 @@ function getTogetherKey(): string {
   return key;
 }
 
+async function fetchWithRetry(url: string, init: RequestInit, providerName: string, maxAttempts = 4): Promise<Response> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(url, init);
+    if (res.ok) return res;
+    if (res.status >= 500 || res.status === 429) {
+      const body = await res.text().catch(() => "");
+      lastErr = new Error(`${providerName} error ${res.status}: ${body.slice(0, 400)}`);
+      if (attempt < maxAttempts) {
+        const delay = Math.min(8000, 500 * Math.pow(2, attempt - 1));
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw lastErr;
+    }
+    const body = await res.text().catch(() => "");
+    throw new Error(`${providerName} error ${res.status}: ${body.slice(0, 400)}`);
+  }
+  throw lastErr ?? new Error(`${providerName} request failed after ${maxAttempts} attempts`);
+}
+
 async function chatTogether(messages: ChatMessage[], opts: ChatOptions): Promise<string> {
   const model = opts.model ?? process.env.AI_MODEL ?? DEFAULT_MODEL;
   const body: any = {
@@ -41,15 +62,11 @@ async function chatTogether(messages: ChatMessage[], opts: ChatOptions): Promise
   };
   if (opts.jsonMode) body.response_format = { type: "json_object" };
 
-  const response = await fetch(`${TOGETHER_BASE}/chat/completions`, {
+  const response = await fetchWithRetry(`${TOGETHER_BASE}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${getTogetherKey()}` },
     body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Together AI error ${response.status}: ${err.slice(0, 400)}`);
-  }
+  }, "Together AI");
   const result = await response.json();
   return result.choices?.[0]?.message?.content?.trim() ?? "";
 }
@@ -67,7 +84,7 @@ async function chatAnthropic(messages: ChatMessage[], opts: ChatOptions, apiKey:
   };
   if (system) body.system = system.content;
 
-  const response = await fetch(`${ANTHROPIC_BASE}/messages`, {
+  const response = await fetchWithRetry(`${ANTHROPIC_BASE}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -75,11 +92,7 @@ async function chatAnthropic(messages: ChatMessage[], opts: ChatOptions, apiKey:
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Anthropic error ${response.status}: ${err.slice(0, 400)}`);
-  }
+  }, "Anthropic");
   const result = await response.json();
   return result.content?.[0]?.text?.trim() ?? "";
 }
@@ -94,15 +107,11 @@ async function chatOpenAI(messages: ChatMessage[], opts: ChatOptions, apiKey: st
   };
   if (opts.jsonMode) body.response_format = { type: "json_object" };
 
-  const response = await fetch(`${OPENAI_BASE}/chat/completions`, {
+  const response = await fetchWithRetry(`${OPENAI_BASE}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI error ${response.status}: ${err.slice(0, 400)}`);
-  }
+  }, "OpenAI");
   const result = await response.json();
   return result.choices?.[0]?.message?.content?.trim() ?? "";
 }

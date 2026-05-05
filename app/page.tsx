@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { applications as sampleData, STATUSES } from "./data";
+import { STATUSES } from "./data";
 import { ScoreBar, StatusPill, Header, Footer } from "./components";
-import { getApplications, saveApplication, Application } from "../lib/store";
+import { getApplications, Application } from "../lib/store";
 import { hasProfile } from "../lib/profile";
 
-function AppCard({ app }: { app: Application | typeof sampleData[0] }) {
+function AppCard({ app }: { app: Application }) {
   return (
     <Link href={`/application/?slug=${app.slug}`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
       <div className="card-company">{app.company}</div>
@@ -37,16 +37,9 @@ export default function Dashboard() {
       window.location.href = "/onboard";
       return;
     }
-    let stored = getApplications();
-    if (stored.length === 0) {
-      stored = sampleData as any[];
-    }
-    setApps(stored);
+    setApps(getApplications());
 
-    const handleUpdate = () => {
-      const updated = getApplications();
-      setApps(updated.length > 0 ? updated : sampleData);
-    };
+    const handleUpdate = () => setApps(getApplications());
     window.addEventListener("careeros-data-change", handleUpdate);
     return () => window.removeEventListener("careeros-data-change", handleUpdate);
   }, []);

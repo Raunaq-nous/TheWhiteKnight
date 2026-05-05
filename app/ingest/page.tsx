@@ -99,45 +99,60 @@ export default function IngestPage() {
   const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
   const TEXT_TYPES = ["text/plain", "text/markdown"];
 
-  const handleFile = async (file: File) => {
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     setErrorMsg("");
-    setExtractedFileName(file.name);
-
-    if (TEXT_TYPES.includes(file.type) || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
-      const text = await readFileAsText(file);
-      setJdText(text);
+    const valid = files.filter(f => IMAGE_TYPES.includes(f.type) || TEXT_TYPES.includes(f.type) || f.name.endsWith(".txt") || f.name.endsWith(".md"));
+    if (valid.length === 0) {
+      setErrorMsg(`Unsupported file types. Use .txt, .md, or images (PNG, JPG, WEBP).`);
       return;
     }
+    setExtractedFileName(valid.length === 1 ? valid[0].name : `${valid.length} files`);
 
-    if (IMAGE_TYPES.includes(file.type)) {
+    const textFiles = valid.filter(f => TEXT_TYPES.includes(f.type) || f.name.endsWith(".txt") || f.name.endsWith(".md"));
+    const imageFiles = valid.filter(f => IMAGE_TYPES.includes(f.type));
+
+    let combined = jdText.trim();
+
+    for (const f of textFiles) {
+      try {
+        const t = await readFileAsText(f);
+        combined = combined ? combined + "\n\n--- " + f.name + " ---\n\n" + t : t;
+      } catch (e: any) {
+        setErrorMsg(`Failed to read ${f.name}: ${e.message}`);
+      }
+    }
+
+    if (imageFiles.length > 0) {
       setIsExtracting(true);
       try {
-        const base64 = await readFileAsBase64(file);
-        const text = await extractTextFromImage(base64, file.type);
-        setJdText(text);
+        for (let i = 0; i < imageFiles.length; i++) {
+          const f = imageFiles[i];
+          setExtractedFileName(`Extracting ${i + 1} of ${imageFiles.length}: ${f.name}`);
+          const base64 = await readFileAsBase64(f);
+          const t = await extractTextFromImage(base64, f.type);
+          combined = combined ? combined + "\n\n" + t : t;
+        }
+        setExtractedFileName(`Extracted from ${imageFiles.length} image${imageFiles.length > 1 ? "s" : ""}`);
       } catch (e: any) {
         setErrorMsg(e.message || "Image extraction failed.");
-        setExtractedFileName("");
       } finally {
         setIsExtracting(false);
       }
-      return;
     }
 
-    setErrorMsg(`Unsupported file type: ${file.type || file.name.split(".").pop()}. Use .txt, .md, or an image (PNG, JPG, WEBP).`);
-    setExtractedFileName("");
+    setJdText(combined);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    handleFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
+    handleFiles(Array.from(e.target.files ?? []));
+    e.target.value = "";
   };
 
   const handleScore = async () => {
@@ -282,6 +297,7 @@ export default function IngestPage() {
                     ref={fileInputRef}
                     type="file"
                     accept=".txt,.md,image/*"
+                    multiple
                     onChange={handleFileInput}
                     style={{ display: "none" }}
                   />
@@ -290,6 +306,7 @@ export default function IngestPage() {
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    multiple
                     onChange={handleFileInput}
                     style={{ display: "none" }}
                   />
@@ -324,7 +341,7 @@ export default function IngestPage() {
                 )}
               </div>
               <div className="label" style={{ marginTop: 6, fontSize: "0.6rem", color: "var(--text-tertiary)" }}>
-                Supports: .txt, .md, PNG, JPG, WEBP. Take a photo of a JD or upload a screenshot from your phone.
+                Supports: .txt, .md, PNG, JPG, WEBP. Multi-image upload supported (one JD spread across screenshots gets concatenated). Drop multiple files or hold to select multiple.
               </div>
             </div>
 

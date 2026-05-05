@@ -11,8 +11,6 @@ import { getModelSettings } from "../../lib/model-settings";
 import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
-import { applications as sampleData } from "../data";
-
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -40,12 +38,7 @@ function ApplicationDetail() {
 
   useEffect(() => {
     if (!slug) return;
-    // Try localStorage first, fall back to sample data
-    let found = getApplication(slug);
-    if (!found) {
-      const sample = (sampleData as any[]).find(a => a.slug === slug);
-      if (sample) found = { ...sample, id: sample.slug, jdRaw: "", jdParsed: null, seniority: "senior", sector: "", sourceUrl: sample.source ?? "", interviews: [], reminders: [], resumeVersions: [], emailEvents: [], createdAt: sample.capturedAt, updatedAt: sample.capturedAt } as Application;
-    }
+    const found = getApplication(slug);
     if (found) {
       setApp(found);
       setNoteText(found.notes ?? "");

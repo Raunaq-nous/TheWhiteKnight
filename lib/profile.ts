@@ -43,6 +43,37 @@ export type Certification = {
   relevance?: string;
 };
 
+export type RoleType =
+  | "strategy-consulting"
+  | "ai-tech"
+  | "product"
+  | "engineering"
+  | "design"
+  | "marketing"
+  | "sales"
+  | "finance"
+  | "operations"
+  | "data"
+  | "research"
+  | "creative"
+  | "other";
+
+export const ROLE_TYPES: { id: RoleType; label: string; description: string }[] = [
+  { id: "strategy-consulting", label: "Strategy / Consulting", description: "MBB, biz ops, chief of staff, GTM strategy" },
+  { id: "ai-tech", label: "AI / ML / Tech", description: "AI engineer, ML, applied research, frontier tech" },
+  { id: "product", label: "Product", description: "PM, product lead, growth product" },
+  { id: "engineering", label: "Software Engineering", description: "Backend, frontend, fullstack, infra, mobile" },
+  { id: "design", label: "Design", description: "Brand, UX, UI, visual, product design" },
+  { id: "marketing", label: "Marketing", description: "Brand, growth, content, performance, lifecycle" },
+  { id: "sales", label: "Sales / BD", description: "AE, BD, partnerships, customer success" },
+  { id: "finance", label: "Finance", description: "FP&A, IB, PE/VC, corporate development" },
+  { id: "operations", label: "Operations", description: "Ops manager, supply chain, expansion, COO" },
+  { id: "data", label: "Data / Analytics", description: "Data analyst, data scientist, BI" },
+  { id: "research", label: "Research", description: "Academic, industry research, R&D" },
+  { id: "creative", label: "Creative / Content", description: "Writer, editor, video, creative direction" },
+  { id: "other", label: "Other / Multidisciplinary", description: "Hybrid, founder, polymath" },
+];
+
 export type Profile = {
   name: string;
   headline: string;
@@ -55,9 +86,10 @@ export type Profile = {
   github?: string;
   portfolio?: string;
   yearsOfExperience: string;
+  roleType?: RoleType;
   experience: ExperienceEntry[];
   education: EducationEntry[];
-  skills: Record<string, string>;  // category -> comma-separated skills
+  skills: Record<string, string>;
   projects: ProjectEntry[];
   publications: Publication[];
   certifications: Certification[];
