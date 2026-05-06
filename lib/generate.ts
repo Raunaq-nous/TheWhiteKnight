@@ -58,3 +58,31 @@ export async function generateCEOColdEmail(profile: Profile, app: Application, t
 export async function generateSkillGap(profile: Profile, app: Application): Promise<SkillGapResult> {
   return (await callGenerate<{ data: SkillGapResult }>("skill-gap", profile, app)).data;
 }
+
+export async function refineGeneration(
+  refineFor: GenerationAction,
+  profile: Profile,
+  app: Application,
+  currentContent: string,
+  instruction: string
+): Promise<string> {
+  const settings = getModelSettings();
+  const providerSettings = settings.provider !== "together"
+    ? { provider: settings.provider, model: settings.model, apiKey: settings.apiKey }
+    : undefined;
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-refine-for": refineFor },
+    body: JSON.stringify({
+      action: "refine",
+      profile, app, providerSettings,
+      currentContent, instruction,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Refine failed: ${res.status}`);
+  }
+  const data = await res.json() as { content: string };
+  return data.content;
+}

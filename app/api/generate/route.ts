@@ -15,6 +15,7 @@ import {
   linkedInDMPromptWithProfile,
   referralDMPromptWithProfile,
   ceoColdEmailPrompt,
+  refinePrompt,
 } from "../../../lib/prompts";
 
 export const runtime = "nodejs";
@@ -22,12 +23,14 @@ export const maxDuration = 300; // Vercel Pro: allow up to 5 min for reasoning m
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, profile, app, target, providerSettings } = await req.json() as {
+    const { action, profile, app, target, providerSettings, currentContent, instruction } = await req.json() as {
       action: GenerationAction;
       profile: any;
       app: any;
       target?: ContactProfile;
       providerSettings?: ProviderSettings;
+      currentContent?: string;
+      instruction?: string;
     };
 
     if (!action || !profile || !app) {
@@ -67,6 +70,20 @@ export async function POST(req: NextRequest) {
       prompt = ceoColdEmailPrompt(profile, app, target);
       temperature = 0.7; maxTokens = 1500;
     }
+    else if (action === "refine") {
+      if (!currentContent || !instruction) {
+        return NextResponse.json({ error: "refine requires currentContent and instruction" }, { status: 400 });
+      }
+      const refineFor = (req.headers.get("x-refine-for") || "document").toString();
+      prompt = refinePrompt(profile, app, refineFor, currentContent, instruction);
+      // Use the same maxTokens as the source action so the refined version doesn't get truncated
+      const tokenBudget: Record<string, number> = {
+        resume: 4000, "cover-letter": 2000, "executive-summary": 3000, "problem-solver": 2500,
+        "outreach-hm": 1500, "linkedin-dm": 600, "referral-dm": 600, "ceo-cold-email": 1500,
+      };
+      maxTokens = tokenBudget[refineFor] ?? 3000;
+      temperature = 0.5; // lower temp for targeted edits
+    }
     else return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
 
     let content = await chat(
@@ -74,7 +91,9 @@ export async function POST(req: NextRequest) {
       { temperature, maxTokens },
       providerSettings
     );
-    if (action === "resume") content = normalizeTextForATS(content);
+    if (action === "resume" || (action === "refine" && req.headers.get("x-refine-for") === "resume")) {
+      content = normalizeTextForATS(content);
+    }
     return NextResponse.json({ content });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Generation failed" }, { status: 500 });

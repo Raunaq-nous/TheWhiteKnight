@@ -8,7 +8,7 @@ import { getApplication, updateApplication, deleteApplication, Application, Inte
 import { getProfile } from "../../lib/profile";
 import { NLUpdateResult } from "../../lib/prompts";
 import { getModelSettings } from "../../lib/model-settings";
-import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, GenerationAction, SkillGapResult } from "../../lib/generate";
+import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, refineGeneration, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -35,6 +35,10 @@ function ApplicationDetail() {
   const [nlParsed, setNlParsed] = useState<NLUpdateResult | null>(null);
   const [nlError, setNlError] = useState("");
   const [nlApplied, setNlApplied] = useState(false);
+  const [refineText, setRefineText] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [refineError, setRefineError] = useState("");
+  const [versionHistory, setVersionHistory] = useState<{ action: GenerationAction; content: string; instruction?: string }[]>([]);
 
   useEffect(() => {
     if (!slug) return;
@@ -87,6 +91,9 @@ function ApplicationDetail() {
     setGenerating(action);
     setGenError("");
     setAiOutput(null);
+    setVersionHistory([]);
+    setRefineText("");
+    setRefineError("");
     try {
       if (action === "skill-gap") {
         const result = await generateSkillGap(profile, app);
@@ -125,6 +132,31 @@ function ApplicationDetail() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleRefine = async () => {
+    if (!aiOutput || !refineText.trim() || !app) return;
+    const profile = getProfile();
+    if (!profile) { setRefineError("No profile found."); return; }
+    setRefining(true);
+    setRefineError("");
+    try {
+      const newContent = await refineGeneration(aiOutput.action, profile, app, aiOutput.content, refineText.trim());
+      setVersionHistory(prev => [...prev, { action: aiOutput.action, content: aiOutput.content, instruction: refineText.trim() }]);
+      setAiOutput({ action: aiOutput.action, content: newContent });
+      setRefineText("");
+    } catch (e: any) {
+      setRefineError(e.message || "Refine failed.");
+    } finally {
+      setRefining(false);
+    }
+  };
+
+  const handleUndoRefine = () => {
+    if (versionHistory.length === 0 || !aiOutput) return;
+    const previous = versionHistory[versionHistory.length - 1];
+    setAiOutput({ action: previous.action, content: previous.content });
+    setVersionHistory(prev => prev.slice(0, -1));
+  };
+
   const handleDownloadMd = () => {
     if (!aiOutput || !app) return;
     const filename = `${app.company.toLowerCase().replace(/\s+/g, "-")}-${app.role.toLowerCase().replace(/\s+/g, "-")}-${aiOutput.action}.md`;
@@ -144,27 +176,38 @@ function ApplicationDetail() {
     const md = aiOutput.content;
     // Minimal markdown -> HTML transform tuned for resume/letter outputs
     const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Render markdown inline patterns: **bold**, [text](url), bare http(s) URLs, and email addresses
+    const renderInline = (text: string): string => {
+      let out = escapeHtml(text);
+      // Markdown links [label](url) -> <a>
+      out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, url) =>
+        `<a href="${url}" target="_blank" rel="noreferrer">${label}</a>`
+      );
+      // Bare http(s) URLs not already inside an href attribute
+      out = out.replace(/(?<!href=")(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer">$1</a>');
+      // Email addresses
+      out = out.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1">$1</a>');
+      // Bold
+      out = out.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      return out;
+    };
     const lines = md.split("\n");
     let html = "";
     let inList = false;
     const flushList = () => { if (inList) { html += "</ul>"; inList = false; } };
     for (const raw of lines) {
       const line = raw.trimEnd();
-      if (!line.trim()) { flushList(); html += ""; continue; }
-      if (line.startsWith("# ")) { flushList(); html += `<h1>${escapeHtml(line.slice(2))}</h1>`; continue; }
-      if (line.startsWith("## ")) { flushList(); html += `<h2>${escapeHtml(line.slice(3))}</h2>`; continue; }
-      if (line.startsWith("### ")) { flushList(); html += `<h3>${escapeHtml(line.slice(4))}</h3>`; continue; }
+      if (!line.trim()) { flushList(); continue; }
+      if (line.startsWith("# ")) { flushList(); html += `<h1>${renderInline(line.slice(2))}</h1>`; continue; }
+      if (line.startsWith("## ")) { flushList(); html += `<h2>${renderInline(line.slice(3))}</h2>`; continue; }
+      if (line.startsWith("### ")) { flushList(); html += `<h3>${renderInline(line.slice(4))}</h3>`; continue; }
       if (/^[-*]\s+/.test(line)) {
         if (!inList) { html += "<ul>"; inList = true; }
-        let item = escapeHtml(line.replace(/^[-*]\s+/, ""));
-        item = item.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-        html += `<li>${item}</li>`;
+        html += `<li>${renderInline(line.replace(/^[-*]\s+/, ""))}</li>`;
         continue;
       }
       flushList();
-      let p = escapeHtml(line);
-      p = p.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-      html += `<p>${p}</p>`;
+      html += `<p>${renderInline(line)}</p>`;
     }
     flushList();
     const title = `${app.company} - ${app.role} - ${aiOutput.action}`;
@@ -181,7 +224,9 @@ p { margin: 2px 0; }
 ul { margin: 2px 0 6px; padding-left: 18px; }
 li { margin: 1px 0; }
 strong { font-weight: 600; }
-@media print { body { padding: 0; } .no-print { display: none; } }
+a { color: #0a58ca; text-decoration: none; border-bottom: 1px solid rgba(10,88,202,0.3); }
+a:hover { border-bottom-color: #0a58ca; }
+@media print { body { padding: 0; } .no-print { display: none; } a { color: #0a58ca; text-decoration: underline; border: none; } }
 .bar { position: fixed; top: 8px; right: 8px; }
 .bar button { font: 12px -apple-system, sans-serif; padding: 6px 12px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; margin-left: 6px; }
 </style></head><body>
@@ -554,6 +599,56 @@ ${html}
                   <div style={{ marginTop: 12 }}>
                     <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: "0.75rem" }} onClick={() => handleGenerate(aiOutput.action)}>REGENERATE</button>
                   </div>
+                </div>
+              )}
+
+              {/* Refine with AI — chat box */}
+              {aiOutput.content?.trim() && (
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed var(--border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+                    <div className="label" style={{ fontSize: "0.625rem", color: "var(--accent)" }}>REFINE WITH AI</div>
+                    {versionHistory.length > 0 && (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5625rem", color: "var(--text-tertiary)" }}>
+                          {versionHistory.length} edit{versionHistory.length === 1 ? "" : "s"}
+                        </span>
+                        <button className="btn" style={{ fontSize: "0.5625rem", padding: "2px 8px" }} onClick={handleUndoRefine} disabled={refining}>
+                          UNDO LAST
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginBottom: 8, lineHeight: 1.5 }}>
+                    Tell the AI what to change. Examples: "Remove the Capital Projects line from Bain", "Make the summary punchier", "Add my IIM degree to Education", "Rewrite paragraph 2 to focus on AI work". The model will only edit what you ask.
+                  </div>
+                  <textarea
+                    value={refineText}
+                    onChange={e => setRefineText(e.target.value)}
+                    placeholder="What should change?"
+                    rows={3}
+                    disabled={refining}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        handleRefine();
+                      }
+                    }}
+                    style={{ width: "100%", padding: 10, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", resize: "vertical", borderRadius: 4 }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5625rem", color: "var(--text-tertiary)" }}>Cmd/Ctrl+Enter to send</span>
+                    <button
+                      className="btn btn-primary"
+                      style={{ padding: "6px 14px", fontSize: "0.75rem" }}
+                      onClick={handleRefine}
+                      disabled={!refineText.trim() || refining}
+                    >
+                      {refining ? "REFINING..." : "APPLY EDIT"}
+                    </button>
+                  </div>
+                  {refineError && (
+                    <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.6875rem" }}>{refineError}</div>
+                  )}
                 </div>
               )}
             </div>

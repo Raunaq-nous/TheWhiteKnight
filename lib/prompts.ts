@@ -1,7 +1,7 @@
 import { Profile } from "./profile";
 import { Application } from "./store";
 
-export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm";
+export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
 export type ContactProfile = {
   name: string;
@@ -82,37 +82,65 @@ export type SkillBuilderResult = {
 };
 
 export function buildProfileContext(profile: Profile): string {
-  const expSummary = profile.experience.slice(0, 4).map(e =>
-    `${e.company} (${e.tenure}): ${e.role}\n${e.bullets.split("\n").filter(b => b.trim()).slice(0, 3).map(b => `  - ${b.trim()}`).join("\n")}`
-  ).join("\n\n");
+  // ALL experiences, ALL bullets — never slice
+  const expFull = profile.experience.map(e => {
+    const bullets = e.bullets.split("\n").filter(b => b.trim()).map(b => `  - ${b.trim()}`).join("\n");
+    return `${e.role} | ${e.company} | ${e.tenure}${e.location ? ` | ${e.location}` : ""}
+${bullets}`;
+  }).join("\n\n");
+
+  // ALL education entries — explicitly structured
+  const educationFull = (profile.education ?? []).map(ed => {
+    let line = `${ed.degree}${ed.field ? ` in ${ed.field}` : ""} | ${ed.institution} | ${ed.years}`;
+    if (ed.gpa) line += ` | GPA: ${ed.gpa}`;
+    if (ed.achievements) line += `\n  Achievements: ${ed.achievements}`;
+    return line;
+  }).join("\n");
 
   const skillsList = Object.entries(profile.skills).map(([cat, skills]) =>
     `${cat}: ${skills}`
   ).join("\n");
 
-  const projectHighlights = profile.projects.slice(0, 6).map(p =>
-    `${p.name}: ${p.description} (Stack: ${p.stack})`
+  const projectsFull = (profile.projects ?? []).map(p =>
+    `${p.name}: ${p.description}${p.outcomes ? ` | Outcomes: ${p.outcomes}` : ""} (Stack: ${p.stack})${p.repoUrl ? ` | ${p.repoUrl}` : ""}`
+  ).join("\n");
+
+  const certs = (profile.certifications ?? []).map(c =>
+    `${c.name} — ${c.issuer} (${c.date})`
+  ).join("\n");
+
+  const pubs = (profile.publications ?? []).map(p =>
+    `${p.title} — ${p.publication} (${p.year})`
   ).join("\n");
 
   return `
-CANDIDATE PROFILE
+CANDIDATE PROFILE — SOURCE OF TRUTH (all data below is verified; never add, invent, or extrapolate)
 Name: ${profile.name}
 Headline: ${profile.headline}
-Years of Experience: ${profile.yearsOfExperience}
+Email: ${profile.email}
+Phone: ${profile.phone}
 Location: ${profile.location}
-Open To: ${profile.locationsOpenTo}
+Open To: ${profile.locationsOpenTo ?? ""}
+Years of Experience: ${profile.yearsOfExperience}
+LinkedIn: ${profile.linkedin ?? "(not provided)"}
+GitHub: ${profile.github ?? "(not provided)"}
+Portfolio/Website: ${profile.portfolio ?? "(not provided)"}
 
-EXPERIENCE HIGHLIGHTS:
-${expSummary}
+FULL WORK EXPERIENCE (every entry below is real and must be included — do not skip any):
+${expFull || "(No experience entries)"}
+
+EDUCATION (copy exactly as written — never alter institution names, degrees, or years):
+${educationFull || "(No education entries)"}
 
 SKILLS:
-${skillsList}
+${skillsList || "(Not specified)"}
 
-KEY PROJECTS:
-${projectHighlights}
+PROJECTS:
+${projectsFull || "(None)"}
+${certs ? `\nCERTIFICATIONS:\n${certs}` : ""}${pubs ? `\nPUBLICATIONS:\n${pubs}` : ""}
 
 VOICE AND TONE NOTES:
-${profile.voiceNotes}
+${profile.voiceNotes ?? ""}
 `.trim();
 }
 
@@ -150,7 +178,16 @@ export function resumePrompt(profile: Profile, app: Application): string {
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
   const isStrategy = profile.roleType === "strategy-consulting";
 
-  return `You are a senior resume strategist. Tailor a one-page, ATS-optimized resume for ${profile.name} targeting the ${app.role} role at ${app.company}.
+  // Build the exact education and experience blocks for the output template
+  const eduBlock = (profile.education ?? []).map(ed => {
+    let line = `${ed.degree}${ed.field ? ` in ${ed.field}` : ""} | ${ed.institution} | ${ed.years}`;
+    if (ed.gpa) line += ` | GPA: ${ed.gpa}`;
+    return line;
+  }).join("\n") || "(copy from profile above)";
+
+  const expCount = profile.experience.length;
+
+  return `You are a senior resume strategist. Write a tailored, ATS-optimized resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
 
 ${buildProfileContext(profile)}
 
@@ -158,50 +195,56 @@ ${buildProfileContext(profile)}
 
 ${buildJDContext(app)}
 
-${atsKeywords ? `ATS KEYWORDS (weave in naturally, exact wording where possible): ${atsKeywords}` : ""}
+${atsKeywords ? `ATS KEYWORDS — weave these exact phrases in naturally: ${atsKeywords}` : ""}
 ${keyReqs ? `MUST-COVER REQUIREMENTS: ${keyReqs}` : ""}
-${techSkills ? `MUST-LIST TECHNICAL SKILLS (only if candidate has them): ${techSkills}` : ""}
+${techSkills ? `MUST-LIST TECH SKILLS (only if candidate actually has them per profile): ${techSkills}` : ""}
 
 ---
 
-REASONING APPROACH (think before writing):
-1. Identify the 5-7 highest-leverage requirements from the JD.
-2. For each, pick the single strongest piece of evidence in the profile (a bullet, project, or metric).
-3. Choose 3-4 experience entries to feature; cut the rest.
-4. Per entry, select 3-4 bullets that map directly to JD requirements; reorder so most relevant comes first.
-5. Calibrate scope language to ${app.seniority} seniority.
-6. Build a Skills section using JD terminology exactly (e.g. "LLMOps" if JD says LLMOps).
+ANTI-HALLUCINATION RULES — READ THESE FIRST, VIOLATING THEM IS A CRITICAL ERROR:
+1. NEVER invent, guess, or extrapolate ANY fact. Every claim must exist in the CANDIDATE PROFILE above.
+2. Education: copy institution names, degree names, and years EXACTLY as written in the profile. Do not alter, abbreviate, or guess. Do not add any education entry not listed.
+3. Company names: copy exactly. Do not rename, consolidate, or infer employer names.
+4. Metrics and numbers: use only numbers from the profile. NEVER invent percentages, revenue figures, team sizes, or timelines.
+5. Skills: only list skills that appear in the profile's SKILLS section. Do not add "presumed" skills.
+6. Projects: only reference projects listed in the profile. Do not fabricate project names.
 
-OUTPUT RULES:
-- Max ~30 content lines total. One page.
-- Every bullet: strong past-tense verb + specific action + quantified outcome (use only metrics from the profile, never invent).
-- No em dashes anywhere. Use commas, semicolons, or restructure.
-- No smart quotes, no fancy unicode bullets — plain hyphens only.
-- Banned phrases: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
-- Vary verbs and sentence lengths. Do not start consecutive bullets with the same word.
-- Summary: 2-3 sentences, lead with years + domain + distinctive angle; weave 3-5 JD keywords naturally.${isStrategy ? '\n- For this strategy/consulting candidate, weave "first principles" into the summary naturally — not as a buzzword.' : ""}
-- Location line: ${profile.location}${profile.locationsOpenTo ? `, open to ${profile.locationsOpenTo}` : ""}.
+EXPERIENCE INCLUSION RULES:
+- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them in the Experience section.
+- For each entry, keep 2-4 bullets, reordering so JD-relevant bullets come first.
+- You may trim low-relevance bullets but MUST NOT drop entire experience entries.
+- Preserve the exact company name and tenure for every entry.
 
-OUTPUT FORMAT (clean markdown, exactly this structure, nothing else):
+STYLE RULES:
+- One page maximum — ~28-32 content lines. Ruthlessly trim BULLETS but never trim entries.
+- Every bullet: strong past-tense action verb + specific action + outcome (quantified if profile has the number).
+- No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
+- Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
+- Vary verbs. Do not start two consecutive bullets with the same word.
+- Summary: 2-3 sentences. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.${isStrategy ? ' Weave "first principles" naturally.' : ""}
+
+OUTPUT FORMAT — markdown only, nothing before or after:
 # ${profile.name}
-${profile.email} | ${profile.phone} | ${profile.location}${profile.linkedin ? ` | ${profile.linkedin}` : ""}${profile.github ? ` | ${profile.github}` : ""}
+${profile.email} | ${profile.phone} | ${profile.location}${profile.linkedin ? ` | [LinkedIn](${profile.linkedin})` : ""}${profile.github ? ` | [GitHub](${profile.github})` : ""}${profile.portfolio ? ` | [Portfolio](${profile.portfolio})` : ""}
 
 ## Summary
 [2-3 sentences]
 
 ## Experience
-### [Role] | [Company] | [Tenure]
-- [Most JD-relevant bullet, quantified]
-- [Next most relevant]
+[List ALL ${expCount} entries from the profile. Each in format:]
+### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
+- [Most JD-relevant bullet]
+- [Next bullet]
 - [...]
 
 ## Skills
-**[Category]:** [comma-separated, JD terminology]
+**[Category]:** [comma-separated, JD terminology where applicable]
 
 ## Education
-[Degree | Institution | Year]
+${eduBlock}
+${(profile.certifications ?? []).length > 0 ? `\n## Certifications\n${(profile.certifications ?? []).map(c => `- ${c.name} — ${c.issuer} (${c.date})`).join("\n")}` : ""}
 
-Write the resume now. Output the markdown only — no preamble, no explanation.`;
+Output the markdown now. No preamble. No explanation. Markdown only.`;
 }
 
 export function coverLetterPrompt(profile: Profile, app: Application): string {
@@ -629,6 +672,42 @@ Hi ${firstName},
 [65 words max — specific to their role, genuine connection, soft ask]
 
 ${profile.name.split(" ")[0]}`;
+}
+
+export function refinePrompt(
+  profile: Profile,
+  app: Application,
+  action: string,
+  currentContent: string,
+  instruction: string
+): string {
+  return `You are refining a "${action}" document for ${profile.name} applying to the ${app.role} role at ${app.company}.
+
+CANDIDATE PROFILE (source of truth — never invent facts not in this profile):
+${buildProfileContext(profile)}
+
+---
+
+CURRENT VERSION OF THE DOCUMENT:
+${currentContent}
+
+---
+
+USER REFINEMENT INSTRUCTION:
+${instruction}
+
+---
+
+RULES:
+1. Apply ONLY what the instruction requests. Do not rewrite sections that were not mentioned.
+2. NEVER invent facts, metrics, education, or experience not in the CANDIDATE PROFILE above.
+3. Education, company names, and tenures must remain exactly as in the profile.
+4. No em dashes. No smart quotes. Plain hyphens only for bullets.
+5. Maintain the same format and section structure unless the instruction specifically changes it.
+6. If the instruction would require fabricating something (e.g. adding a degree not in the profile), refuse that specific part and explain briefly at the end of the document as a comment: [NOTE: Could not apply X — Y reason].
+7. Preserve all hyperlinks in the format [Text](URL) — do not convert to plain text URLs.
+
+Output the complete refined document now. Same format as the input. No preamble, no meta-commentary.`;
 }
 
 export function afScoringPrompt(
