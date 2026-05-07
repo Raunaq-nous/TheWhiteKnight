@@ -156,7 +156,7 @@ export function NotificationBell() {
         }}
       >
         {count > 0 && (
-          <span style={{ background: "var(--accent)", color: "#000", borderRadius: "50%", width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.5rem", fontWeight: 700 }}>
+          <span style={{ background: "var(--accent)", color: "#fff", borderRadius: "50%", width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.5rem", fontWeight: 700 }}>
             {count > 9 ? "9+" : count}
           </span>
         )}

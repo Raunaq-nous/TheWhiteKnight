@@ -1,26 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg: #0A0A0A;
-  --surface: #1A1A1A;
-  --surface-hover: #222222;
-  --border: #333333;
-  --border-light: #2A2A2A;
-  --text-primary: #F4F4F4;
-  --text-secondary: #999999;
-  --text-tertiary: #666666;
-  --accent: #FF6B00;
-  --accent-hover: #FF8533;
-  --success: #00A86B;
-  --error: #D32F2F;
-  --info: #0066CC;
-  --status-sourced: #666666;
-  --status-reviewed: #888888;
-  --status-applied: #0066CC;
-  --status-interview: #FF6B00;
-  --status-offer: #00A86B;
-  --status-rejected: #D32F2F;
-  --status-archived: #444444;
+  --bg: #FFFFFF;
+  --surface: #F7F7F7;
+  --surface-hover: #EFEFEF;
+  --border: #D4D4D4;
+  --border-light: #E5E5E5;
+  --text-primary: #0A0A0A;
+  --text-secondary: #4A4A4A;
+  --text-tertiary: #737373;
+  --accent: #1A1A1A;
+  --accent-hover: #333333;
+  --success: #00794D;
+  --error: #B91C1C;
+  --info: #0052A3;
+  --status-sourced: #737373;
+  --status-reviewed: #525252;
+  --status-applied: #0052A3;
+  --status-interview: #1A1A1A;
+  --status-offer: #00794D;
+  --status-rejected: #B91C1C;
+  --status-archived: #A3A3A3;
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --radius: 2px;
@@ -282,8 +282,11 @@ html, body {
 
 .btn:hover { background: var(--text-primary); color: var(--bg); }
 
-.btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
-.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-primary { background: #0A0A0A; color: #FFFFFF; border-color: #0A0A0A; }
+.btn-primary:hover { background: #333333; border-color: #333333; }
+
+.btn-secondary { background: #4A4A4A; color: #FFFFFF; border-color: #4A4A4A; }
+.btn-secondary:hover { background: #2A2A2A; border-color: #2A2A2A; }
 
 .section-header {
   display: flex;
