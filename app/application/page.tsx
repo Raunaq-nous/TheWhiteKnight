@@ -39,19 +39,28 @@ function ApplicationDetail() {
   const [refining, setRefining] = useState(false);
   const [refineError, setRefineError] = useState("");
   const [versionHistory, setVersionHistory] = useState<{ action: GenerationAction; content: string; instruction?: string }[]>([]);
+  const [loadingApp, setLoadingApp] = useState(true);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!slug) { setLoadingApp(false); return; }
     const found = getApplication(slug);
     if (found) {
       setApp(found);
       setNoteText(found.notes ?? "");
       setNextActionText(found.nextAction ?? "");
     }
+    setLoadingApp(false);
   }, [slug]);
 
+  if (loadingApp) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>LOADING...</div>;
   if (!slug) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>NO APPLICATION SELECTED</div>;
-  if (!app) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>APPLICATION NOT FOUND</div>;
+  if (!app) return (
+    <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>
+      <div style={{ marginBottom: 16 }}>APPLICATION NOT FOUND</div>
+      <div style={{ fontSize: "0.75rem", marginBottom: 24 }}>Slug: {slug}</div>
+      <a href="/" style={{ color: "var(--accent)", fontSize: "0.75rem" }}>← BACK TO PIPELINE</a>
+    </div>
+  );
 
   const filled = Math.round(app.score);
   const empty = 10 - filled;
