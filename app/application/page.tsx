@@ -215,8 +215,8 @@ function ApplicationDetail() {
     if (!win) { alert("Popup blocked. Allow popups to export PDF."); return; }
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>
-@page { size: letter; margin: 0.5in; }
-body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.35; font-size: 10.5pt; max-width: 7.5in; margin: 0 auto; padding: 0.4in 0.5in; }
+@page { size: letter portrait; margin: 0.45in; }
+body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.35; font-size: 10.5pt; max-width: 7.5in; margin: 0 auto; padding: 0; }
 h1 { font-size: 18pt; margin: 0 0 4px; letter-spacing: 0.3px; }
 h2 { font-size: 11pt; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 2px; margin: 12px 0 6px; }
 h3 { font-size: 10.5pt; margin: 8px 0 2px; }
@@ -225,13 +225,26 @@ ul { margin: 2px 0 6px; padding-left: 18px; }
 li { margin: 1px 0; }
 strong { font-weight: 600; }
 a { color: #0a58ca; text-decoration: none; border-bottom: 1px solid rgba(10,88,202,0.3); }
-a:hover { border-bottom-color: #0a58ca; }
-@media print { body { padding: 0; } .no-print { display: none; } a { color: #0a58ca; text-decoration: underline; border: none; } }
-.bar { position: fixed; top: 8px; right: 8px; }
-.bar button { font: 12px -apple-system, sans-serif; padding: 6px 12px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; margin-left: 6px; }
+@media print { .no-print { display: none; } a { color: #0a58ca; text-decoration: underline; border: none; } }
+.bar { position: fixed; top: 8px; right: 8px; display: flex; gap: 6px; }
+.bar button { font: 12px -apple-system, sans-serif; padding: 6px 12px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
 </style></head><body>
 <div class="bar no-print"><button onclick="window.print()">SAVE AS PDF</button><button onclick="window.close()">CLOSE</button></div>
-${html}
+<div id="content">${html}</div>
+<script>
+window.addEventListener('load', function() {
+  var content = document.getElementById('content');
+  // Letter page minus margins: (11 - 0.9) * 96 ≈ 970px at screen 96dpi
+  var pageH = 970;
+  var h = content.scrollHeight;
+  if (h > pageH) {
+    var scale = (pageH / h).toFixed(4);
+    content.style.transform = 'scale(' + scale + ')';
+    content.style.transformOrigin = 'top left';
+    content.style.width = Math.round(100 / parseFloat(scale)) + '%';
+  }
+});
+<\/script>
 </body></html>`);
     win.document.close();
   };
@@ -418,7 +431,7 @@ ${html}
       </div>
 
       {/* Two-column layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+      <div className="app-two-col">
         {/* Left */}
         <div>
           {/* Score */}

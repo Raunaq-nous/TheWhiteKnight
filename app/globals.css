@@ -25,6 +25,7 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --radius: 2px;
   --transition: 150ms ease-out;
+  --bg-primary: var(--bg);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -380,4 +381,46 @@ html, body {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   margin: 24px 0;
+}
+
+/* Two-column page layout with mobile collapse */
+.app-two-col {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+/* ─── Mobile ─────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-two-col { grid-template-columns: 1fr; }
+
+  /* Header: logo on top, nav below, full-width scroll */
+  .header { padding: 10px 0; }
+  .header-inner { flex-wrap: wrap; gap: 6px; }
+  .header-inner nav { width: 100%; overflow: hidden; }
+
+  /* Header nav: scrolls horizontally instead of wrapping */
+  .nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    gap: 16px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { font-size: 0.6875rem; white-space: nowrap; }
+
+  /* Stats bar: 2-col on mobile */
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+
+  /* Containers narrower padding */
+  .container { padding: 0 16px; }
+  .container-narrow { padding: 0 16px; }
+
+  /* Page main less vertical padding */
+  .page-main { padding-top: 20px; padding-bottom: 40px; }
+
+  /* Section buttons wrap better */
+  .btn { font-size: 0.6875rem; padding: 7px 12px; }
 }
