@@ -167,10 +167,11 @@ export function NotificationBell() {
         <>
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
           <div style={{
-            position: "absolute", top: "calc(100% + 8px)", right: 0, width: 420,
+            position: "absolute", top: "calc(100% + 8px)", right: 0,
+            width: "min(420px, calc(100vw - 24px))",
             background: "var(--surface)", border: "1px solid var(--border)",
             borderRadius: "var(--radius)", zIndex: 50,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
             maxHeight: "85vh", overflowY: "auto",
           }}>
             <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>

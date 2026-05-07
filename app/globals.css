@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
-:root {
+:root, [data-theme="light"] {
   --bg: #FFFFFF;
   --surface: #F7F7F7;
   --surface-hover: #EFEFEF;
@@ -28,6 +28,30 @@
   --bg-primary: var(--bg);
 }
 
+[data-theme="dark"] {
+  --bg: #0A0A0A;
+  --surface: #1A1A1A;
+  --surface-hover: #222222;
+  --border: #333333;
+  --border-light: #2A2A2A;
+  --text-primary: #F4F4F4;
+  --text-secondary: #B5B5B5;
+  --text-tertiary: #888888;
+  --accent: #FFFFFF;
+  --accent-hover: #E0E0E0;
+  --success: #34D399;
+  --error: #F87171;
+  --info: #60A5FA;
+  --status-sourced: #888888;
+  --status-reviewed: #AAAAAA;
+  --status-applied: #60A5FA;
+  --status-interview: #FFFFFF;
+  --status-offer: #34D399;
+  --status-rejected: #F87171;
+  --status-archived: #555555;
+  --bg-primary: var(--bg);
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body {
@@ -38,6 +62,9 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .label {
@@ -283,11 +310,11 @@ html, body {
 
 .btn:hover { background: var(--text-primary); color: var(--bg); }
 
-.btn-primary { background: #0A0A0A; color: #FFFFFF; border-color: #0A0A0A; }
-.btn-primary:hover { background: #333333; border-color: #333333; }
+.btn-primary { background: var(--text-primary); color: var(--bg); border-color: var(--text-primary); }
+.btn-primary:hover { background: var(--text-secondary); border-color: var(--text-secondary); }
 
-.btn-secondary { background: #4A4A4A; color: #FFFFFF; border-color: #4A4A4A; }
-.btn-secondary:hover { background: #2A2A2A; border-color: #2A2A2A; }
+.btn-secondary { background: var(--text-secondary); color: var(--bg); border-color: var(--text-secondary); }
+.btn-secondary:hover { background: var(--text-primary); border-color: var(--text-primary); }
 
 .section-header {
   display: flex;
@@ -390,9 +417,14 @@ html, body {
   gap: 24px;
 }
 
+/* Long-content overflow protection */
+pre { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+a { word-break: break-word; overflow-wrap: anywhere; }
+img, svg, video { max-width: 100%; height: auto; }
+
 /* ─── Mobile ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .app-two-col { grid-template-columns: 1fr; }
+  .app-two-col { grid-template-columns: 1fr; gap: 16px; }
 
   /* Header: logo on top, nav below, full-width scroll */
   .header { padding: 10px 0; }
@@ -415,12 +447,17 @@ html, body {
   .stats-bar { grid-template-columns: repeat(2, 1fr); }
 
   /* Containers narrower padding */
-  .container { padding: 0 16px; }
-  .container-narrow { padding: 0 16px; }
+  .container, .container-narrow, .container-wide { padding: 0 12px; }
 
   /* Page main less vertical padding */
   .page-main { padding-top: 20px; padding-bottom: 40px; }
 
   /* Section buttons wrap better */
   .btn { font-size: 0.6875rem; padding: 7px 12px; }
+
+  /* Surface cards: less padding on mobile */
+  .surface-card, .surface-card-accent { padding: 16px; }
+
+  /* Generic cards / panels — most use inline padding 24, override here */
+  main.container > div { max-width: 100%; }
 }

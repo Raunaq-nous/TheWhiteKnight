@@ -3,6 +3,34 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { NotificationBell } from "./notifications";
 
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const current = (document.documentElement.getAttribute("data-theme") as "light" | "dark") ?? "light";
+    setTheme(current);
+  }, []);
+
+  const toggle = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("careeros-theme", next); } catch {}
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      className="btn"
+      style={{ fontSize: "0.625rem", padding: "3px 10px" }}
+      title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+      aria-label="Toggle theme"
+    >
+      {theme === "light" ? "DARK" : "LIGHT"}
+    </button>
+  );
+}
+
 export function ScoreBar({ score }: { score: number }) {
   const filled = Math.round(score);
   const empty = 10 - filled;
@@ -54,6 +82,7 @@ export function Header() {
             <li><Link href="/persona/">PERSONA</Link></li>
             <li><Link href="/config/">CONFIG</Link></li>
             <li><Link href="/settings/" style={{color: "var(--accent)"}}>SETTINGS</Link></li>
+            <li><ThemeToggle /></li>
             <li><NotificationBell /></li>
             {userEmail && (
               <li style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 8, paddingLeft: 8, borderLeft: "1px solid var(--border)" }}>
