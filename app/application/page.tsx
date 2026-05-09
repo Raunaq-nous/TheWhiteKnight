@@ -39,19 +39,48 @@ function ApplicationDetail() {
   const [refining, setRefining] = useState(false);
   const [refineError, setRefineError] = useState("");
   const [versionHistory, setVersionHistory] = useState<{ action: GenerationAction; content: string; instruction?: string }[]>([]);
+  const [loadingApp, setLoadingApp] = useState(true);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!slug) { setLoadingApp(false); return; }
     const found = getApplication(slug);
     if (found) {
       setApp(found);
       setNoteText(found.notes ?? "");
       setNextActionText(found.nextAction ?? "");
     }
+    setLoadingApp(false);
   }, [slug]);
 
+  if (loadingApp) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>LOADING...</div>;
   if (!slug) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>NO APPLICATION SELECTED</div>;
-  if (!app) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>APPLICATION NOT FOUND</div>;
+  if (!app) {
+    let storedSlugs: string[] = [];
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("careeros_apps") : null;
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) storedSlugs = parsed.map((a: any) => a.slug).filter(Boolean);
+    } catch {}
+    return (
+      <div style={{ padding: 48, maxWidth: 480, margin: "0 auto", fontFamily: "var(--font-mono)" }}>
+        <div style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 12, color: "var(--text-primary)" }}>APPLICATION NOT FOUND</div>
+        <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", marginBottom: 8 }}>Looking for: <code style={{ background: "var(--surface)", padding: "2px 6px", borderRadius: 2 }}>{slug}</code></div>
+        {storedSlugs.length > 0 ? (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", marginBottom: 6 }}>Stored applications ({storedSlugs.length}):</div>
+            {storedSlugs.map(s => (
+              <div key={s}>
+                <a href={`/application/?slug=${s}`} style={{ fontSize: "0.75rem", color: "var(--accent)", display: "block", padding: "2px 0" }}>{s}</a>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: "0.75rem", color: "var(--error)", marginBottom: 24 }}>No applications found in localStorage on this browser.</div>
+        )}
+        <a href="/" style={{ fontSize: "0.75rem", color: "var(--accent)" }}>← BACK TO PIPELINE</a>
+      </div>
+    );
+  }
 
   const filled = Math.round(app.score);
   const empty = 10 - filled;
@@ -215,8 +244,8 @@ function ApplicationDetail() {
     if (!win) { alert("Popup blocked. Allow popups to export PDF."); return; }
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>
-@page { size: letter; margin: 0.5in; }
-body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.35; font-size: 10.5pt; max-width: 7.5in; margin: 0 auto; padding: 0.4in 0.5in; }
+@page { size: letter portrait; margin: 0.45in; }
+body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.35; font-size: 10.5pt; max-width: 7.5in; margin: 0 auto; padding: 0; }
 h1 { font-size: 18pt; margin: 0 0 4px; letter-spacing: 0.3px; }
 h2 { font-size: 11pt; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 2px; margin: 12px 0 6px; }
 h3 { font-size: 10.5pt; margin: 8px 0 2px; }
@@ -225,13 +254,26 @@ ul { margin: 2px 0 6px; padding-left: 18px; }
 li { margin: 1px 0; }
 strong { font-weight: 600; }
 a { color: #0a58ca; text-decoration: none; border-bottom: 1px solid rgba(10,88,202,0.3); }
-a:hover { border-bottom-color: #0a58ca; }
-@media print { body { padding: 0; } .no-print { display: none; } a { color: #0a58ca; text-decoration: underline; border: none; } }
-.bar { position: fixed; top: 8px; right: 8px; }
-.bar button { font: 12px -apple-system, sans-serif; padding: 6px 12px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; margin-left: 6px; }
+@media print { .no-print { display: none; } a { color: #0a58ca; text-decoration: underline; border: none; } }
+.bar { position: fixed; top: 8px; right: 8px; display: flex; gap: 6px; }
+.bar button { font: 12px -apple-system, sans-serif; padding: 6px 12px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
 </style></head><body>
 <div class="bar no-print"><button onclick="window.print()">SAVE AS PDF</button><button onclick="window.close()">CLOSE</button></div>
-${html}
+<div id="content">${html}</div>
+<script>
+window.addEventListener('load', function() {
+  var content = document.getElementById('content');
+  // Letter page minus margins: (11 - 0.9) * 96 ≈ 970px at screen 96dpi
+  var pageH = 970;
+  var h = content.scrollHeight;
+  if (h > pageH) {
+    var scale = (pageH / h).toFixed(4);
+    content.style.transform = 'scale(' + scale + ')';
+    content.style.transformOrigin = 'top left';
+    content.style.width = Math.round(100 / parseFloat(scale)) + '%';
+  }
+});
+<\/script>
 </body></html>`);
     win.document.close();
   };
@@ -418,7 +460,7 @@ ${html}
       </div>
 
       {/* Two-column layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+      <div className="app-two-col">
         {/* Left */}
         <div>
           {/* Score */}

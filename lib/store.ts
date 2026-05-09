@@ -80,6 +80,7 @@ export function getApplications(): Application[] {
   if (!data) return [];
   try {
     const apps = JSON.parse(data);
+    if (!Array.isArray(apps)) return [];
     return apps.map((app: any) => ({
       ...app,
       days: Math.floor((Date.now() - new Date(app.capturedAt).getTime()) / (1000 * 60 * 60 * 24))
