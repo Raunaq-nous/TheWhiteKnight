@@ -417,6 +417,28 @@ html, body {
   gap: 24px;
 }
 
+.projects-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.add-company-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 768px) {
+  .add-company-grid { grid-template-columns: 1fr; }
+  .projects-grid { grid-template-columns: 1fr; }
+  .config-grid { grid-template-columns: 1fr; gap: 12px; }
+}
+
 /* Long-content overflow protection */
 pre { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 a { word-break: break-word; overflow-wrap: anywhere; }

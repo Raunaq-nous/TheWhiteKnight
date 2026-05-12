@@ -21,7 +21,7 @@ export default function BatchPage() {
   const [query, setQuery] = useState("AI Product Manager");
   const [regions, setRegions] = useState<Region[]>(["middle-east", "india", "apac", "global"]);
   const [scanning, setScanning] = useState(false);
-  const [discovered, setDiscovered] = useState<{ title: string; company?: string; location?: string; url: string; snippet?: string; selected: boolean }[]>([]);
+  const [discovered, setDiscovered] = useState<{ title: string; company?: string; location?: string; url: string; snippet?: string; relevance?: number; source?: string; selected: boolean }[]>([]);
 
   // PASTE tab state
   const [pasteText, setPasteText] = useState("");
@@ -38,19 +38,51 @@ export default function BatchPage() {
     try {
       const integ = getIntegrationSettings();
       const targets = getCompanyTargets();
+      const profile = getProfile();
+
+      // Build role keywords from profile to refine relevance scoring
+      const roleKeywords: string[] = [];
+      if (profile?.roleType) roleKeywords.push(profile.roleType.replace(/-/g, " "));
+      if (profile?.headline) roleKeywords.push(profile.headline);
+      // Take role title from most recent experience entry
+      const latestRole = profile?.experience?.[0]?.role;
+      if (latestRole) roleKeywords.push(latestRole);
+
+      // Build excludes from years-of-experience and latest tenure heuristic
+      const excludeKeywords: string[] = [];
+      const yoe = parseInt((profile?.yearsOfExperience || "0").replace(/[^0-9]/g, ""), 10) || 0;
+      const headlineLower = (profile?.headline || "").toLowerCase();
+      if (yoe >= 7 || /senior|director|vp|head|lead|principal|chief/.test(headlineLower)) {
+        excludeKeywords.push("intern", "junior", "entry-level", "fresher", "trainee");
+      }
+      if (yoe < 2 || /student|intern|graduate/.test(headlineLower)) {
+        excludeKeywords.push("director", "vp", "head of", "chief", "principal");
+      }
+
       const res = await fetch("/api/scan/jobs", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query, regions,
           companies: targets.filter(t => t.enabled),
           exaApiKey: integ.exaApiKey,
+          adzunaAppId: integ.adzunaAppId,
+          adzunaAppKey: integ.adzunaAppKey,
           numResults: 30,
+          roleKeywords,
+          excludeKeywords,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Scan failed");
       setDiscovered((data.jobs ?? []).map((j: any) => ({ ...j, selected: true })));
-      if (!data.jobs || data.jobs.length === 0) setError("No jobs found. Add an Exa.ai key in Settings or enable more companies.");
+      if (!data.jobs || data.jobs.length === 0) {
+        const before = data.counts?.beforeFiltering ?? 0;
+        if (before > 0) {
+          setError(`${before} jobs found but none scored high enough on relevance. Try a more specific query or add role keywords to your profile.`);
+        } else {
+          setError("No jobs found. Add an Adzuna or Exa.ai key in Settings → Integrations.");
+        }
+      }
     } catch (e: any) { setError(e.message); }
     finally { setScanning(false); }
   };
@@ -137,8 +169,8 @@ export default function BatchPage() {
               <button className="btn btn-primary" onClick={runScan} disabled={scanning}>{scanning ? "SCANNING..." : "SCAN NOW"}</button>
               <Link href="/companies" className="btn" style={{ textDecoration: "none" }}>EDIT COMPANIES</Link>
             </div>
-            <p style={{ marginTop: 8, fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-              Scans Greenhouse/Ashby/Lever feeds for enabled companies + Exa.ai across portal domains (Naukri, BAYT, NaukriGulf, LinkedIn Jobs, etc.).
+            <p style={{ marginTop: 8, fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", lineHeight: 1.5 }}>
+              Scans Adzuna (when configured) for structured listings + Greenhouse/Ashby/Lever ATS feeds for your enabled target companies + Exa.ai across portal domains. Results are filtered by relevance against your query and profile role keywords; jobs scoring below 20/100 are dropped.
             </p>
           </div>
         )}
@@ -155,12 +187,20 @@ export default function BatchPage() {
             </div>
             <div style={{ maxHeight: 360, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
               {discovered.map((d, i) => (
-                <label key={i} style={{ display: "flex", gap: 10, padding: 8, border: "1px solid var(--border-light)", borderRadius: "var(--radius)", cursor: "pointer", background: d.selected ? "rgba(255,165,0,0.04)" : "transparent" }}>
+                <label key={i} style={{ display: "flex", gap: 10, padding: 8, border: "1px solid var(--border-light)", borderRadius: "var(--radius)", cursor: "pointer", background: d.selected ? "var(--surface-hover)" : "transparent" }}>
                   <input type="checkbox" checked={d.selected} onChange={() => toggleSelected(i)} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{d.title}</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                      <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", flex: 1, minWidth: 0 }}>{d.title}</div>
+                      {typeof d.relevance === "number" && (
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: d.relevance >= 60 ? "var(--success)" : d.relevance >= 40 ? "var(--text-primary)" : "var(--text-tertiary)", flexShrink: 0 }}>
+                          {d.relevance}/100
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: "0.7rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                      {d.company ?? new URL(d.url).hostname}{d.location ? ` · ${d.location}` : ""}
+                      {d.company ?? (() => { try { return new URL(d.url).hostname; } catch { return d.url; } })()}{d.location ? ` · ${d.location}` : ""}
+                      {d.source && <span style={{ marginLeft: 8, opacity: 0.7 }}>via {d.source}</span>}
                     </div>
                     {d.snippet && <div style={{ fontSize: "0.65rem", color: "var(--text-tertiary)", marginTop: 2, lineHeight: 1.3 }}>{d.snippet.slice(0, 200)}</div>}
                   </div>

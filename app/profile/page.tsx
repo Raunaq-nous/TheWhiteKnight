@@ -92,7 +92,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+        <div className="app-two-col">
           {/* Left column */}
           <div>
             {/* Experience */}
@@ -127,7 +127,7 @@ export default function ProfilePage() {
 
             {/* Projects */}
             <SectionCard title={`PROJECTS & BUILDS (${profile.projects.length})`} action={editLink}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="projects-grid">
                 {profile.projects.map(proj => (
                   <div key={proj.id} style={{ background: "var(--bg-primary)", border: "1px solid var(--border-light)", borderRadius: "var(--radius)", padding: 16 }}>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", fontWeight: 600, marginBottom: 6, textTransform: "uppercase" }}>{proj.name}</div>

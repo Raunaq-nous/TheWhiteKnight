@@ -196,15 +196,26 @@ export default function SettingsPage() {
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--success)", whiteSpace: "nowrap" }}>{opt.pricing}</span>
                 </div>
                 <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: 8, lineHeight: 1.5 }}>{opt.description}</p>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="password"
-                    value={(integrations[opt.keyField] as string) || ""}
-                    onChange={e => setIntegrations(prev => ({ ...prev, [opt.keyField]: e.target.value }))}
-                    placeholder={opt.keyPlaceholder}
-                    style={{ flex: 1, padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
-                  />
-                  <a href={opt.keyLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.625rem", color: "var(--accent)", textDecoration: "none", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>GET KEY →</a>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {(opt as any).secondaryKeyField && (
+                    <input
+                      type="text"
+                      value={(integrations[(opt as any).secondaryKeyField as keyof typeof integrations] as string) || ""}
+                      onChange={e => setIntegrations(prev => ({ ...prev, [(opt as any).secondaryKeyField]: e.target.value }))}
+                      placeholder={(opt as any).secondaryKeyPlaceholder}
+                      style={{ width: "100%", padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+                    />
+                  )}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="password"
+                      value={(integrations[opt.keyField] as string) || ""}
+                      onChange={e => setIntegrations(prev => ({ ...prev, [opt.keyField]: e.target.value }))}
+                      placeholder={opt.keyPlaceholder}
+                      style={{ flex: 1, padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+                    />
+                    <a href={opt.keyLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.625rem", color: "var(--accent)", textDecoration: "none", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }}>GET KEY →</a>
+                  </div>
                 </div>
               </div>
             ))}

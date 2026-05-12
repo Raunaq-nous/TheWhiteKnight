@@ -34,7 +34,7 @@ export default function ConfigPage() {
           <span className="label">USER LAYER</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
+        <div className="config-grid">
           {/* Profile */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
             <div className="label" style={{ marginBottom: 16 }}>PROFILE</div>
@@ -76,7 +76,7 @@ export default function ConfigPage() {
           <span className="label">{buckets.length} CONFIGURED</span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+        <div className="config-grid">
           {buckets.map(b => (
             <div key={b.name} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
