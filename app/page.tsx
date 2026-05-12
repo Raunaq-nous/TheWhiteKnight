@@ -4,28 +4,55 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { STATUSES } from "./data";
 import { ScoreBar, StatusPill, Header, Footer } from "./components";
-import { getApplications, Application } from "../lib/store";
+import { getApplications, deleteApplication, Application } from "../lib/store";
 import { hasProfile } from "../lib/profile";
 
-function AppCard({ app }: { app: Application }) {
+function AppCard({ app, onDelete }: { app: Application; onDelete: (id: string, label: string) => void }) {
   return (
-    <Link href={`/application/?slug=${app.slug}`} className="card" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
-      <div className="card-company">{app.company}</div>
-      <div className="card-role">{app.role}</div>
-      <div className="card-meta">
-        <span className="card-location">{app.location}{app.remote ? " · REMOTE" : ""}</span>
-        <StatusPill status={app.status as any} days={app.days ?? 0} />
-      </div>
-      <div style={{ marginTop: 8 }}>
-        <ScoreBar score={app.score} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
-        <span className="label">{app.bucket}</span>
-        <span className="label" style={{ color: "var(--text-tertiary)", fontSize: "0.625rem" }}>
-          {("capturedAt" in app) ? app.capturedAt : ""}
-        </span>
-      </div>
-    </Link>
+    <div className="card" style={{ position: "relative", color: "inherit" }}>
+      <Link href={`/application/?slug=${app.slug}`} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+        <div className="card-company">{app.company}</div>
+        <div className="card-role">{app.role}</div>
+        <div className="card-meta">
+          <span className="card-location">{app.location}{app.remote ? " · REMOTE" : ""}</span>
+          <StatusPill status={app.status as any} days={app.days ?? 0} />
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <ScoreBar score={app.score} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 6 }}>
+          <span className="label">{app.bucket}</span>
+          <span className="label" style={{ color: "var(--text-tertiary)", fontSize: "0.625rem" }}>
+            {("capturedAt" in app) ? app.capturedAt : ""}
+          </span>
+        </div>
+      </Link>
+      <button
+        onClick={e => { e.preventDefault(); e.stopPropagation(); if (app.id) onDelete(app.id, `${app.company} — ${app.role}`); }}
+        aria-label="Delete application"
+        title="Delete"
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          width: 24,
+          height: 24,
+          padding: 0,
+          background: "transparent",
+          border: "1px solid var(--border-light)",
+          borderRadius: 4,
+          color: "var(--text-tertiary)",
+          cursor: "pointer",
+          fontSize: "0.875rem",
+          lineHeight: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        ×
+      </button>
+    </div>
   );
 }
 
@@ -43,6 +70,12 @@ export default function Dashboard() {
     window.addEventListener("careeros-data-change", handleUpdate);
     return () => window.removeEventListener("careeros-data-change", handleUpdate);
   }, []);
+
+  const handleDelete = (id: string, label: string) => {
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+    deleteApplication(id);
+    setApps(getApplications());
+  };
 
   const counts: Record<string, number> = {};
   STATUSES.forEach(s => { counts[s] = apps.filter(a => a.status === s).length; });
@@ -95,7 +128,7 @@ export default function Dashboard() {
               </div>
               <div className="column-body">
                 {apps.filter(a => a.status === status).map((app, i) => (
-                  <AppCard app={app} key={i} />
+                  <AppCard app={app} key={i} onDelete={handleDelete} />
                 ))}
                 {counts[status] === 0 && (
                   <div className="empty-state"><p>NO APPLICATIONS</p></div>

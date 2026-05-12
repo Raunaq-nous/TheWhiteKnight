@@ -417,6 +417,22 @@ html, body {
   gap: 24px;
 }
 
+.projects-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 768px) {
+  .projects-grid { grid-template-columns: 1fr; }
+  .config-grid { grid-template-columns: 1fr; gap: 12px; }
+}
+
 /* Long-content overflow protection */
 pre { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 a { word-break: break-word; overflow-wrap: anywhere; }
