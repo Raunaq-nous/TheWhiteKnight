@@ -4,6 +4,18 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { CompanyTarget, Region, Sector, getCompanyTargets, saveCompanyTargets, resetCompanyTargets } from "../../lib/company-targets";
+import { getProfile } from "../../lib/profile";
+import { getModelSettings } from "../../lib/model-settings";
+
+type Discovered = {
+  name: string;
+  region: Region[];
+  sector: string;
+  careersUrl: string;
+  rationale: string;
+  seniorityFit: string;
+  selected: boolean;
+};
 
 const REGION_LABELS: Record<Region, string> = {
   "global": "Global",
@@ -31,6 +43,70 @@ export default function CompaniesPage() {
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<Partial<CompanyTarget>>({ enabled: true, region: ["global"], sector: "ai-emerging", ats: "custom" });
+
+  // AI discovery state
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<Discovered[]>([]);
+  const [discoverError, setDiscoverError] = useState("");
+  const [discoverRegion, setDiscoverRegion] = useState<Region | "auto">("auto");
+
+  const runDiscover = async () => {
+    setDiscoverError("");
+    const profile = getProfile();
+    if (!profile) { setDiscoverError("No profile found. Set up your profile first."); return; }
+    setDiscovering(true);
+    try {
+      const settings = getModelSettings();
+      const providerSettings = settings.provider !== "together"
+        ? { provider: settings.provider, model: settings.model, apiKey: settings.apiKey }
+        : undefined;
+      const res = await fetch("/api/companies/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile,
+          providerSettings,
+          count: 25,
+          region: discoverRegion === "auto" ? undefined : REGION_LABELS[discoverRegion],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Discovery failed");
+      setDiscovered((data.companies ?? []).map((c: any) => ({ ...c, selected: true })));
+    } catch (e: any) {
+      setDiscoverError(e.message || "Discovery failed.");
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  const addDiscovered = () => {
+    const existingNames = new Set(targets.map(t => t.name.toLowerCase()));
+    const toAdd = discovered
+      .filter(d => d.selected && !existingNames.has(d.name.toLowerCase()))
+      .map(d => {
+        const id = d.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const region = (d.region?.length ? d.region : ["global" as Region]).filter((r): r is Region =>
+          ["global", "middle-east", "apac", "india", "north-america", "europe"].includes(r as string)
+        );
+        // Map AI sector strings to our enum, defaulting to ai-emerging
+        const validSectors = ["consulting", "big-tech-strategy", "ai-emerging", "fintech", "ecommerce", "investment", "industry"];
+        const sector = (validSectors.includes(d.sector) ? d.sector : "ai-emerging") as Sector;
+        return {
+          id,
+          name: d.name,
+          region,
+          sector,
+          ats: "custom" as const,
+          careersUrl: d.careersUrl.startsWith("http") ? d.careersUrl : `https://${d.careersUrl}`,
+          enabled: true,
+        };
+      });
+    if (toAdd.length === 0) return;
+    persist([...toAdd, ...targets]);
+    setDiscovered([]);
+  };
+  const toggleDiscovered = (i: number) => setDiscovered(prev => prev.map((d, idx) => idx === i ? { ...d, selected: !d.selected } : d));
 
   useEffect(() => { setTargets(getCompanyTargets()); }, []);
 
@@ -65,8 +141,11 @@ export default function CompaniesPage() {
       <main className="container" style={{ paddingTop: 24, paddingBottom: 64, flex: 1 }}>
         <div className="section-header">
           <span className="section-title">TARGET COMPANIES <span style={{ color: "var(--text-tertiary)", fontWeight: "normal" }}>{enabledCount}/{targets.length} ACTIVE</span></span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" onClick={() => setAdding(!adding)}>{adding ? "CANCEL" : "+ ADD"}</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-primary" onClick={runDiscover} disabled={discovering}>
+              {discovering ? "DISCOVERING..." : "✨ DISCOVER FOR ME"}
+            </button>
+            <button className="btn" onClick={() => setAdding(!adding)}>{adding ? "CANCEL" : "+ ADD"}</button>
             <button className="btn" onClick={handleReset}>RESET</button>
             <Link href="/" className="btn" style={{ textDecoration: "none" }}>BACK</Link>
           </div>
@@ -86,10 +165,45 @@ export default function CompaniesPage() {
           </label>
         </div>
 
+        {discoverError && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--error)", color: "var(--error)", borderRadius: "var(--radius)", padding: 12, marginBottom: 16, fontSize: "0.8125rem", fontFamily: "var(--font-mono)" }}>
+            {discoverError}
+          </div>
+        )}
+
+        {discovered.length > 0 && (
+          <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 16, marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+              <div className="label" style={{ color: "var(--accent)" }}>AI SUGGESTIONS — {discovered.filter(d => d.selected).length}/{discovered.length} SELECTED</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn" style={{ fontSize: "0.625rem" }} onClick={() => setDiscovered(prev => prev.map(d => ({ ...d, selected: true })))}>ALL</button>
+                <button className="btn" style={{ fontSize: "0.625rem" }} onClick={() => setDiscovered(prev => prev.map(d => ({ ...d, selected: false })))}>NONE</button>
+                <button className="btn btn-primary" onClick={addDiscovered}>ADD SELECTED</button>
+                <button className="btn" onClick={() => setDiscovered([])}>DISMISS</button>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 8, maxHeight: 480, overflowY: "auto" }}>
+              {discovered.map((d, i) => (
+                <label key={`${d.name}-${i}`} style={{ background: "var(--bg)", border: `1px solid ${d.selected ? "var(--accent)" : "var(--border-light)"}`, borderRadius: "var(--radius)", padding: 12, cursor: "pointer", display: "block" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: "0.875rem", color: "var(--text-primary)", fontWeight: 500, flex: 1, minWidth: 0, wordBreak: "break-word" }}>{d.name}</span>
+                    <input type="checkbox" checked={d.selected} onChange={() => toggleDiscovered(i)} />
+                  </div>
+                  <div style={{ fontSize: "0.65rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginTop: 4 }}>
+                    {d.sector?.toUpperCase()} · {d.seniorityFit?.toUpperCase()} · {d.region?.join(", ").toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.45 }}>{d.rationale}</div>
+                  <div style={{ fontSize: "0.625rem", color: "var(--accent)", marginTop: 6, fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>{d.careersUrl}</div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         {adding && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 20, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 12 }}>ADD COMPANY</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <div className="add-company-grid">
               <input placeholder="Company name *" value={draft.name ?? ""} onChange={e => setDraft({ ...draft, name: e.target.value })} style={inputStyle} />
               <input placeholder="Careers URL *" value={draft.careersUrl ?? ""} onChange={e => setDraft({ ...draft, careersUrl: e.target.value })} style={inputStyle} />
               <select value={draft.sector} onChange={e => setDraft({ ...draft, sector: e.target.value as Sector })} style={inputStyle}>

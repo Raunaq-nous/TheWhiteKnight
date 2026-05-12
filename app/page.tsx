@@ -114,7 +114,7 @@ export default function Dashboard() {
         <div className="section-header">
           <span className="section-title">APPLICATION PIPELINE</span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn">SCAN PORTALS</button>
+            <Link href="/batch/" className="btn" style={{ textDecoration: "none" }}>SCAN PORTALS</Link>
             <Link href="/ingest" className="btn btn-primary" style={{ textDecoration: "none" }}>+ INGEST JD</Link>
           </div>
         </div>
