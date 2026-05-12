@@ -8,6 +8,8 @@ export type IntegrationSettings = {
   resendApiKey?: string;
   senderEmail?: string;
   senderName?: string;
+  adzunaAppId?: string;
+  adzunaAppKey?: string;
 };
 
 const KEY = "careeros_integration_settings";
@@ -27,9 +29,21 @@ export function saveIntegrationSettings(s: IntegrationSettings) {
 
 export const INTEGRATION_OPTIONS = [
   {
+    id: "adzuna",
+    label: "Adzuna Jobs API (Recommended for India / UAE / UK / US)",
+    description: "Structured job listings from a real jobs aggregator. Supports India, UAE, UK, US, Singapore, Australia, and more. Requires both an App ID and App Key.",
+    pricing: "Free: 1,000 calls/month",
+    keyField: "adzunaAppKey" as const,
+    keyPlaceholder: "App Key (your-adzuna-app-key)",
+    secondaryKeyField: "adzunaAppId" as const,
+    secondaryKeyPlaceholder: "App ID (your-adzuna-app-id)",
+    keyLink: "https://developer.adzuna.com/signup",
+    required: false,
+  },
+  {
     id: "exa",
-    label: "Exa.ai (People & Job Search)",
-    description: "Neural search for finding contacts on LinkedIn and jobs across all portals (Naukri, BAYT, NaukriGulf, company career pages).",
+    label: "Exa.ai (Neural Search for Portals + People)",
+    description: "Neural search across LinkedIn, Naukri, BAYT, NaukriGulf, and company career pages. Useful when Adzuna doesn't cover the region.",
     pricing: "Free: 1,000 searches/month",
     keyField: "exaApiKey" as const,
     keyPlaceholder: "exa_...",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { exaJobSearch } from "../../../../lib/exa-client";
 import { CompanyTarget, Region } from "../../../../lib/company-targets";
+import { adzunaSearch, REGION_TO_ADZUNA_COUNTRIES, AdzunaCountry } from "../../../../lib/adzuna-client";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,14 @@ export type JobScanRequest = {
   regions?: Region[];                // ["middle-east", "india", "apac"]
   companies?: CompanyTarget[];       // user's enabled targets; client passes them in
   exaApiKey?: string;
+  adzunaAppId?: string;
+  adzunaAppKey?: string;
   numResults?: number;
+  // Optional: extra role keywords inferred from the user's profile,
+  // used to score relevance after fetching from sources.
+  roleKeywords?: string[];
+  // Optional: hard-exclude these keywords from titles (e.g. "Intern" if user is senior)
+  excludeKeywords?: string[];
 };
 
 export type JobResult = {
@@ -17,9 +25,10 @@ export type JobResult = {
   company?: string;
   location?: string;
   url: string;
-  source: "greenhouse" | "ashby" | "lever" | "exa-portal" | "exa-company";
+  source: "greenhouse" | "ashby" | "lever" | "exa-portal" | "exa-company" | "adzuna";
   publishedDate?: string;
   snippet?: string;
+  relevance?: number; // 0-100 score against query + roleKeywords
 };
 
 // ATS feed fetchers — public, no key required
@@ -80,23 +89,115 @@ const REGION_PORTAL_DOMAINS: Record<Region, string[]> = {
   "global": ["linkedin.com/jobs"],
 };
 
-function matchesQuery(title: string, query: string): boolean {
+// Relevance scoring: 0-100. Title gets 70 weight, snippet 30.
+// Requires at least one query token to match. Penalises excludes hard.
+const STOPWORDS = new Set(["the","and","for","of","in","at","to","a","an","with","or"]);
+
+function tokenize(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9\s+#./-]/g, " ").split(/\s+/).filter(t => t.length > 1 && !STOPWORDS.has(t));
+}
+
+function scoreRelevance(
+  title: string,
+  snippet: string | undefined,
+  queryTokens: string[],
+  roleTokens: string[],
+  excludeTokens: string[]
+): number {
   const t = title.toLowerCase();
-  const tokens = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  return tokens.some(tok => t.includes(tok));
+  const s = (snippet ?? "").toLowerCase();
+
+  // Hard reject if title contains an exclude term
+  if (excludeTokens.some(ex => t.includes(ex))) return 0;
+
+  let titleScore = 0;
+  let snippetScore = 0;
+
+  for (const tok of queryTokens) {
+    if (t.includes(tok)) titleScore += 10;
+    else if (s.includes(tok)) snippetScore += 4;
+  }
+  for (const tok of roleTokens) {
+    if (t.includes(tok)) titleScore += 6;
+    else if (s.includes(tok)) snippetScore += 2;
+  }
+
+  // At least one query token must match somewhere
+  const anyQueryMatch = queryTokens.some(tok => t.includes(tok) || s.includes(tok));
+  if (!anyQueryMatch) return 0;
+
+  // Normalize to 0-100. Cap the total.
+  const raw = Math.min(70, titleScore) + Math.min(30, snippetScore);
+  return Math.min(100, raw);
+}
+
+async function fetchAdzuna(
+  appId: string,
+  appKey: string,
+  query: string,
+  regions: Region[]
+): Promise<JobResult[]> {
+  const countries: AdzunaCountry[] = Array.from(new Set(
+    regions.flatMap(r => REGION_TO_ADZUNA_COUNTRIES[r] ?? [])
+  ));
+  if (countries.length === 0) return [];
+
+  const results: JobResult[] = [];
+  // Limit to 3 countries max per scan to conserve free-tier credits
+  for (const country of countries.slice(0, 3)) {
+    try {
+      const jobs = await adzunaSearch(appId, appKey, {
+        country,
+        what: query,
+        resultsPerPage: 20,
+        sortBy: "relevance",
+        maxDaysOld: 30,
+      });
+      for (const j of jobs) {
+        results.push({
+          title: j.title,
+          company: j.company,
+          location: j.location,
+          url: j.url,
+          source: "adzuna",
+          publishedDate: j.created,
+          snippet: j.description?.slice(0, 240),
+        });
+      }
+    } catch {
+      // Skip country on failure; other countries continue
+    }
+  }
+  return results;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json() as JobScanRequest;
-    const { query, regions = [], companies = [], exaApiKey, numResults = 30 } = body;
+    const {
+      query,
+      regions = [],
+      companies = [],
+      exaApiKey,
+      adzunaAppId,
+      adzunaAppKey,
+      numResults = 30,
+      roleKeywords = [],
+      excludeKeywords = [],
+    } = body;
 
     if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
+
+    const queryTokens = tokenize(query);
+    const roleTokens = roleKeywords.flatMap(k => tokenize(k));
+    const excludeTokens = excludeKeywords.flatMap(k => tokenize(k));
+    if (queryTokens.length === 0) return NextResponse.json({ error: "Query has no useful tokens" }, { status: 400 });
 
     const errors: string[] = [];
     const allResults: JobResult[] = [];
 
-    // Parallel ATS feed fetches for known tenants
+    // Parallel ATS feed fetches for known tenants — these return ALL jobs at the
+    // company, we score them after.
     const atsPromises: Promise<JobResult[]>[] = [];
     for (const c of companies) {
       if (!c.enabled || !c.atsTenant) continue;
@@ -106,8 +207,16 @@ export async function POST(req: NextRequest) {
     }
 
     const atsResults = await Promise.all(atsPromises);
-    for (const r of atsResults) {
-      allResults.push(...r.filter(j => matchesQuery(j.title, query)));
+    for (const r of atsResults) allResults.push(...r);
+
+    // Adzuna structured search per region (preferred when available)
+    if (adzunaAppId && adzunaAppKey && regions.length > 0) {
+      try {
+        const adzunaResults = await fetchAdzuna(adzunaAppId, adzunaAppKey, query, regions);
+        allResults.push(...adzunaResults);
+      } catch (e: any) {
+        errors.push(`Adzuna: ${e.message}`);
+      }
     }
 
     // Exa searches per region (consolidated portals)
@@ -171,13 +280,25 @@ export async function POST(req: NextRequest) {
       return true;
     });
 
+    // Score relevance and filter — only keep jobs with >= 20 relevance score
+    const scored = deduped.map(j => ({
+      ...j,
+      relevance: scoreRelevance(j.title, j.snippet, queryTokens, roleTokens, excludeTokens),
+    }));
+    const relevant = scored
+      .filter(j => (j.relevance ?? 0) >= 20)
+      .sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0))
+      .slice(0, Math.max(numResults, 30));
+
     return NextResponse.json({
-      jobs: deduped,
+      jobs: relevant,
       errors: errors.length > 0 ? errors : undefined,
       counts: {
-        total: deduped.length,
-        ats: deduped.filter(j => j.source === "greenhouse" || j.source === "ashby" || j.source === "lever").length,
-        exa: deduped.filter(j => j.source === "exa-portal" || j.source === "exa-company").length,
+        total: relevant.length,
+        beforeFiltering: deduped.length,
+        ats: relevant.filter(j => j.source === "greenhouse" || j.source === "ashby" || j.source === "lever").length,
+        adzuna: relevant.filter(j => j.source === "adzuna").length,
+        exa: relevant.filter(j => j.source === "exa-portal" || j.source === "exa-company").length,
       },
     });
   } catch (e: any) {
