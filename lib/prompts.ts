@@ -172,11 +172,117 @@ ${app.jdRaw ? app.jdRaw.slice(0, 3000) : "(Not available, using structured data 
 `.trim();
 }
 
+// Per-role-type resume structure guidance. Each block returns:
+//   - sectionOrder: how the output template orders the resume
+//   - emphasis: what each bullet should emphasise
+//   - voiceQuirk: optional one-line stylistic instruction
+function getResumeStructureGuidance(roleType: string | undefined, yoeNum: number): {
+  sectionOrder: "exp-first" | "edu-first" | "projects-first";
+  emphasis: string;
+  voiceQuirk: string;
+  extraSection: string;
+} {
+  const rt = roleType ?? "professional";
+
+  // Student / Intern / <2 yoe: education first
+  if (rt === "other" && yoeNum < 2) {
+    return {
+      sectionOrder: "edu-first",
+      emphasis: "Lead with academic strength, projects, and coursework. Use experience bullets for internships and part-time roles.",
+      voiceQuirk: "",
+      extraSection: "## Relevant Coursework\n[3-5 most relevant courses or research areas if listed in profile education achievements]",
+    };
+  }
+
+  switch (rt) {
+    case "strategy-consulting":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead each bullet with quantified business impact: revenue captured, cost saved, % uplift, deals closed, market sized. Show consulting toolkit: analytical frameworks, executive communication, due diligence depth.",
+        voiceQuirk: 'Weave "first principles" naturally once in the Summary.',
+        extraSection: "",
+      };
+
+    case "ai-tech":
+    case "engineering":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead with technical scale and impact: latency improvements, throughput, model accuracy gains, system reliability, users served. Mention specific tools, languages, and architectures by name. Reference GitHub projects when relevant.",
+        voiceQuirk: "Use precise technical terminology — say 'shipped a multi-agent RAG pipeline with sub-300ms p95 latency' not 'built an AI system'.",
+        extraSection: profile_hasProjects(profile_from_closure) ? "## Notable Builds\n[2-3 highest-impact projects from profile with stack + outcome on one line each]" : "",
+      };
+
+    case "design":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead with named brands shipped for, scope of work (identity, web, packaging, motion, etc.), and measurable outcomes if available (engagement lift, brand recall, award recognition). Mention specific tools (Figma, After Effects, Adobe Suite). The portfolio link in the header is critical — it carries the visual proof.",
+        voiceQuirk: "Pick verbs that signal craft: shipped, art-directed, illustrated, prototyped, defined. Not 'leveraged' or 'spearheaded'.",
+        extraSection: "## Tools\n[Comma-separated list of design tools and skills from profile, e.g. Figma, Adobe Creative Suite, Webflow, After Effects]",
+      };
+
+    case "product":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead with user/business outcomes: MAU growth, retention, NPS, conversion, revenue per user, time-to-launch. Show 0-to-1 vs scaling roles distinctly. Mention cross-functional partners (eng, design, data, GTM) when scope justifies.",
+        voiceQuirk: "Frame bullets around 'problem → bet → outcome'. Avoid 'managed product' — say what shipped and what changed.",
+        extraSection: "",
+      };
+
+    case "marketing":
+    case "sales":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead with quota attainment, pipeline generated, revenue closed, growth multipliers, ROAS, CAC, channels owned. Be ruthless about numbers — never use 'managed' or 'oversaw' without an outcome attached.",
+        voiceQuirk: "Every bullet should contain at least one number when possible.",
+        extraSection: "",
+      };
+
+    case "finance":
+    case "operations":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead with scale of P&L owned, deals modelled/closed, processes built or saved (in hours or $), audits cleared. Demonstrate analytical rigor through tool fluency (Excel, SQL, Tableau, ERP systems).",
+        voiceQuirk: "Pair process discipline with business outcome — 'cut close cycle from 12d to 4d, unlocking real-time CFO reporting'.",
+        extraSection: "",
+      };
+
+    case "data":
+    case "research":
+      return {
+        sectionOrder: rt === "research" ? "edu-first" : "exp-first",
+        emphasis: "Lead with rigorous methodology: model type, dataset size, sample power, evaluation metric. Tie every project to a business or research outcome.",
+        voiceQuirk: "Use precise quantitative language. Distinguish exploratory from production work.",
+        extraSection: rt === "research" && profile_hasPubs(profile_from_closure) ? "## Selected Publications\n[2-4 most relevant publications from profile, copied verbatim]" : "",
+      };
+
+    case "creative":
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead with named work, the role you played (writer, director, producer, designer), audience scale (views, plays, units sold, screens), and any awards or notable critical reception. The portfolio link is essential.",
+        voiceQuirk: "Use verbs of craft and authorship. Mention collaborators only when they sharpen the achievement.",
+        extraSection: "",
+      };
+
+    default:
+      return {
+        sectionOrder: "exp-first",
+        emphasis: "Lead each bullet with action + scope + outcome. Quantify where the profile provides numbers.",
+        voiceQuirk: "",
+        extraSection: "",
+      };
+  }
+}
+
+// Helper closures bound when called (avoid TS narrowing issues by passing profile in)
+let profile_from_closure: Profile;
+function profile_hasProjects(p: Profile) { return (p?.projects ?? []).length >= 2; }
+function profile_hasPubs(p: Profile) { return (p?.publications ?? []).length >= 1; }
+
 export function resumePrompt(profile: Profile, app: Application): string {
+  profile_from_closure = profile;
   const atsKeywords = app.jdParsed?.keywords?.join(", ") ?? "";
   const keyReqs = app.jdParsed?.keyRequirements?.join("; ") ?? "";
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
-  const isStrategy = profile.roleType === "strategy-consulting";
 
   // Build the exact education and experience blocks for the output template
   const eduBlock = (profile.education ?? []).map(ed => {
@@ -186,6 +292,8 @@ export function resumePrompt(profile: Profile, app: Application): string {
   }).join("\n") || "(copy from profile above)";
 
   const expCount = profile.experience.length;
+  const yoeNum = parseInt((profile.yearsOfExperience || "0").replace(/[^0-9]/g, ""), 10) || 0;
+  const guidance = getResumeStructureGuidance(profile.roleType, yoeNum);
 
   return `You are a senior resume strategist. Write a tailored, ATS-optimized resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
 
@@ -221,7 +329,11 @@ STYLE RULES:
 - No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
 - Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
 - Vary verbs. Do not start two consecutive bullets with the same word.
-- Summary: 2-3 sentences. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.${isStrategy ? ' Weave "first principles" naturally.' : ""}
+- Summary: 2-3 sentences. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.
+
+ROLE-SPECIFIC GUIDANCE (this candidate is in: ${profile.roleType ?? "general"}, ${yoeNum} years exp):
+- EMPHASIS: ${guidance.emphasis}
+${guidance.voiceQuirk ? `- VOICE: ${guidance.voiceQuirk}` : ""}
 
 OUTPUT FORMAT — markdown only, nothing before or after:
 # ${profile.name}
@@ -229,7 +341,19 @@ ${profile.email} | ${profile.phone} | ${profile.location}${profile.linkedin ? ` 
 
 ## Summary
 [2-3 sentences]
+${guidance.sectionOrder === "edu-first" ? `
+## Education
+${eduBlock}
+${guidance.extraSection ? `\n${guidance.extraSection}\n` : ""}
+## Experience
+[List ALL ${expCount} entries. If no experience, omit this section.]
+### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
+- [Most JD-relevant bullet]
+- [Next bullet]
 
+## Skills
+**[Category]:** [comma-separated, JD terminology where applicable]
+` : `
 ## Experience
 [List ALL ${expCount} entries from the profile. Each in format:]
 ### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
@@ -239,9 +363,10 @@ ${profile.email} | ${profile.phone} | ${profile.location}${profile.linkedin ? ` 
 
 ## Skills
 **[Category]:** [comma-separated, JD terminology where applicable]
-
+${guidance.extraSection ? `\n${guidance.extraSection}\n` : ""}
 ## Education
 ${eduBlock}
+`}
 ${(profile.certifications ?? []).length > 0 ? `\n## Certifications\n${(profile.certifications ?? []).map(c => `- ${c.name} — ${c.issuer} (${c.date})`).join("\n")}` : ""}
 
 Output the markdown now. No preamble. No explanation. Markdown only.`;
