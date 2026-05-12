@@ -435,8 +435,6 @@ html, body {
 }
 @media (max-width: 768px) {
   .add-company-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 768px) {
   .projects-grid { grid-template-columns: 1fr; }
   .config-grid { grid-template-columns: 1fr; gap: 12px; }
 }
