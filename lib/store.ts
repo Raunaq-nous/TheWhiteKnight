@@ -57,6 +57,7 @@ export type Application = {
   createdAt: string;
   updatedAt: string;
   days?: number;
+  formAnswers?: Array<{ question: string; answer: string }>;
 };
 
 export type TargetBucket = {

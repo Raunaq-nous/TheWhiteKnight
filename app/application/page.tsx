@@ -11,6 +11,7 @@ import { getModelSettings } from "../../lib/model-settings";
 import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, refineGeneration, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
+import { FormQASection } from "../form-qa-section";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -953,6 +954,15 @@ window.addEventListener('load', function() {
               </div>
             </div>
           )}
+
+          {/* Form Q&A */}
+          <FormQASection
+            jdRaw={app.jdRaw}
+            companyName={app.company}
+            roleTitle={app.role}
+            savedAnswers={app.formAnswers}
+            onSave={qa => { updateApplication(app.id, { formAnswers: qa }); setApp(prev => prev ? { ...prev, formAnswers: qa } : prev); }}
+          />
 
           {/* Timeline */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24 }}>
