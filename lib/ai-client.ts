@@ -8,6 +8,11 @@ const OPENAI_BASE = "https://api.openai.com/v1";
 // chain-of-thought before the final answer. We compensate with a much larger token budget.
 const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4-Pro";
 const DEFAULT_VISION_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
+// Fallback vision models tried in order when the primary returns 5xx
+const FALLBACK_VISION_MODELS = [
+  "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
+  "meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo",
+];
 
 // Models known to wrap output in <think>...</think> blocks (reasoning models).
 const REASONING_MODEL_PATTERNS = [/deepseek-r1/i, /deepseek-v4/i, /qwq/i, /reasoning/i, /thinking/i, /\bo1\b/i, /\bo3\b/i];
@@ -192,12 +197,26 @@ export async function chatJSON<T>(messages: ChatMessage[], opts: ChatOptions = {
 }
 
 export async function visionExtract(base64: string, mimeType: string, instruction: string): Promise<string> {
-  const model = process.env.AI_VISION_MODEL ?? DEFAULT_VISION_MODEL;
-  return chat([{
+  const primaryModel = process.env.AI_VISION_MODEL ?? DEFAULT_VISION_MODEL;
+  const modelsToTry = [primaryModel, ...FALLBACK_VISION_MODELS.filter(m => m !== primaryModel)];
+
+  const messages: ChatMessage[] = [{
     role: "user",
     content: [
       { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}`, detail: "high" } },
       { type: "text", text: instruction },
     ],
-  }], { temperature: 0.1, maxTokens: 3000, model });
+  }];
+
+  let lastError: Error | null = null;
+  for (const model of modelsToTry) {
+    try {
+      return await chat(messages, { temperature: 0.1, maxTokens: 3000, model });
+    } catch (e: any) {
+      lastError = e;
+      // Only fall through to next model on server errors (5xx); client errors are terminal
+      if (!/error 5\d\d/i.test(e.message ?? "")) throw e;
+    }
+  }
+  throw lastError ?? new Error("All vision models failed");
 }
