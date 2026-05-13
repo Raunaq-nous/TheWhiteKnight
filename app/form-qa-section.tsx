@@ -113,11 +113,12 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
 
   const handleGenerate = async () => {
     if (!questionsText.trim()) { setError("Please add questions first."); return; }
+    const profile = getProfile();
+    if (!profile) { setError("Profile not found. Please complete your profile in Settings before generating answers."); return; }
     setError("");
     setIsGenerating(true);
     setStatus("Generating answers using your persona...");
     try {
-      const profile = getProfile();
       const modelSettings = getModelSettings();
       const providerSettings = modelSettings?.provider
         ? { provider: modelSettings.provider, model: modelSettings.model, apiKey: modelSettings.apiKey }

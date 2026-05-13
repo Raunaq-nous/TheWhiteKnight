@@ -12,19 +12,16 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(base64, "base64");
 
-    // Basic PDF header check before attempting parse
     if (buffer.length < 5 || buffer.slice(0, 5).toString("ascii") !== "%PDF-") {
       return NextResponse.json({ error: "File does not appear to be a valid PDF." }, { status: 422 });
     }
 
-    // pdf-parse v2 class-based API.
-    // Excluded from webpack bundling via serverExternalPackages in next.config.js
-    // so pdfjs-dist worker/canvas code is loaded natively by Node.js, not bundled.
+    // pdf-parse v1.1.1 — simple function API, stable in Node.js/Next.js server routes.
+    // Excluded from webpack bundling via serverExternalPackages in next.config.js.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { PDFParse } = require("pdf-parse");
-    const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
-    const text = (result.text ?? "").trim();
+    const pdfParse = require("pdf-parse");
+    const data = await pdfParse(buffer);
+    const text = (data.text ?? "").trim();
 
     if (!text) {
       return NextResponse.json({
