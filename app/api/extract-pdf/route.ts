@@ -12,19 +12,30 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(base64, "base64");
 
-    // pdf-parse v2 uses a class-based API
+    // Basic PDF header check before attempting parse
+    if (buffer.length < 5 || buffer.slice(0, 5).toString("ascii") !== "%PDF-") {
+      return NextResponse.json({ error: "File does not appear to be a valid PDF." }, { status: 422 });
+    }
+
+    // pdf-parse v2 class-based API.
+    // Excluded from webpack bundling via serverExternalPackages in next.config.js
+    // so pdfjs-dist worker/canvas code is loaded natively by Node.js, not bundled.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { PDFParse } = require("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     const result = await parser.getText();
-    const text: string = result.text ?? "";
+    const text = (result.text ?? "").trim();
 
-    if (!text.trim()) {
-      return NextResponse.json({ error: "PDF appears to be image-only (scanned). Please use the + PHOTO option instead." }, { status: 422 });
+    if (!text) {
+      return NextResponse.json({
+        error: "PDF appears to contain only images (scanned document). Use the + PHOTO option to upload a screenshot of the JD instead.",
+      }, { status: 422 });
     }
 
-    return NextResponse.json({ text: text.trim() });
+    return NextResponse.json({ text });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message ?? "PDF extraction failed" }, { status: 500 });
+    return NextResponse.json({
+      error: `PDF extraction failed: ${e.message ?? e}. Try saving the JD as .txt, or use the + PHOTO screenshot option.`,
+    }, { status: 500 });
   }
 }
