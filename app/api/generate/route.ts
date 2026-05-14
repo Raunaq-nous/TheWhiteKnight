@@ -23,7 +23,7 @@ export const maxDuration = 300; // Vercel Pro: allow up to 5 min for reasoning m
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, profile, app, target, providerSettings, currentContent, instruction } = await req.json() as {
+    const { action, profile, app, target, providerSettings, currentContent, instruction, researchContext } = await req.json() as {
       action: GenerationAction;
       profile: any;
       app: any;
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
       providerSettings?: ProviderSettings;
       currentContent?: string;
       instruction?: string;
+      researchContext?: string;
     };
 
     if (!action || !profile || !app) {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (action === "resume") { prompt = resumePrompt(profile, app); temperature = 0.6; maxTokens = 4000; }
     else if (action === "cover-letter") { prompt = coverLetterPrompt(profile, app); temperature = 0.7; maxTokens = 2000; }
     else if (action === "executive-summary") { prompt = executiveSummaryPrompt(profile, app); temperature = 0.6; maxTokens = 3000; }
-    else if (action === "problem-solver") { prompt = problemSolverPrompt(profile, app); temperature = 0.75; maxTokens = 2500; }
+    else if (action === "problem-solver") { prompt = problemSolverPrompt(profile, app, researchContext); temperature = 0.75; maxTokens = 4000; }
     else if (action === "outreach-hm") {
       prompt = target ? hmOutreachPromptWithProfile(profile, app, target) : hmOutreachPrompt(profile, app);
       temperature = 0.7; maxTokens = 1500;

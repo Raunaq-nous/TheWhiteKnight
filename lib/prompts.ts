@@ -324,12 +324,13 @@ EXPERIENCE INCLUSION RULES:
 - Preserve the exact company name and tenure for every entry.
 
 STYLE RULES:
-- One page maximum — ~28-32 content lines. Ruthlessly trim BULLETS but never trim entries.
+- STRICT ONE PAGE. Target 520-600 words for the entire resume (excluding headers and section titles). If you exceed 600 words, cut the least JD-relevant bullets first. Never exceed 3 bullets per experience entry.
 - Every bullet: strong past-tense action verb + specific action + outcome (quantified if profile has the number).
 - No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
 - Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
 - Vary verbs. Do not start two consecutive bullets with the same word.
-- Summary: 2-3 sentences. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.
+- Summary: 2 sentences max. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.
+- Skills section: maximum 3 skill categories, each with no more than 6 items. Do not pad this section.
 
 ROLE-SPECIFIC GUIDANCE (this candidate is in: ${profile.roleType ?? "general"}, ${yoeNum} years exp):
 - EMPHASIS: ${guidance.emphasis}
@@ -453,10 +454,10 @@ AREAS FOR GROWTH
 Output all four sections completely. Do not stop early.`;
 }
 
-export function problemSolverPrompt(profile: Profile, app: Application): string {
+export function problemSolverPrompt(profile: Profile, app: Application, researchContext?: string): string {
   return `You are crafting a "Problem Solver Pitch" for ${profile.name} applying to ${app.company} for the ${app.role} role.
 
-A Problem Solver Pitch is a structured argument that (1) names a specific real problem the company faces, (2) reasons about its structural difficulty, (3) proposes a concrete approach grounded in first principles, and (4) shows proven capability through past work. It is NOT a cover letter. It is a thinking document.
+A Problem Solver Pitch is a structured argument that (1) names a specific real problem the company faces, (2) reasons about its structural difficulty, (3) proposes a concrete approach grounded in first principles, (4) shows proven capability through past work, and (5) proposes specific AI tools the candidate could build and demonstrate. It is NOT a cover letter. It is a thinking document designed for cold outreach to hiring managers.
 
 ${buildProfileContext(profile)}
 
@@ -464,20 +465,28 @@ ${buildProfileContext(profile)}
 
 ${buildJDContext(app)}
 
+${researchContext ? `---
+
+RECENT COMPANY RESEARCH (use this to be specific):
+${researchContext}
+` : ""}
 ---
 
 RULES:
-1. No em dashes anywhere.
-2. Be specific about ${app.company} — their business model, competitive position, sector dynamics, or known operational challenges. Do not be generic.
+1. No em dashes anywhere. Use commas, semicolons, or restructure.
+2. Be specific about ${app.company} — their business model, competitive position, sector dynamics, or known operational challenges. Use the research above if provided.
 3. No sycophancy. No "I'm excited to", "I admire your", "I've been following".
 4. Every section must reference something real from ${profile.name}'s profile or ${app.company}'s known context.
 5. The "How I'd Approach It" section must be genuinely actionable — not abstract frameworks or buzzwords.
-6. 450-550 words total. Write all six sections completely.
+6. The AI Tool Ideas must be buildable using Claude Code, Cursor, V0, or similar agentic platforms by a non-engineer with AI assistance. Each tool must solve a real, specific pain at ${app.company}.
+7. Write all nine sections completely. Do not truncate.
+
+---
 
 OUTPUT:
 
 THE CORE PROBLEM AT ${app.company.toUpperCase()}
-[3-4 sentences. Name a specific, non-obvious problem. Connect it to the JD — what challenge does this ${app.role} role exist to solve? Be precise about the sector dynamic or operational gap. No clichés.]
+[3-4 sentences. Name a specific, non-obvious problem. Connect it to the JD — what challenge does this ${app.role} role exist to solve? Be precise about the sector dynamic or operational gap. Reference the research context above where relevant. No clichés.]
 
 WHY THIS IS STRUCTURALLY HARD
 [3-4 sentences. Reason from first principles. What makes this hard to solve even with good intent and resources? Identify the underlying tension, constraint, or tradeoff — not just the surface symptom.]
@@ -494,7 +503,39 @@ PROOF FROM PAST WORK
 WHY NOW, WHY ${app.company.toUpperCase()}
 [2-3 sentences. Why is this the right moment for this problem at this company? What makes ${app.company}'s context specifically suited to the approach above?]
 
-Write all six sections completely. Do not truncate.`;
+---
+
+AI TOOL IDEAS
+
+Three concrete AI tools or workflows ${profile.name} could build using Claude Code, Cursor, V0, or similar agentic platforms, then demonstrate to ${app.company} as proof of approach. These are not hypotheticals — they are buildable in days, not months.
+
+TOOL 1: [Give it a specific, evocative name — not "AI Dashboard" or "Chatbot"]
+What it does: [One sharp sentence. The tool's core function in plain English.]
+Why ${app.company} specifically: [1-2 sentences. Tie it directly to the company's sector, business model, or the problem named above. Be precise — not generic.]
+How to build it: [Tech stack in plain English. Use Claude API for the AI layer. Front-end via V0 or basic HTML. Data layer via Airtable, Supabase, or local JSON. State the approximate effort honestly: "a focused weekend", "3-5 hours with Claude Code", "one evening". Do not say "complex" or "enterprise-grade".]
+Value it delivers: [Specific outcome. What does it save or generate for the company? Quantify where possible — "cuts X from Y hours to Z minutes", "surfaces the top 10 leads from a list of 500 in seconds".]
+Best demo format: [Choose one: Video walkthrough (screen-record a live run) / Working prototype shared via link / Slide deck with live output screenshots. Explain in one sentence why this format lands best with a hiring manager at this type of company.]
+
+TOOL 2: [Specific name]
+What it does: [One sentence.]
+Why ${app.company} specifically: [1-2 sentences.]
+How to build it: [Stack + effort.]
+Value it delivers: [Specific outcome.]
+Best demo format: [Format + rationale.]
+
+TOOL 3: [Specific name]
+What it does: [One sentence.]
+Why ${app.company} specifically: [1-2 sentences.]
+How to build it: [Stack + effort.]
+Value it delivers: [Specific outcome.]
+Best demo format: [Format + rationale.]
+
+---
+
+OUTREACH DELIVERY STRATEGY
+[3 sentences. Which of the three tools should ${profile.name} build first and lead with in the cold outreach? What format should the demo take — embedded video in email, a Loom link, a live prototype URL, or a PDF one-pager with screenshots? Tailor the advice to whether ${app.company} is a startup, enterprise, consulting firm, or investor, and whether this role is likely gatekept by a recruiter or reached directly by a hiring manager.]
+
+Write all nine sections completely. Do not truncate.`;
 }
 
 export function skillGapPrompt(profile: Profile, app: Application): string {
