@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Footer } from "../../components";
 import {
@@ -35,11 +35,27 @@ export default function ProfileEditPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tab, setTab] = useState<Tab>("PERSONAL");
   const [saved, setSaved] = useState(false);
+  const [autoSaved, setAutoSaved] = useState(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     const p = getProfile() ?? getSeedProfile();
     setProfile(p);
   }, []);
+
+  // Auto-save 1.5s after any profile field change (skip the initial load)
+  useEffect(() => {
+    if (!profile) return;
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      saveProfile(profile);
+      setAutoSaved(true);
+      setTimeout(() => setAutoSaved(false), 2000);
+    }, 1500);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [profile]);
 
   if (!profile) return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -138,7 +154,7 @@ export default function ProfileEditPage() {
             <span className="label" style={{ marginLeft: 12, color: "var(--text-tertiary)" }}>{profile.name}</span>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {saved && <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>SAVED</span>}
+            {(saved || autoSaved) && <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{autoSaved ? "AUTO-SAVED" : "SAVED"}</span>}
             <button className="btn" onClick={() => router.push("/profile/")}>CANCEL</button>
             <button className="btn" onClick={handleSave}>SAVE DRAFT</button>
             <button className="btn btn-primary" onClick={handleSaveAndExit}>SAVE & VIEW</button>
@@ -461,7 +477,7 @@ export default function ProfileEditPage() {
 
         {/* Bottom save bar */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 32, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-          {saved && <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", alignSelf: "center" }}>SAVED</span>}
+          {(saved || autoSaved) && <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", alignSelf: "center" }}>{autoSaved ? "AUTO-SAVED" : "SAVED"}</span>}
           <button className="btn" onClick={() => router.push("/profile/")}>CANCEL</button>
           <button className="btn" onClick={handleSave}>SAVE DRAFT</button>
           <button className="btn btn-primary" onClick={handleSaveAndExit}>SAVE & VIEW PROFILE</button>
