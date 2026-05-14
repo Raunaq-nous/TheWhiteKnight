@@ -13,6 +13,7 @@ import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, 
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
 import { FormQASection } from "../form-qa-section";
+import { ProfileEnrichmentBanner, ProfileSuggestion } from "../profile-enrichment-banner";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -47,6 +48,7 @@ function ApplicationDetail() {
   const [resumeEditText, setResumeEditText] = useState("");
   const [resumeSaved, setResumeSaved] = useState(false);
   const [researchingPitch, setResearchingPitch] = useState(false);
+  const [enrichSuggestions, setEnrichSuggestions] = useState<ProfileSuggestion[]>([]);
 
   useEffect(() => {
     if (!slug) { setLoadingApp(false); return; }
@@ -109,6 +111,7 @@ function ApplicationDetail() {
     setEditingNote(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+    runEnrichment(noteText);
   };
 
   const handleSaveNextAction = () => {
@@ -219,6 +222,26 @@ function ApplicationDetail() {
     const previous = versionHistory[versionHistory.length - 1];
     setAiOutput({ action: previous.action, content: previous.content });
     setVersionHistory(prev => prev.slice(0, -1));
+  };
+
+  const runEnrichment = async (text: string) => {
+    if (!text || text.trim().length < 40) return;
+    const profile = getProfile();
+    if (!profile) return;
+    try {
+      const s = getModelSettings();
+      const providerSettings = s.provider !== "together" ? { provider: s.provider, model: s.model, apiKey: s.apiKey } : undefined;
+      const res = await fetch("/api/enrich-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, profile, providerSettings }),
+      });
+      if (!res.ok) return;
+      const { suggestions } = await res.json();
+      if (suggestions?.length > 0) setEnrichSuggestions(suggestions);
+    } catch {
+      // enrichment is non-critical — silent fail
+    }
   };
 
   const handleDownloadMd = () => {
@@ -398,12 +421,21 @@ window.addEventListener('load', function() {
     setApp(prev => prev ? { ...prev, ...changes } : prev);
     if (changes.notes) setNoteText(changes.notes);
     setNlApplied(true);
+    runEnrichment(nlText);
     setNlText("");
     setTimeout(() => { setNlParsed(null); setNlApplied(false); }, 3000);
   };
 
   return (
     <main className="container" style={{ paddingTop: 32, paddingBottom: 64, flex: 1 }}>
+      {/* Profile Enrichment Banner */}
+      {enrichSuggestions.length > 0 && (
+        <ProfileEnrichmentBanner
+          suggestions={enrichSuggestions}
+          onDismiss={() => setEnrichSuggestions([])}
+        />
+      )}
+
       {/* Breadcrumb */}
       <div style={{ marginBottom: 24 }}>
         <Link href="/" className="label" style={{ color: "var(--text-tertiary)", textDecoration: "none" }}>
