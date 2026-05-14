@@ -8,6 +8,7 @@ import { getApplication, updateApplication, deleteApplication, Application, Inte
 import { getProfile } from "../../lib/profile";
 import { NLUpdateResult } from "../../lib/prompts";
 import { getModelSettings } from "../../lib/model-settings";
+import { getIntegrationSettings } from "../../lib/integration-settings";
 import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, refineGeneration, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
@@ -41,6 +42,11 @@ function ApplicationDetail() {
   const [refineError, setRefineError] = useState("");
   const [versionHistory, setVersionHistory] = useState<{ action: GenerationAction; content: string; instruction?: string }[]>([]);
   const [loadingApp, setLoadingApp] = useState(true);
+  const [savedResume, setSavedResume] = useState<string | null>(null);
+  const [editingResume, setEditingResume] = useState(false);
+  const [resumeEditText, setResumeEditText] = useState("");
+  const [resumeSaved, setResumeSaved] = useState(false);
+  const [researchingPitch, setResearchingPitch] = useState(false);
 
   useEffect(() => {
     if (!slug) { setLoadingApp(false); return; }
@@ -49,6 +55,7 @@ function ApplicationDetail() {
       setApp(found);
       setNoteText(found.notes ?? "");
       setNextActionText(found.nextAction ?? "");
+      if (found.resumeMarkdown) setSavedResume(found.resumeMarkdown);
     }
     setLoadingApp(false);
   }, [slug]);
@@ -131,10 +138,37 @@ function ApplicationDetail() {
         setAiOutput(null);
       } else {
         let content = "";
-        if (action === "resume") content = await generateTailoredResume(profile, app);
+        if (action === "resume") {
+          content = await generateTailoredResume(profile, app);
+          updateApplication(app.id, { resumeMarkdown: content });
+          setSavedResume(content);
+          setApp(prev => prev ? { ...prev, resumeMarkdown: content } : prev);
+        }
         else if (action === "cover-letter") content = await generateCoverLetter(profile, app);
         else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app);
-        else if (action === "problem-solver") content = await generateProblemSolverPitch(profile, app);
+        else if (action === "problem-solver") {
+          setResearchingPitch(true);
+          let researchContext: string | undefined;
+          try {
+            const { exaApiKey } = getIntegrationSettings();
+            if (exaApiKey) {
+              const rRes = await fetch("/api/research-company", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ company: app.company, role: app.role, sector: app.sector, exaApiKey }),
+              });
+              if (rRes.ok) {
+                const rData = await rRes.json();
+                researchContext = rData.research || undefined;
+              }
+            }
+          } catch {
+            // research failed — proceed without it
+          } finally {
+            setResearchingPitch(false);
+          }
+          content = await generateProblemSolverPitch(profile, app, researchContext);
+        }
         else if (action === "outreach-hm") {
           content = await generateHMOutreach(profile, app);
           queueOutreach(app.slug, app.company, app.role, content);
@@ -245,42 +279,47 @@ function ApplicationDetail() {
     if (!win) { alert("Popup blocked. Allow popups to export PDF."); return; }
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>
-@page { size: letter portrait; margin: 0.45in; }
-body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.35; font-size: 10.5pt; max-width: 7.5in; margin: 0 auto; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-h1 { font-size: 18pt; margin: 0 0 4px; letter-spacing: 0.3px; }
-h2 { font-size: 11pt; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; padding-bottom: 2px; margin: 12px 0 6px; }
-h3 { font-size: 10.5pt; margin: 8px 0 2px; }
-p { margin: 2px 0; }
-ul { margin: 2px 0 6px; padding-left: 18px; }
-li { margin: 1px 0; }
+@page { size: letter portrait; margin: 0.35in; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; line-height: 1.3; font-size: 9.5pt; max-width: 7.8in; margin: 0 auto; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+h1 { font-size: 16pt; margin: 0 0 3px; letter-spacing: 0.2px; }
+h2 { font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 0.75px solid #333; padding-bottom: 2px; margin: 9px 0 4px; page-break-after: avoid; }
+h3 { font-size: 9.5pt; margin: 5px 0 1px; page-break-after: avoid; }
+p { margin: 1px 0; }
+ul { margin: 1px 0 4px; padding-left: 15px; }
+li { margin: 0; line-height: 1.3; }
 strong { font-weight: 600; }
-a { color: #0a58ca; text-decoration: none; border-bottom: 1px solid rgba(10,88,202,0.3); }
+a { color: #0a58ca; text-decoration: none; }
 .toolbar { display: none; }
 @media screen {
   .toolbar { display: flex !important; position: fixed; top: 12px; right: 12px; gap: 6px; z-index: 999; }
   .toolbar button { font: 12px -apple-system, sans-serif; padding: 8px 14px; background: #111; color: #fff; border: 0; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-  body { background: #f5f5f5; padding: 24px 0; }
-  #content { background: white; padding: 0.45in; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  body { background: #f5f5f5; padding: 24px 0; font-size: 9.5pt; }
+  #content { background: white; padding: 0.35in; box-shadow: 0 4px 16px rgba(0,0,0,0.08); min-height: 10in; }
 }
 @media print {
   .toolbar { display: none !important; visibility: hidden !important; }
-  a { color: #0a58ca; text-decoration: underline; border: none; }
+  a { color: #0a58ca; text-decoration: underline; }
   body { background: white; padding: 0; }
   #content { box-shadow: none; padding: 0; }
+  h2, h3 { page-break-after: avoid; }
+  ul, li { page-break-inside: avoid; }
 }
 </style></head><body>
-<div class="toolbar"><button onclick="window.print()">SAVE AS PDF</button><button onclick="window.close()">CLOSE</button></div>
+<div class="toolbar">
+  <button onclick="window.print()">SAVE AS PDF</button>
+  <button onclick="window.close()">CLOSE</button>
+</div>
 <div id="content">${html}</div>
 <script>
 window.addEventListener('load', function() {
   var content = document.getElementById('content');
-  var pageH = 970;
+  var pageH = 1020;
   var h = content.scrollHeight;
   if (h > pageH) {
-    var scale = (pageH / h).toFixed(4);
-    content.style.transform = 'scale(' + scale + ')';
-    content.style.transformOrigin = 'top left';
-    content.style.width = Math.round(100 / parseFloat(scale)) + '%';
+    var ratio = pageH / h;
+    var newSize = Math.max(7.5, 9.5 * ratio);
+    document.body.style.fontSize = newSize.toFixed(2) + 'pt';
   }
 });
 <\/script>
@@ -618,7 +657,7 @@ window.addEventListener('load', function() {
                 {generating === "executive-summary" ? "GENERATING..." : "EXECUTIVE SUMMARY"}
               </button>
               <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => handleGenerate("problem-solver")} disabled={!!generating}>
-                {generating === "problem-solver" ? "GENERATING..." : "PROBLEM SOLVER PITCH"}
+                {generating === "problem-solver" ? (researchingPitch ? "RESEARCHING..." : "GENERATING...") : "PROBLEM SOLVER PITCH"}
               </button>
               <button className="btn" onClick={() => handleGenerate("skill-gap")} disabled={!!generating}>
                 {generating === "skill-gap" ? "ANALYZING..." : "SKILL GAP"}
@@ -740,6 +779,53 @@ window.addEventListener('load', function() {
                     <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.6875rem" }}>{refineError}</div>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Saved Resume */}
+          {savedResume && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+                <div className="label">SAVED RESUME</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => { navigator.clipboard.writeText(savedResume); }}>COPY</button>
+                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => {
+                    if (editingResume) {
+                      updateApplication(app.id, { resumeMarkdown: resumeEditText });
+                      setSavedResume(resumeEditText);
+                      setApp(prev => prev ? { ...prev, resumeMarkdown: resumeEditText } : prev);
+                      setEditingResume(false);
+                      setResumeSaved(true);
+                      setTimeout(() => setResumeSaved(false), 2000);
+                    } else {
+                      setResumeEditText(savedResume);
+                      setEditingResume(true);
+                    }
+                  }}>
+                    {editingResume ? "SAVE EDITS" : "EDIT"}
+                  </button>
+                  {editingResume && (
+                    <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px", borderColor: "var(--error)", color: "var(--error)" }} onClick={() => setEditingResume(false)}>CANCEL</button>
+                  )}
+                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px", borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => {
+                    const content = editingResume ? resumeEditText : savedResume;
+                    setAiOutput({ action: "resume", content });
+                  }}>EXPORT PDF</button>
+                  {resumeSaved && <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5625rem", color: "var(--success)", alignSelf: "center" }}>SAVED</span>}
+                </div>
+              </div>
+              {editingResume ? (
+                <textarea
+                  value={resumeEditText}
+                  onChange={e => setResumeEditText(e.target.value)}
+                  rows={30}
+                  style={{ width: "100%", padding: 10, background: "var(--bg-primary)", border: "1px solid var(--accent)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", resize: "vertical", lineHeight: 1.6 }}
+                />
+              ) : (
+                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.7, margin: 0, maxHeight: 500, overflowY: "auto" }}>
+                  {savedResume}
+                </pre>
               )}
             </div>
           )}

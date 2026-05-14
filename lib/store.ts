@@ -58,6 +58,7 @@ export type Application = {
   updatedAt: string;
   days?: number;
   formAnswers?: Array<{ question: string; answer: string }>;
+  resumeMarkdown?: string;
 };
 
 export type TargetBucket = {

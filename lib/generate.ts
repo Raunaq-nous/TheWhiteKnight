@@ -6,7 +6,7 @@ import { getModelSettings } from "./model-settings";
 export type { GenerationAction, SkillGapResult, SkillBuilderResult, ContactProfile } from "./prompts";
 import type { GenerationAction, SkillGapResult, ContactProfile } from "./prompts";
 
-async function callGenerate<T = any>(action: GenerationAction, profile: Profile, app: Application, target?: ContactProfile): Promise<T> {
+async function callGenerate<T = any>(action: GenerationAction, profile: Profile, app: Application, target?: ContactProfile, researchContext?: string): Promise<T> {
   const settings = getModelSettings();
   const providerSettings = settings.provider !== "together"
     ? { provider: settings.provider, model: settings.model, apiKey: settings.apiKey }
@@ -14,7 +14,7 @@ async function callGenerate<T = any>(action: GenerationAction, profile: Profile,
   const res = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, profile, app, target, providerSettings }),
+    body: JSON.stringify({ action, profile, app, target, providerSettings, researchContext }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -35,8 +35,8 @@ export async function generateExecutiveSummary(profile: Profile, app: Applicatio
   return (await callGenerate<{ content: string }>("executive-summary", profile, app)).content;
 }
 
-export async function generateProblemSolverPitch(profile: Profile, app: Application): Promise<string> {
-  return (await callGenerate<{ content: string }>("problem-solver", profile, app)).content;
+export async function generateProblemSolverPitch(profile: Profile, app: Application, researchContext?: string): Promise<string> {
+  return (await callGenerate<{ content: string }>("problem-solver", profile, app, undefined, researchContext)).content;
 }
 
 export async function generateHMOutreach(profile: Profile, app: Application, target?: ContactProfile): Promise<string> {

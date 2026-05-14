@@ -69,6 +69,10 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
   const [status, setStatus] = useState("");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const [copiedAll, setCopiedAll] = useState(false);
   const screenshotRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
@@ -163,6 +167,47 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
   const copyAll = () => {
     const text = qa.map((item, i) => `Q${i + 1}: ${item.question}\n\nA: ${item.answer}`).join("\n\n---\n\n");
     navigator.clipboard.writeText(text);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 1500);
+  };
+
+  const handleChat = async () => {
+    if (!chatInput.trim() || !qa.length) return;
+    const profile = getProfile();
+    if (!profile) { setChatError("Profile not found."); return; }
+    setChatError("");
+    setIsChatting(true);
+    try {
+      const modelSettings = getModelSettings();
+      const providerSettings = modelSettings?.provider
+        ? { provider: modelSettings.provider, model: modelSettings.model, apiKey: modelSettings.apiKey }
+        : undefined;
+      const res = await fetch("/api/refine-form-answers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          qa,
+          instruction: chatInput.trim(),
+          jdContext: jdRaw,
+          companyName,
+          roleTitle,
+          profile,
+          providerSettings,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Refine failed");
+      }
+      const { qa: updated } = await res.json();
+      setQA(updated ?? qa);
+      onSave?.(updated ?? qa);
+      setChatInput("");
+    } catch (e: any) {
+      setChatError(e.message ?? "Chat refinement failed");
+    } finally {
+      setIsChatting(false);
+    }
   };
 
   const startEdit = (idx: number) => {
@@ -178,7 +223,7 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
     setEditingIdx(null);
   };
 
-  const busy = isExtracting || isFetching || isGenerating;
+  const busy = isExtracting || isFetching || isGenerating || isChatting;
 
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", marginBottom: 16 }}>
@@ -272,7 +317,13 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <div className="label" style={{ color: "var(--success)" }}>GENERATED ANSWERS ({qa.length})</div>
-                <button className="btn" style={{ fontSize: "0.5rem", padding: "3px 10px" }} onClick={copyAll}>COPY ALL</button>
+                <button
+                  className="btn"
+                  style={{ fontSize: "0.5rem", padding: "3px 10px", borderColor: copiedAll ? "var(--success)" : undefined, color: copiedAll ? "var(--success)" : undefined }}
+                  onClick={copyAll}
+                >
+                  {copiedAll ? "COPIED!" : "COPY ALL"}
+                </button>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -317,6 +368,42 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
                     )}
                   </div>
                 ))}
+              </div>
+
+              {/* AI Chat Refinement */}
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px dashed var(--border)" }}>
+                <div className="label" style={{ fontSize: "0.6rem", color: "var(--accent)", marginBottom: 8 }}>REFINE WITH AI</div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginBottom: 8, lineHeight: 1.5 }}>
+                  Tell the AI what to change. Examples: "Make all answers more concise", "Q2: add a consulting example", "Rewrite answer 3 with a stronger result", "Match the key skills from the JD in every answer".
+                </div>
+                <textarea
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder="What should change?"
+                  rows={3}
+                  disabled={isChatting}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      handleChat();
+                    }
+                  }}
+                  style={{ width: "100%", padding: 10, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", resize: "vertical", borderRadius: 4 }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5625rem", color: "var(--text-tertiary)" }}>Cmd/Ctrl+Enter to send</span>
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: "6px 14px", fontSize: "0.75rem" }}
+                    onClick={handleChat}
+                    disabled={!chatInput.trim() || isChatting}
+                  >
+                    {isChatting ? "REFINING..." : "APPLY EDIT"}
+                  </button>
+                </div>
+                {chatError && (
+                  <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.6875rem" }}>{chatError}</div>
+                )}
               </div>
             </div>
           )}
