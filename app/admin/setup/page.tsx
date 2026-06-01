@@ -39,7 +39,7 @@ export default function AdminSetupPage() {
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 32 }}>
           {result?.ok && (
             <div style={{ background: "rgba(0,200,100,0.1)", border: "1px solid var(--success)", padding: "12px 16px", borderRadius: "var(--radius)", marginBottom: 20, fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--success)" }}>
-              Admin account created for raunaq1509@gmail.com. Go to{" "}
+              Admin account created. Go to{" "}
               <a href="/login" style={{ color: "var(--accent)" }}>/login</a> and sign in.
             </div>
           )}
