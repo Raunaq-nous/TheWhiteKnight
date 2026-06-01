@@ -38,7 +38,7 @@ You are generating a one-page tailored resume that will be exported to PDF and s
 
 Read all four input files. Build a mental model of:
 - What the JD prioritizes (top 3 priorities)
-- Which Raunaq experiences map most directly to those priorities
+- Which user experiences map most directly to those priorities
 - Which bucket this is (target-roles.yml) and what that bucket emphasizes
 - Whether this is a strategy role, AI/product role, chief-of-staff role, or hybrid (this changes which experiences lead)
 
@@ -55,8 +55,8 @@ Engineering-adjacent → Education section gets IEEE publications
 Use this exact structure:
 
 ```markdown
-# RAUNAQ RAKESH
-Gurgaon | +91-7982271861 | raunaq1509@gmail.com | [LinkedIn](url) | [Portfolio](url)
+# [USER NAME]
+[Location] | [Phone] | [Email] | [LinkedIn] | [Portfolio]
 
 ## PROFILE
 [80-100 word paragraph. First principles thinking woven in. Years of experience, sectors, what's distinctive about this user vs other consultants — usually the AI builder + strategy combination.]

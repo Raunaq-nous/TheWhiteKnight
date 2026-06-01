@@ -8,13 +8,13 @@ const buckets = [
 ];
 
 const profile = {
-  name: "Raunaq Rakesh",
-  email: "raunaq1509@gmail.com",
-  phone: "+91-7982271861",
-  location: "Gurgaon, India",
-  linkedin: "linkedin.com/in/raunaqrakesh",
-  portfolio: "raunaqrakesh.com",
-  github: "github.com/Raunaq-nous",
+  name: "",
+  email: "",
+  phone: "",
+  location: "",
+  linkedin: "",
+  portfolio: "",
+  github: "",
 };
 
 const portals = [

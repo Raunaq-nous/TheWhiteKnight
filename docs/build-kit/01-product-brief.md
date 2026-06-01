@@ -23,7 +23,7 @@ Each step is doable manually. The aggregate is a part-time job. The information 
 
 ## 2. Who this is for
 
-**Primary user (v1):** Raunaq Rakesh — Strategy consultant + AI builder, 7+ years, targeting senior strategy, AI product, and chief-of-staff roles. India, with global remote and Middle East roles in scope.
+**Primary user (v1):** [Admin user] — Strategy consultant + AI builder, 7+ years, targeting senior strategy, AI product, and chief-of-staff roles. India, with global remote and Middle East roles in scope.
 
 **Secondary user (vN):** Anyone running a serious senior-level job search where:
 - The jobs require tailoring (not just spray-and-pray)
