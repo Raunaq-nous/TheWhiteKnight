@@ -1,10 +1,8 @@
-// Persists the generated Skill Builder plan and any user-applied status overrides.
-// Plan is regenerated on demand; status overrides survive across regenerations.
+// Skill store — reads from cache, writes through to server.
+
+import { getCache, updateCacheSkillPlan, updateCacheSkillStatus, wt_saveSettings } from "./data-cache";
 
 import type { SkillBuilderResult } from "./prompts";
-
-const PLAN_KEY = "careeros_skill_plan";
-const STATUS_KEY = "careeros_skill_status";
 
 export type SkillStatus = {
   manualLevel?: "novice" | "intermediate" | "advanced" | "expert";
@@ -19,35 +17,29 @@ export type StoredPlan = {
 };
 
 export function getPlan(): StoredPlan | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(PLAN_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  return getCache().skillPlan;
 }
 
-export function savePlan(result: SkillBuilderResult) {
-  if (typeof window === "undefined") return;
+export function savePlan(result: SkillBuilderResult): void {
   const stored: StoredPlan = { generatedAt: new Date().toISOString(), result };
-  localStorage.setItem(PLAN_KEY, JSON.stringify(stored));
+  updateCacheSkillPlan(stored);
   window.dispatchEvent(new Event("careeros-skill-change"));
+  wt_saveSettings("skill_plan", stored).catch(e => console.error("[CareerOS] savePlan failed:", e));
 }
 
 export function getStatuses(): Record<string, SkillStatus> {
-  if (typeof window === "undefined") return {};
-  const raw = localStorage.getItem(STATUS_KEY);
-  if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  return getCache().skillStatus;
 }
 
-export function setStatus(skillName: string, status: SkillStatus) {
-  if (typeof window === "undefined") return;
-  const all = getStatuses();
+export function setStatus(skillName: string, status: SkillStatus): void {
+  const all = { ...getCache().skillStatus };
   all[skillName] = { ...status, lastUpdated: new Date().toISOString() };
-  localStorage.setItem(STATUS_KEY, JSON.stringify(all));
+  updateCacheSkillStatus(all);
   window.dispatchEvent(new Event("careeros-skill-change"));
+  wt_saveSettings("skill_status", all).catch(e => console.error("[CareerOS] setStatus failed:", e));
 }
 
-export function toggleStep(skillName: string, stepNumber: number) {
+export function toggleStep(skillName: string, stepNumber: number): void {
   const all = getStatuses();
   const current = all[skillName] ?? { completedSteps: [] };
   const completed = current.completedSteps ?? [];

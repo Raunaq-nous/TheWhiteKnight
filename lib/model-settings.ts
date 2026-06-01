@@ -1,3 +1,5 @@
+import { getCache, updateCacheModelSettings, wt_saveSettings } from "./data-cache";
+
 export type ModelProvider = "together" | "anthropic" | "openai";
 
 export type ModelSettings = {
@@ -40,17 +42,15 @@ export const MODEL_OPTIONS = [
   },
 ] as const;
 
-const SETTINGS_KEY = "careeros_model_settings";
 const DEFAULT: ModelSettings = { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" };
 
 export function getModelSettings(): ModelSettings {
-  if (typeof window === "undefined") return DEFAULT;
-  const raw = localStorage.getItem(SETTINGS_KEY);
-  if (!raw) return DEFAULT;
-  try { return JSON.parse(raw); } catch { return DEFAULT; }
+  return getCache().modelSettings ?? DEFAULT;
 }
 
-export function saveModelSettings(settings: ModelSettings) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+export function saveModelSettings(settings: ModelSettings): void {
+  updateCacheModelSettings(settings);
+  wt_saveSettings("model_settings", settings).catch(e =>
+    console.error("[CareerOS] saveModelSettings failed:", e)
+  );
 }
