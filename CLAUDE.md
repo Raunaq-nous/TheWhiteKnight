@@ -29,10 +29,15 @@ Next.js talks to it via server routes on the user's machine. Vercel is valid onl
 - Phase 1 data layer seeds from `private/admin-profile.json` on first run when present.
 - `getSeedProfile()` in `lib/profile.ts` returns an empty template for new users.
 
+## Known temporary gaps (to be closed in later phases)
+
+- **Auth on Upstash Redis (temporary).** User accounts and invite codes still live on Redis. A later phase moves auth into the local SQLite DB to make each instance fully self-contained. Until then, auth requires a Redis connection.
+- **careeros-theme stays in localStorage** by design. It is a per-device display preference, not user data. It is never included in export/import.
+
 ## Development branch
 
 Current branch: `rebuild/local-first-actionable`
-Current phase: Phase 0 (safety + hygiene) -- completing commits, then GATE.
+Current phase: Phase 1 complete, awaiting GATE.
 
 ## How to work
 
