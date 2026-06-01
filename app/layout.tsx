@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import DataProvider from "./DataProvider";
 
 export const metadata: Metadata = {
   title: "CareerOS",
@@ -35,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/TheWhiteKnight/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: setInitialTheme }} />
       </head>
-      <body>{children}</body>
+      <body><DataProvider>{children}</DataProvider></body>
     </html>
   );
 }
