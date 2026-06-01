@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "../../../lib/rate-limit";
 import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { afScoringPrompt, AFScoreResult } from "../../../lib/prompts";
 import type { Profile } from "../../../lib/profile";
@@ -6,6 +7,14 @@ import type { Profile } from "../../../lib/profile";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") ?? "local";
+  const rl = checkRateLimit(`score:${ip}`, 40, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.retryAfterSecs) }
+    });
+  }
   try {
     const { jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings } = await req.json() as {
       jdText: string;
