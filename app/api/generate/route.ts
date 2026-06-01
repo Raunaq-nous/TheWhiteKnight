@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "../../../lib/rate-limit";
 import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { normalizeTextForATS } from "../../../lib/ats";
 import {
@@ -22,6 +23,14 @@ export const runtime = "nodejs";
 export const maxDuration = 300; // Vercel Pro: allow up to 5 min for reasoning models
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") ?? "local";
+  const rl = checkRateLimit(`generate:${ip}`, 20, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.retryAfterSecs) }
+    });
+  }
   try {
     const { action, profile, app, target, providerSettings, currentContent, instruction, researchContext } = await req.json() as {
       action: GenerationAction;
