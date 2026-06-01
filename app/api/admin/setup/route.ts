@@ -1,4 +1,4 @@
-// One-time setup: creates Raunaq's admin account.
+// One-time setup: creates the admin account.
 // POST /api/admin/setup with { adminPassword: "your-chosen-password", setupSecret: process.env.SETUP_SECRET }
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
@@ -6,7 +6,7 @@ import { createUser, userExists } from "../../../../lib/kv";
 
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "raunaq1509@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "";
 
 export async function POST(req: NextRequest) {
   try {
