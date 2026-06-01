@@ -1,3 +1,5 @@
+import { getCache, wt_saveProfile } from "./data-cache";
+
 export type ExperienceEntry = {
   id: string;
   company: string;
@@ -98,24 +100,16 @@ export type Profile = {
   updatedAt: string;
 };
 
-const PROFILE_KEY = "careeros_profile";
-
 export function getProfile(): Profile | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(PROFILE_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  return getCache().profile;
 }
 
-export function saveProfile(profile: Profile) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...profile, updatedAt: new Date().toISOString() }));
-  window.dispatchEvent(new Event("careeros-profile-change"));
+export function saveProfile(profile: Profile): void {
+  wt_saveProfile(profile).catch(e => console.error("[CareerOS] saveProfile failed:", e));
 }
 
 export function hasProfile(): boolean {
-  if (typeof window === "undefined") return false;
-  return !!localStorage.getItem(PROFILE_KEY);
+  return getCache().profile !== null;
 }
 
 // Real admin profile lives in private/admin-profile.json (gitignored).

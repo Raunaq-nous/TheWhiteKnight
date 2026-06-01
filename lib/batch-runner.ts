@@ -1,11 +1,12 @@
 // Client-side batch evaluation runner. Processes a queue of JDs through
-// A-F scoring → saves to applications, with bounded concurrency
-// and localStorage-persisted state so progress survives page refresh.
+// A-F scoring → saves to applications, with bounded concurrency.
+// State is persisted to SQLite via write-through so progress survives refresh.
 
 import { Profile } from "./profile";
 import { TargetBucket, Application, generateId, generateSlug, saveApplication } from "./store";
 import { getModelSettings } from "./model-settings";
 import { AFScoreResult } from "./prompts";
+import { getCache, updateCacheBatchState, wt_saveSettings } from "./data-cache";
 
 export type BatchInput = {
   company: string;
@@ -35,18 +36,14 @@ export type BatchState = {
   concurrency: number;
 };
 
-const KEY = "careeros_batch_state";
-
 export function loadBatchState(): BatchState | null {
-  if (typeof window === "undefined") return null;
-  try { const raw = localStorage.getItem(KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  return getCache().batchState;
 }
 
-export function saveBatchState(s: BatchState | null) {
-  if (typeof window === "undefined") return;
-  if (s === null) localStorage.removeItem(KEY);
-  else localStorage.setItem(KEY, JSON.stringify(s));
+export function saveBatchState(s: BatchState | null): void {
+  updateCacheBatchState(s);
   window.dispatchEvent(new Event("careeros-batch-change"));
+  wt_saveSettings("batch_state", s).catch(e => console.error("[CareerOS] saveBatchState failed:", e));
 }
 
 export function clearBatchState() { saveBatchState(null); }
