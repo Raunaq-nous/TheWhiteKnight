@@ -15,8 +15,9 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       SETUP_SECRET: ${SETUP_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
-      # DB lives in the mounted volume so it survives image rebuilds.
-      CAREEROS_DB_PATH: /data/private/careeros.db
+      # Single env var covers both the DB and the admin-profile.json seed.
+      # Both live inside the mounted volume so they survive image rebuilds.
+      CAREEROS_PRIVATE_DIR: /data/private
     volumes:
       # Mount the private/ directory from the host into the container.
       # This is where careeros.db and admin-profile.json live.

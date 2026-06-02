@@ -40,7 +40,8 @@ RUN mkdir -p /data/private
 
 EXPOSE 3000
 
-# CAREEROS_DB_PATH points to the mounted volume so data survives rebuilds.
-ENV CAREEROS_DB_PATH=/data/private/careeros.db
+# CAREEROS_PRIVATE_DIR points to the mounted volume so both the DB and the
+# admin-profile.json seed are found in the same place at runtime.
+ENV CAREEROS_PRIVATE_DIR=/data/private
 
 CMD ["node_modules/.bin/next", "start", "-p", "3000"]

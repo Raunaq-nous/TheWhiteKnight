@@ -3,10 +3,16 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 
-// DB lives in private/ (gitignored). Override with CAREEROS_DB_PATH env var.
+// DB lives in CAREEROS_PRIVATE_DIR (default: private/ next to cwd).
+// Override the whole private dir with CAREEROS_PRIVATE_DIR, or override just
+// the DB path with CAREEROS_DB_PATH (takes precedence over the derived path).
+function privateDir(): string {
+  return process.env.CAREEROS_PRIVATE_DIR ?? path.join(process.cwd(), "private");
+}
+
 function dbPath(): string {
   if (process.env.CAREEROS_DB_PATH) return process.env.CAREEROS_DB_PATH;
-  const dir = path.join(process.cwd(), "private");
+  const dir = privateDir();
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, "careeros.db");
 }
