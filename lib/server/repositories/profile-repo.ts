@@ -36,13 +36,14 @@ export const profileRepo: ProfileRepository = {
     `).run(userEmail, KEY, JSON.stringify(record), now);
   },
 
-  // Seed from private/admin-profile.json only if:
+  // Seed from admin-profile.json only if:
   //   1. The requesting user is the ADMIN_EMAIL account
   //   2. No profile exists yet for that user
   seedIfEmpty(userEmail, adminEmail) {
     if (userEmail !== adminEmail) return;
     if (profileRepo.has(userEmail)) return;
-    const seedPath = path.join(process.cwd(), "private", "admin-profile.json");
+    const privateDir = process.env.CAREEROS_PRIVATE_DIR ?? path.join(process.cwd(), "private");
+    const seedPath = path.join(privateDir, "admin-profile.json");
     if (!fs.existsSync(seedPath)) return;
     try {
       const seed = JSON.parse(fs.readFileSync(seedPath, "utf-8")) as Profile;

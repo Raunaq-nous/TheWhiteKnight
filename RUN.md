@@ -41,7 +41,8 @@ Open `.env.local` and fill in every value:
 | `SESSION_SECRET` | Run: `openssl rand -base64 32` |
 | `SETUP_SECRET` | Any secret string; used once to create the admin account, then can be removed |
 | `ADMIN_EMAIL` | The email address for the admin (your) account |
-| `CAREEROS_DB_PATH` | Optional. Defaults to `private/careeros.db` inside the repo. Set an absolute path if you want the DB elsewhere (e.g. `/data/careeros.db`) |
+| `CAREEROS_PRIVATE_DIR` | Optional. Directory that contains `careeros.db` and `admin-profile.json`. Defaults to `private/` next to the repo. Set this when running in Docker (`/data/private`) or when you want both files in a custom location. |
+| `CAREEROS_DB_PATH` | Optional. Overrides just the DB path; takes precedence over `CAREEROS_PRIVATE_DIR`. Not needed when `CAREEROS_PRIVATE_DIR` is set. |
 
 ---
 
@@ -154,7 +155,7 @@ server {
 
 Export all your data from `/settings` → "Export All Data". The downloaded JSON can be re-imported via the same page.
 
-The raw SQLite file lives at `private/careeros.db` (or `CAREEROS_DB_PATH`). You can back it up with:
+The raw SQLite file lives at `$CAREEROS_PRIVATE_DIR/careeros.db` (default: `private/careeros.db`). You can back it up with:
 
 ```bash
 cp private/careeros.db private/careeros.db.bak
@@ -180,4 +181,5 @@ If you prefer containers, see the `Dockerfile` and `docker-compose.yml` at the r
 | `SESSION_SECRET` | Yes | — | JWT signing secret (32+ random chars) |
 | `SETUP_SECRET` | Yes (once) | — | Admin account creation guard |
 | `ADMIN_EMAIL` | Yes | — | Admin account email; ties profile seed |
-| `CAREEROS_DB_PATH` | No | `private/careeros.db` | SQLite file location |
+| `CAREEROS_PRIVATE_DIR` | No | `private/` (next to repo) | Directory for `careeros.db` and `admin-profile.json`; set to `/data/private` in Docker |
+| `CAREEROS_DB_PATH` | No | `$CAREEROS_PRIVATE_DIR/careeros.db` | Override just the DB path; takes precedence over `CAREEROS_PRIVATE_DIR` |
