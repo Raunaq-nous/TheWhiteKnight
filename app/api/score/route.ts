@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../lib/rate-limit";
 import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { afScoringPrompt, AFScoreResult } from "../../../lib/prompts";
+import { AFScoreResultSchema } from "../../../lib/schemas";
+import { computeGlobalScore, deriveRecommendation } from "../../../lib/scoring-weights";
 import type { Profile } from "../../../lib/profile";
 
 export const runtime = "nodejs";
@@ -39,17 +41,32 @@ export async function POST(req: NextRequest) {
     const result = await chatJSON<AFScoreResult>(
       [{ role: "user", content: afScoringPrompt(profile, jdText, { company, role, location, seniority, sector, remote }, buckets) }],
       { temperature: 0.2, maxTokens: 3000 },
-      providerSettings
+      providerSettings,
+      AFScoreResultSchema
     );
 
-    const totalScore10 = Math.max(0, Math.min(10, result.global * 2));
+    // Replace the LLM's global with the code-computed weighted average.
+    const computedGlobal = computeGlobalScore({
+      cv_match: result.scores.cv_match.score,
+      north_star: result.scores.north_star.score,
+      comp: result.scores.comp.score,
+      culture: result.scores.culture.score,
+      red_flags: result.scores.red_flags.score,
+    });
+
+    const recommendation = deriveRecommendation(computedGlobal, result.scores.red_flags.score);
+
     const recommendationLabel =
-      result.recommendation === "apply_immediately" ? "Apply Immediately" :
-      result.recommendation === "apply" ? "Apply" :
-      result.recommendation === "review_manually" ? "Review Manually" : "Skip";
+      recommendation === "apply_immediately" ? "Apply Immediately" :
+      recommendation === "apply" ? "Apply" :
+      recommendation === "review_manually" ? "Review Manually" : "Skip";
+
+    const totalScore10 = Math.round(Math.max(0, Math.min(10, computedGlobal * 2)) * 100) / 100;
 
     return NextResponse.json({
       ...result,
+      global: computedGlobal,
+      recommendation,
       totalScore: totalScore10,
       recommendationLabel,
       parsed: result.jdParsed,
