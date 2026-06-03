@@ -1,4 +1,5 @@
 // Server-only AI client. Supports Together AI (default), Anthropic, and OpenAI.
+import { ZodSchema } from "zod";
 
 const TOGETHER_BASE = "https://api.together.xyz/v1";
 const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
@@ -187,13 +188,54 @@ export async function chat(messages: ChatMessage[], opts: ChatOptions = {}, prov
   return chatTogether(messages, { ...opts, model: opts.model ?? provider?.model });
 }
 
-export async function chatJSON<T>(messages: ChatMessage[], opts: ChatOptions = {}, provider?: ProviderSettings): Promise<T> {
-  const raw = await chat(messages, { ...opts, jsonMode: true }, provider);
-  let cleaned = raw.trim();
-  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-  if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
-  return JSON.parse(cleaned.trim()) as T;
+function cleanJsonString(raw: string): string {
+  let s = raw.trim();
+  if (s.startsWith("```json")) s = s.slice(7);
+  if (s.startsWith("```")) s = s.slice(3);
+  if (s.endsWith("```")) s = s.slice(0, -3);
+  return s.trim();
+}
+
+// chatJSON: parses the LLM response as JSON, optionally validates it against a
+// Zod schema. When a schema is provided, a single retry is attempted on parse
+// or validation failure before a clear error is thrown.
+export async function chatJSON<T>(
+  messages: ChatMessage[],
+  opts: ChatOptions = {},
+  provider?: ProviderSettings,
+  schema?: ZodSchema<T>
+): Promise<T> {
+  async function attempt(): Promise<T> {
+    const raw = await chat(messages, { ...opts, jsonMode: true }, provider);
+    const parsed = JSON.parse(cleanJsonString(raw)) as T;
+    if (!schema) return parsed;
+    const result = schema.safeParse(parsed);
+    if (result.success) return result.data;
+    const issues = result.error.issues
+      .map(i => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    const err = new Error("schema:" + issues) as Error & { isValidationError: boolean };
+    err.isValidationError = true;
+    throw err;
+  }
+
+  try {
+    return await attempt();
+  } catch (e: any) {
+    if (!schema) throw e;
+    // Retry once on any parse or validation failure
+    try {
+      return await attempt();
+    } catch (e2: any) {
+      if (e2.isValidationError) {
+        throw new Error(
+          "AI response failed schema validation after retry: " +
+          e2.message.replace("schema:", "")
+        );
+      }
+      throw e2;
+    }
+  }
 }
 
 export async function visionExtract(base64: string, mimeType: string, instruction: string): Promise<string> {

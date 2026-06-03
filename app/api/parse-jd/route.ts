@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
+import { ParsedJDFieldsSchema } from "../../../lib/schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -44,7 +45,8 @@ Return this exact JSON structure (all fields required, use empty string if unkno
     const fields = await chatJSON<ParsedJDFields>(
       [{ role: "user", content: prompt }],
       { temperature: 0.1, maxTokens: 800 },
-      providerSettings
+      providerSettings,
+      ParsedJDFieldsSchema
     );
 
     return NextResponse.json(fields);
