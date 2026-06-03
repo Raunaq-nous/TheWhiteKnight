@@ -37,7 +37,11 @@ Next.js talks to it via server routes on the user's machine. Vercel is valid onl
 ## Development branch
 
 Current branch: `rebuild/local-first-actionable`
-Current phase: Phase 1 complete, awaiting GATE.
+Current phase: Phase 2 complete, awaiting GATE.
+
+## Deleted in Phase 2
+
+- **`.claude/skills/` deleted.** The directory contained three pre-rebuild CLI workflow skills (`career-os`, `ingest-jd`, `tailor-resume`) that referenced `persona/master-cv.md`, `applications/<slug>/jd.md`, and `config/profile.yml` — paths that do not exist in the rebuilt system. All scoring and generation now run through `/api/score` and `/api/generate` routes. Keeping stale skills that describe a dead workflow would contradict the current architecture.
 
 ## How to work
 
