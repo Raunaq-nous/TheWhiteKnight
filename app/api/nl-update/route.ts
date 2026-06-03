@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { nlUpdatePrompt, NLUpdateResult } from "../../../lib/prompts";
+import { NLUpdateResultSchema } from "../../../lib/schemas";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,8 @@ export async function POST(req: NextRequest) {
     const result = await chatJSON<NLUpdateResult>(
       [{ role: "user", content: prompt }],
       { temperature: 0.1, maxTokens: 1000 },
-      providerSettings
+      providerSettings,
+      NLUpdateResultSchema
     );
 
     return NextResponse.json(result);

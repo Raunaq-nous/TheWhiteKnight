@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatJSON } from "../../../lib/ai-client";
 import { skillBuilderPrompt, SkillBuilderResult } from "../../../lib/prompts";
+import { SkillBuilderResultSchema } from "../../../lib/schemas";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,9 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<SkillBuilderResult>(
       [{ role: "user", content: skillBuilderPrompt(profile, orderedSkills, allRequirements.slice(0, 25)) }],
-      { temperature: 0.3, maxTokens: 4000 }
+      { temperature: 0.3, maxTokens: 4000 },
+      undefined,
+      SkillBuilderResultSchema
     );
 
     return NextResponse.json({ data });

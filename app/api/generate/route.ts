@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../lib/rate-limit";
 import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { normalizeTextForATS } from "../../../lib/ats";
+import { SkillGapResultSchema } from "../../../lib/schemas";
 import {
   GenerationAction,
   ContactProfile,
@@ -51,7 +52,8 @@ export async function POST(req: NextRequest) {
       const data = await chatJSON(
         [{ role: "user", content: skillGapPrompt(profile, app) }],
         { temperature: 0.2 },
-        providerSettings
+        providerSettings,
+        SkillGapResultSchema
       );
       return NextResponse.json({ data });
     }

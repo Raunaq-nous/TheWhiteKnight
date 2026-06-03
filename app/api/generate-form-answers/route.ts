@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
+import { FormQAResultSchema } from "../../../lib/schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -87,7 +88,8 @@ Output JSON only:
     const data = await chatJSON<{ qa: FormQA[] }>(
       [{ role: "user", content: prompt }],
       { temperature: 0.4, maxTokens: 4000 },
-      providerSettings
+      providerSettings,
+      FormQAResultSchema
     );
 
     return NextResponse.json({ qa: data.qa ?? [] });

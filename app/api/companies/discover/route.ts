@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatJSON, ProviderSettings } from "../../../../lib/ai-client";
+import { DiscoveredCompaniesResultSchema } from "../../../../lib/schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -77,7 +78,8 @@ Output JSON only, no explanation:
     const data = await chatJSON<{ companies: DiscoveredCompany[] }>(
       [{ role: "user", content: prompt }],
       { temperature: 0.5, maxTokens: 4000 },
-      providerSettings
+      providerSettings,
+      DiscoveredCompaniesResultSchema
     );
 
     return NextResponse.json({ companies: data.companies ?? [] });
