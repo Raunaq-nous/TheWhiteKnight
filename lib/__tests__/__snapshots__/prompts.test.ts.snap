@@ -1,0 +1,383 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`prompt builder snapshots > afScoringPrompt matches snapshot 1`] = `
+"You are an expert career coach evaluating a job opportunity for Alex Chen.
+
+CANDIDATE PROFILE — SOURCE OF TRUTH (all data below is verified; never add, invent, or extrapolate)
+Name: Alex Chen
+Headline: AI Product Manager with 7 years building ML-powered products
+Email: alex@example.com
+Phone: +1 555 0100
+Location: San Francisco, CA
+Open To: Remote, NYC
+Years of Experience: 7
+LinkedIn: https://linkedin.com/in/alexchen
+GitHub: https://github.com/alexchen
+Portfolio/Website: (not provided)
+
+FULL WORK EXPERIENCE (every entry below is real and must be included — do not skip any):
+Senior Product Manager | Acme AI | 2021 - Present | San Francisco, CA
+  - Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%
+  - Managed 3 cross-functional teams across eng, design, and data
+
+Product Manager | DataCo | 2018 - 2021 | New York, NY
+  - Shipped data pipeline product serving 200+ enterprise customers
+  - Reduced churn by 18% through targeted onboarding improvements
+
+EDUCATION (copy exactly as written — never alter institution names, degrees, or years):
+B.S. in Computer Science | MIT | 2014 - 2018
+
+SKILLS:
+Product: Roadmapping, PRD writing, A/B testing, user research
+Technical: SQL, Python, LLM APIs, data pipelines
+
+PROJECTS:
+AutoEval: Open-source LLM evaluation harness | Outcomes: 500+ GitHub stars (Stack: Python, OpenAI API) | https://github.com/alexchen/autoeval
+ResumeAI: AI resume tailoring tool | Outcomes: 1000+ users (Stack: Next.js, Claude API)
+
+
+VOICE AND TONE NOTES:
+Direct, data-driven tone. Lead with numbers. No buzzwords.
+
+CANDIDATE'S TARGET ARCHETYPES (North Star — the kinds of roles they want):
+- AI / Technical PM (id: ai-tech-pm): Product roles at AI-first companies requiring technical depth
+- Strategy / Consulting (id: strategy): Strategy and operations roles at top firms
+
+JOB DETAILS:
+Company: OpenAI
+Role: Product Manager, API Platform
+Location: San Francisco, CA
+Seniority: senior
+Sector: ai-emerging
+
+JOB DESCRIPTION:
+We are looking for a Senior PM to lead our API Platform...
+
+---
+
+TASK: Score this opportunity across 5 dimensions (each 1-5), compute a weighted Global score (1-5), assess posting legitimacy, classify the role archetype, and extract structured JD data.
+
+SCORING RUBRIC (qualitative, mirror career-ops framework):
+
+**CV Match (1-5)** — How well do the candidate's actual skills, experience, and proof points match the JD requirements?
+- 5: Direct line-by-line match across most requirements with strong evidence
+- 4: Strong match on most key requirements, minor gaps
+- 3: Match on half the requirements, notable gaps
+- 2: Some overlap, multiple hard gaps
+- 1: Almost no match
+
+**North Star Alignment (1-5)** — How well does this role fit the candidate's target archetypes (above)?
+- 5: Perfect fit for the primary archetype
+- 4: Strong fit for primary OR perfect fit for secondary
+- 3: Hybrid that touches at least one target archetype
+- 2: Adjacent but not aligned with their stated targets
+- 1: Off-target
+
+**Compensation (1-5)** — Salary vs market for this role/location/seniority. If JD doesn't list comp, infer from company tier and role:
+- 5: Top quartile for the market
+- 4: Above market
+- 3: At market
+- 2: Below market
+- 1: Well below market
+
+**Cultural Signals (1-5)** — Remote policy, stability, growth signals, team dynamics, transparency:
+- 5: All positive signals (remote-first or candidate-aligned, growing, transparent)
+- 4: Mostly positive
+- 3: Mixed
+- 2: Several concerning signals
+- 1: Red flags throughout
+
+**Red Flags (1-5)** — INVERTED: 5 = no red flags, 1 = many red flags. Penalties for: vague compensation in regulated jurisdictions, contradictory requirements (entry-level title with staff requirements), suspiciously generic JD, unrealistic experience asks, recent layoff news in same department, repost patterns, suspicious apply flow.
+
+**Global (1-5)** — Weighted average. Weights are qualitative (use judgment): CV Match and North Star matter most, Comp and Culture moderate, Red Flags can pull the score down significantly when severe.
+
+**Recommendation thresholds:**
+- 4.5+ → "apply_immediately"
+- 4.0-4.4 → "apply"
+- 3.5-3.9 → "review_manually"
+- Below 3.5 → "skip"
+
+---
+
+ARCHETYPE: Classify the role as one of:
+- AI Platform / LLMOps
+- Agentic / Automation
+- Technical AI PM
+- AI Solutions Architect
+- AI Forward Deployed
+- AI Transformation
+- Strategy / Consulting (MBB-style)
+- General Product Management
+- Other (specify)
+
+If hybrid, give primary + secondary.
+
+---
+
+LEGITIMACY ASSESSMENT (Block G):
+
+Analyze the JD for ghost-job signals. Output one of three tiers:
+- **high_confidence** — Multiple positive signals, real active opening
+- **proceed_with_caution** — Mixed signals worth noting
+- **suspicious** — Multiple ghost-job indicators
+
+Signals to evaluate (each: signal description, finding, weight as positive/neutral/concerning):
+1. Description Quality — does it name specific technologies, tools, team size?
+2. Realism — are requirements vs years of experience plausible?
+3. Specificity — what % is role-specific vs boilerplate?
+4. Internal Contradictions — entry-level title + staff requirements?
+5. Compensation Transparency — context-dependent (legitimate omissions exist)
+6. Scope Clarity — clear first 6-12 months?
+
+NEVER default to "suspicious" without evidence. Default to "proceed_with_caution" when data is limited.
+NEVER present findings as accusations — observations only.
+
+---
+
+ALSO EXTRACT structured JD data (for downstream ATS optimization and skill analysis):
+- keyRequirements: top 5-8 must-haves
+- technicalSkills: explicit tools/frameworks/languages
+- softSkills: collaboration/leadership signals
+- yearsExperienceRequired: number or null
+- redFlags: any concerning items found
+- keywords: 15-20 ATS-relevant keywords from the JD
+
+Pick the SINGLE best-matching bucket (id and name) from the candidate's archetypes. If none matches well, pick the closest.
+
+---
+
+Return ONLY raw JSON (no markdown fences):
+
+{
+  "archetype": { "primary": "string", "secondary": "string or null" },
+  "scores": {
+    "cv_match": { "score": number, "reasoning": "string", "evidence": ["string"], "gaps": ["string"] },
+    "north_star": { "score": number, "reasoning": "string" },
+    "comp": { "score": number, "reasoning": "string" },
+    "culture": { "score": number, "reasoning": "string", "signals": ["string"] },
+    "red_flags": { "score": number, "reasoning": "string", "signals": ["string"] }
+  },
+  "global": number,
+  "recommendation": "apply_immediately" | "apply" | "review_manually" | "skip",
+  "legitimacy": {
+    "tier": "high_confidence" | "proceed_with_caution" | "suspicious",
+    "signals": [{ "signal": "string", "finding": "string", "weight": "positive" | "neutral" | "concerning" }],
+    "notes": "string or null"
+  },
+  "jdParsed": {
+    "keyRequirements": ["string"],
+    "technicalSkills": ["string"],
+    "softSkills": ["string"],
+    "yearsExperienceRequired": number | null,
+    "redFlags": ["string"],
+    "keywords": ["string"]
+  },
+  "bucket": "string (id of best-matching bucket)",
+  "bucketName": "string (display name of best-matching bucket)"
+}
+
+Be honest. Cite specific evidence from the candidate's profile. Don't invent metrics. Use the actual archetype names from the JD context."
+`;
+
+exports[`prompt builder snapshots > coverLetterPrompt matches snapshot 1`] = `
+"You are writing a cover letter for Alex Chen applying to OpenAI for the Product Manager, API Platform role.
+
+CANDIDATE PROFILE — SOURCE OF TRUTH (all data below is verified; never add, invent, or extrapolate)
+Name: Alex Chen
+Headline: AI Product Manager with 7 years building ML-powered products
+Email: alex@example.com
+Phone: +1 555 0100
+Location: San Francisco, CA
+Open To: Remote, NYC
+Years of Experience: 7
+LinkedIn: https://linkedin.com/in/alexchen
+GitHub: https://github.com/alexchen
+Portfolio/Website: (not provided)
+
+FULL WORK EXPERIENCE (every entry below is real and must be included — do not skip any):
+Senior Product Manager | Acme AI | 2021 - Present | San Francisco, CA
+  - Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%
+  - Managed 3 cross-functional teams across eng, design, and data
+
+Product Manager | DataCo | 2018 - 2021 | New York, NY
+  - Shipped data pipeline product serving 200+ enterprise customers
+  - Reduced churn by 18% through targeted onboarding improvements
+
+EDUCATION (copy exactly as written — never alter institution names, degrees, or years):
+B.S. in Computer Science | MIT | 2014 - 2018
+
+SKILLS:
+Product: Roadmapping, PRD writing, A/B testing, user research
+Technical: SQL, Python, LLM APIs, data pipelines
+
+PROJECTS:
+AutoEval: Open-source LLM evaluation harness | Outcomes: 500+ GitHub stars (Stack: Python, OpenAI API) | https://github.com/alexchen/autoeval
+ResumeAI: AI resume tailoring tool | Outcomes: 1000+ users (Stack: Next.js, Claude API)
+
+
+VOICE AND TONE NOTES:
+Direct, data-driven tone. Lead with numbers. No buzzwords.
+
+---
+
+JOB DETAILS
+Company: OpenAI
+Role: Product Manager, API Platform
+Location: San Francisco, CA
+Sector: ai-emerging
+Seniority: senior
+Bucket: ai-tech-pm
+
+KEY REQUIREMENTS:
+- 5+ years PM experience
+- Technical background
+- API product experience
+
+TECHNICAL SKILLS REQUIRED: REST APIs, Python, LLMs
+
+RED FLAGS: None identified
+
+RAW JD:
+We are looking for a Senior PM to lead our API Platform...
+
+---
+
+TASK: Write a sharp, differentiated cover letter that does NOT sound generic.
+
+HARD RULES:
+1. No em dashes.
+2. Never use: "excited to apply", "passionate about", "synergy", "leverage" as verb, "cutting-edge", "innovative solutions", "self-starter", "proven track record", "consumer-facing".
+3. Follow the OPENING PATTERNS from the voice notes exactly.
+4. Direct and specific. Lead with substantive claim, then evidence.
+5. Maximum 4 paragraphs. No fluff.
+6. Adjust tone by audience type from voice notes.
+
+OUTPUT:
+Dear Hiring Manager,
+
+[Opening — most compelling connection]
+[Middle — specific experience matching a key requirement]
+[Middle — AI builds or unique capability]
+[Closing — clear next step, no platitudes]
+
+Alex Chen"
+`;
+
+exports[`prompt builder snapshots > resumePrompt matches snapshot 1`] = `
+"You are a senior resume strategist. Write a tailored, ATS-optimized resume for Alex Chen applying for the Product Manager, API Platform role at OpenAI.
+
+CANDIDATE PROFILE — SOURCE OF TRUTH (all data below is verified; never add, invent, or extrapolate)
+Name: Alex Chen
+Headline: AI Product Manager with 7 years building ML-powered products
+Email: alex@example.com
+Phone: +1 555 0100
+Location: San Francisco, CA
+Open To: Remote, NYC
+Years of Experience: 7
+LinkedIn: https://linkedin.com/in/alexchen
+GitHub: https://github.com/alexchen
+Portfolio/Website: (not provided)
+
+FULL WORK EXPERIENCE (every entry below is real and must be included — do not skip any):
+Senior Product Manager | Acme AI | 2021 - Present | San Francisco, CA
+  - Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%
+  - Managed 3 cross-functional teams across eng, design, and data
+
+Product Manager | DataCo | 2018 - 2021 | New York, NY
+  - Shipped data pipeline product serving 200+ enterprise customers
+  - Reduced churn by 18% through targeted onboarding improvements
+
+EDUCATION (copy exactly as written — never alter institution names, degrees, or years):
+B.S. in Computer Science | MIT | 2014 - 2018
+
+SKILLS:
+Product: Roadmapping, PRD writing, A/B testing, user research
+Technical: SQL, Python, LLM APIs, data pipelines
+
+PROJECTS:
+AutoEval: Open-source LLM evaluation harness | Outcomes: 500+ GitHub stars (Stack: Python, OpenAI API) | https://github.com/alexchen/autoeval
+ResumeAI: AI resume tailoring tool | Outcomes: 1000+ users (Stack: Next.js, Claude API)
+
+
+VOICE AND TONE NOTES:
+Direct, data-driven tone. Lead with numbers. No buzzwords.
+
+---
+
+JOB DETAILS
+Company: OpenAI
+Role: Product Manager, API Platform
+Location: San Francisco, CA
+Sector: ai-emerging
+Seniority: senior
+Bucket: ai-tech-pm
+
+KEY REQUIREMENTS:
+- 5+ years PM experience
+- Technical background
+- API product experience
+
+TECHNICAL SKILLS REQUIRED: REST APIs, Python, LLMs
+
+RED FLAGS: None identified
+
+RAW JD:
+We are looking for a Senior PM to lead our API Platform...
+
+ATS KEYWORDS — weave these exact phrases in naturally: API, platform, LLM, product management, technical PM
+MUST-COVER REQUIREMENTS: 5+ years PM experience; Technical background; API product experience
+MUST-LIST TECH SKILLS (only if candidate actually has them per profile): REST APIs, Python, LLMs
+
+---
+
+ANTI-HALLUCINATION RULES — READ THESE FIRST, VIOLATING THEM IS A CRITICAL ERROR:
+1. NEVER invent, guess, or extrapolate ANY fact. Every claim must exist in the CANDIDATE PROFILE above.
+2. Education: copy institution names, degree names, and years EXACTLY as written in the profile. Do not alter, abbreviate, or guess. Do not add any education entry not listed.
+3. Company names: copy exactly. Do not rename, consolidate, or infer employer names.
+4. Metrics and numbers: use only numbers from the profile. NEVER invent percentages, revenue figures, team sizes, or timelines.
+5. Skills: only list skills that appear in the profile's SKILLS section. Do not add "presumed" skills.
+6. Projects: only reference projects listed in the profile. Do not fabricate project names.
+
+EXPERIENCE INCLUSION RULES:
+- There are 2 experience entries in the profile. You MUST include ALL 2 of them in the Experience section.
+- For each entry, keep 2-4 bullets, reordering so JD-relevant bullets come first.
+- You may trim low-relevance bullets but MUST NOT drop entire experience entries.
+- Preserve the exact company name and tenure for every entry.
+
+STYLE RULES:
+- STRICT ONE PAGE. Target 520-600 words for the entire resume (excluding headers and section titles). If you exceed 600 words, cut the least JD-relevant bullets first. Never exceed 3 bullets per experience entry.
+- Every bullet: strong past-tense action verb + specific action + outcome (quantified if profile has the number).
+- No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
+- Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
+- Vary verbs. Do not start two consecutive bullets with the same word.
+- Summary: 2 sentences max. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.
+- Skills section: maximum 3 skill categories, each with no more than 6 items. Do not pad this section.
+
+ROLE-SPECIFIC GUIDANCE (this candidate is in: product, 7 years exp):
+- EMPHASIS: Lead with user/business outcomes: MAU growth, retention, NPS, conversion, revenue per user, time-to-launch. Show 0-to-1 vs scaling roles distinctly. Mention cross-functional partners (eng, design, data, GTM) when scope justifies.
+- VOICE: Frame bullets around 'problem → bet → outcome'. Avoid 'managed product' — say what shipped and what changed.
+
+OUTPUT FORMAT — markdown only, nothing before or after:
+# Alex Chen
+alex@example.com | +1 555 0100 | San Francisco, CA | [LinkedIn](https://linkedin.com/in/alexchen) | [GitHub](https://github.com/alexchen)
+
+## Summary
+[2-3 sentences]
+
+## Experience
+[List ALL 2 entries from the profile. Each in format:]
+### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
+- [Most JD-relevant bullet]
+- [Next bullet]
+- [...]
+
+## Skills
+**[Category]:** [comma-separated, JD terminology where applicable]
+
+## Education
+B.S. in Computer Science | MIT | 2014 - 2018
+
+
+
+Output the markdown now. No preamble. No explanation. Markdown only."
+`;
