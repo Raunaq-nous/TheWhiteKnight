@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../lib/rate-limit";
-import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
-import { afScoringPrompt, AFScoreResult } from "../../../lib/prompts";
-import { AFScoreResultSchema } from "../../../lib/schemas";
-import { computeGlobalScore, deriveRecommendation } from "../../../lib/scoring-weights";
+import { ProviderSettings } from "../../../lib/ai-client";
+import { scoreJob } from "../../../lib/server/services/scoring-service";
 import type { Profile } from "../../../lib/profile";
 
 export const runtime = "nodejs";
@@ -38,39 +36,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing target archetypes (buckets)" }, { status: 400 });
     }
 
-    const result = await chatJSON<AFScoreResult>(
-      [{ role: "user", content: afScoringPrompt(profile, jdText, { company, role, location, seniority, sector, remote }, buckets) }],
-      { temperature: 0.2, maxTokens: 3000 },
-      providerSettings,
-      AFScoreResultSchema
-    );
-
-    // Replace the LLM's global with the code-computed weighted average.
-    const computedGlobal = computeGlobalScore({
-      cv_match: result.scores.cv_match.score,
-      north_star: result.scores.north_star.score,
-      comp: result.scores.comp.score,
-      culture: result.scores.culture.score,
-      red_flags: result.scores.red_flags.score,
-    });
-
-    const recommendation = deriveRecommendation(computedGlobal, result.scores.red_flags.score);
-
-    const recommendationLabel =
-      recommendation === "apply_immediately" ? "Apply Immediately" :
-      recommendation === "apply" ? "Apply" :
-      recommendation === "review_manually" ? "Review Manually" : "Skip";
-
-    const totalScore10 = Math.round(Math.max(0, Math.min(10, computedGlobal * 2)) * 100) / 100;
-
-    return NextResponse.json({
-      ...result,
-      global: computedGlobal,
-      recommendation,
-      totalScore: totalScore10,
-      recommendationLabel,
-      parsed: result.jdParsed,
-    });
+    const result = await scoreJob({ jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings });
+    return NextResponse.json(result);
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Scoring failed" }, { status: 500 });
   }
