@@ -60,3 +60,35 @@ export interface SettingsRepository {
   getBatchState(userEmail: string): BatchState | null;
   saveBatchState(userEmail: string, state: BatchState | null): void;
 }
+
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "consumed";
+
+export type ApprovalAction = {
+  kind: string;
+  applicationId?: string;
+  payload?: Record<string, unknown>;
+};
+
+export type Approval = {
+  id: string;
+  userEmail: string;
+  action: ApprovalAction;
+  status: ApprovalStatus;
+  token: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  consumedAt: string | null;
+};
+
+export interface ApprovalRepository {
+  /** Stage a new pending approval and return its id. */
+  create(userEmail: string, action: ApprovalAction): string;
+  /** List approvals for a user, optionally filtered by status. */
+  list(userEmail: string, status?: ApprovalStatus): Approval[];
+  /** Get a single approval by id. */
+  get(userEmail: string, id: string): Approval | undefined;
+  /** Approve or reject: sets status + token (on approve). Returns updated record. */
+  resolve(userEmail: string, id: string, decision: "approve" | "reject"): Approval | undefined;
+  /** Consume a single-use token. Returns the approval if valid + unconsumed, null otherwise. */
+  consume(token: string, expected: { kind: string; applicationId?: string }): Approval | null;
+}
