@@ -4,6 +4,7 @@ export { contactRepo } from "./contact-repo";
 export { skillRepo } from "./skill-repo";
 export { notificationRepo } from "./notification-repo";
 export { settingsRepo } from "./settings-repo";
+export { approvalRepo } from "./approval-repo";
 export type {
   ApplicationRepository,
   ProfileRepository,
@@ -11,4 +12,8 @@ export type {
   SkillRepository,
   NotificationRepository,
   SettingsRepository,
+  ApprovalRepository,
+  ApprovalAction,
+  Approval,
+  ApprovalStatus,
 } from "./types";

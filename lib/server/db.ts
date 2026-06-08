@@ -27,6 +27,7 @@ function openDb(): Database.Database {
   const db = new Database(dbPath());
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  db.pragma("busy_timeout = 5000");
   applySchema(db);
   return db;
 }
@@ -83,6 +84,21 @@ function applySchema(db: Database.Database) {
       updated_at  TEXT NOT NULL,
       PRIMARY KEY (user_email, key)
     );
+
+    -- Human-approval gate: staged external actions awaiting user decision.
+    CREATE TABLE IF NOT EXISTS approvals (
+      id          TEXT NOT NULL PRIMARY KEY,
+      user_email  TEXT NOT NULL,
+      action      TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      token       TEXT,
+      created_at  TEXT NOT NULL,
+      resolved_at TEXT,
+      consumed_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_approvals_user_status
+      ON approvals (user_email, status, created_at DESC);
   `);
 }
 
@@ -91,4 +107,12 @@ export function getDb(): Database.Database {
     global.__careeros_db = openDb();
   }
   return global.__careeros_db;
+}
+
+/** Close and clear the cached DB instance. Only call from test setup. */
+export function _resetDbForTesting(): void {
+  if (global.__careeros_db) {
+    global.__careeros_db.close();
+    global.__careeros_db = undefined;
+  }
 }
