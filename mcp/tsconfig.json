@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "../dist/mcp",
+    "rootDir": "..",
+    "paths": {
+      "server-only": ["./stubs/server-only/index.js"]
+    }
+  },
+  "include": ["server.ts", "../lib/**/*.ts"],
+  "exclude": ["../lib/__tests__/**", "../app/**", "../node_modules/**"]
+}
