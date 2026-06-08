@@ -48,7 +48,7 @@ async function main() {
   process.env.ADMIN_EMAIL = ADMIN_EMAIL;
   process.env.CAREEROS_PRIVATE_DIR = tmpDir;
   // Prevent mcp/server.ts from calling main() if it were imported directly.
-  process.env.NODE_ENV = "test";
+  (process.env as Record<string, string>)["NODE_ENV"] = "test";
 
   // Lazy imports — after env vars are set so getDb() picks up the right path.
   const { _resetDbForTesting } = await import("../lib/server/db");

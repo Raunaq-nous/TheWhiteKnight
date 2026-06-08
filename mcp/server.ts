@@ -218,9 +218,7 @@ server.registerTool(
       type: "approval_pending",
       title: `Action awaiting approval: ${kind}`,
       body: applicationId ? `Application ${applicationId}` : "",
-      relatedSlug: "",
-      dueAt: undefined,
-    } as any);
+    });
     return { content: [{ type: "text", text: JSON.stringify({ staged: true, approvalId }) }] };
   },
 );
@@ -313,9 +311,9 @@ server.registerTool(
       type: "follow_up_scheduled",
       title: `Follow-up scheduled: ${app.company} - ${app.role}`,
       body: note ?? "",
-      relatedSlug: app.slug,
+      applicationSlug: app.slug,
       dueAt: when,
-    } as any);
+    });
 
     return { content: [{ type: "text", text: JSON.stringify({ scheduled: true, approvalId, when }) }] };
   },

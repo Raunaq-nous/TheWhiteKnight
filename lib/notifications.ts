@@ -10,8 +10,10 @@ export type NotifType =
   | "pending_outreach"
   | "pending_ceo_email"
   | "followup_reminder"
+  | "follow_up_scheduled"
   | "interview_reminder"
   | "offer_deadline"
+  | "approval_pending"
   | "info";
 
 export type Notification = {
