@@ -87,19 +87,31 @@ function applySchema(db: Database.Database) {
 
     -- Human-approval gate: staged external actions awaiting user decision.
     CREATE TABLE IF NOT EXISTS approvals (
-      id          TEXT NOT NULL PRIMARY KEY,
-      user_email  TEXT NOT NULL,
-      action      TEXT NOT NULL,
-      status      TEXT NOT NULL DEFAULT 'pending',
-      token       TEXT,
-      created_at  TEXT NOT NULL,
-      resolved_at TEXT,
-      consumed_at TEXT
+      id             TEXT NOT NULL PRIMARY KEY,
+      user_email     TEXT NOT NULL,
+      action         TEXT NOT NULL,
+      status         TEXT NOT NULL DEFAULT 'pending',
+      token          TEXT,
+      payload_digest TEXT,
+      expires_at     TEXT,
+      created_at     TEXT NOT NULL,
+      resolved_at    TEXT,
+      consumed_at    TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_approvals_user_status
       ON approvals (user_email, status, created_at DESC);
   `);
+
+  // Additive migrations for DBs created before these columns existed.
+  for (const col of ["payload_digest TEXT", "expires_at TEXT"]) {
+    const name = col.split(" ")[0];
+    const exists = (db.prepare("PRAGMA table_info(approvals)").all() as { name: string }[])
+      .some(r => r.name === name);
+    if (!exists) {
+      db.exec(`ALTER TABLE approvals ADD COLUMN ${col}`);
+    }
+  }
 }
 
 export function getDb(): Database.Database {

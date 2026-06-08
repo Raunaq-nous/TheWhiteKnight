@@ -75,6 +75,8 @@ export type Approval = {
   action: ApprovalAction;
   status: ApprovalStatus;
   token: string | null;
+  payloadDigest: string | null;
+  expiresAt: string | null;
   createdAt: string;
   resolvedAt: string | null;
   consumedAt: string | null;

@@ -1,6 +1,7 @@
 import "server-only";
 import { approvalRepo } from "./repositories/approval-repo";
 import type { ApprovalAction } from "./repositories/types";
+import { notifyOperator } from "./channels/notify-operator";
 
 export type ApprovalResult =
   | { staged: true; approvalId: string }
@@ -30,12 +31,15 @@ export function requireApproval(
     }
   }
   const approvalId = approvalRepo.create(userEmail, action);
+  notifyOperator(userEmail, approvalId, action).catch(() => {});
   return { staged: true, approvalId };
 }
 
 /** Stage an action without attempting execution. Thin wrapper for MCP tool use. */
 export function queueApproval(userEmail: string, action: ApprovalAction): string {
-  return approvalRepo.create(userEmail, action);
+  const id = approvalRepo.create(userEmail, action);
+  notifyOperator(userEmail, id, action).catch(() => {});
+  return id;
 }
 
 /** Approve or reject a staged action. Call only from JWT-gated web API. */

@@ -14,7 +14,7 @@ Next.js talks to it via server routes on the user's machine. Vercel is valid onl
 ## Hard rules (these never change)
 
 1. **Local-first.** All user data lives on the user's own machine or their own instance. Nothing user-specific is persisted to a server the project operators control.
-2. **Human approval gate.** No external action (application submit, email send, outreach) executes without an explicit, per-action human approval recorded in the system.
+2. **Human approval gate.** No external action (application submit, email send, outreach) executes without an explicit, per-action human approval recorded in the system. Carve-out: self-notification to the operator's pinned address is ungated; all third-party sends remain gated.
 3. **Never auto-submit applications.** Agent fills and stages; human clicks the final submit.
 4. **Never auto-send on LinkedIn.** Agent drafts and stages; human sends by hand. (LinkedIn ToS 8.2.)
 5. **Secrets never committed.** No API keys, tokens, or PII in source control or plaintext browser storage exfiltrable by XSS. Real data in gitignored `private/`.
@@ -36,8 +36,8 @@ Next.js talks to it via server routes on the user's machine. Vercel is valid onl
 
 ## Development branch
 
-Current branch: `rebuild/local-first-actionable`
-Current phase: Phase 3 complete, awaiting GATE.
+Current branch: `claude/analyze-repo-structure-pXSLI`
+Current phase: Phase 4a complete, awaiting GATE.
 
 ## Phase 3 — MCP capability layer (complete)
 
@@ -50,6 +50,21 @@ Current phase: Phase 3 complete, awaiting GATE.
   draftMaterials, queueApproval, getApprovals, recordSend, scheduleFollowUp)
 - **SECURITY INVARIANT**: `resolveApproval` is NOT an MCP tool; test asserts this cannot regress
 - `mcp/stubs/server-only/` + `node_modules/server-only/`: empty stub for tsx/vitest contexts
+
+## Phase 4a — Channel interface + email + expiry + UI card (complete)
+
+- `lib/server/channels/channel.ts`: `Channel` interface + `EmailPayload` type
+- `lib/server/channels/email-channel.ts`: `buildEmailChannel(apiKey, from)` using Resend SDK
+- `lib/server/channels/notify-operator.ts`: ungated self-notification to `ADMIN_EMAIL`; fires on every stage
+- `lib/server/db.ts`: `expires_at` + `payload_digest` columns; additive migration for existing DBs
+- `lib/server/repositories/approval-repo.ts`: digest computed at create; expiry enforced in resolve+consume
+- `lib/server/approval-gate.ts`: `queueApproval` + `requireApproval` fire-and-forget `notifyOperator`
+- `app/api/approvals/route.ts`: GET pending approvals (JWT-gated)
+- `app/api/approvals/[id]/route.ts`: token removed from HTTP response; expiry check returns 410
+- `app/approvals/page.tsx`: minimal pending-approvals UI card with Approve/Reject
+- `lib/notifications.ts`: added `"approval_pending"` + `"follow_up_scheduled"` to `NotifType`
+- `mcp/server.ts`: removed `as any` casts; fixed `relatedSlug` -> `applicationSlug`
+- Tests: payload immutability + expiry assertions added to `approval-gate.test.ts`
 
 ## Deleted in Phase 2
 
