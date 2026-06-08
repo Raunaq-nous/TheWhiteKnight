@@ -37,7 +37,19 @@ Next.js talks to it via server routes on the user's machine. Vercel is valid onl
 ## Development branch
 
 Current branch: `rebuild/local-first-actionable`
-Current phase: Phase 2 complete, awaiting GATE.
+Current phase: Phase 3 complete, awaiting GATE.
+
+## Phase 3 — MCP capability layer (complete)
+
+- `lib/server/db.ts`: `busy_timeout = 5000` + `approvals` table + `_resetDbForTesting()`
+- `lib/server/repositories/approval-repo.ts`: create/list/get/resolve/consume (single-use tokens)
+- `lib/server/approval-gate.ts`: `requireApproval` / `queueApproval` / `resolveApproval`
+- `app/api/approvals/[id]/route.ts`: JWT-gated approve/reject (human-only; NOT an MCP tool)
+- `lib/server/services/scoring-service.ts` + `draft-service.ts`: reusable service layer
+- `mcp/server.ts`: 9 tools (listPipeline, findJobs, updateStatus, scoreApplication,
+  draftMaterials, queueApproval, getApprovals, recordSend, scheduleFollowUp)
+- **SECURITY INVARIANT**: `resolveApproval` is NOT an MCP tool; test asserts this cannot regress
+- `mcp/stubs/server-only/` + `node_modules/server-only/`: empty stub for tsx/vitest contexts
 
 ## Deleted in Phase 2
 
