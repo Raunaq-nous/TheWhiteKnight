@@ -20,13 +20,13 @@ import { requireApproval } from "../lib/server/approval-gate.js";
 import { scoreJob } from "../lib/server/services/scoring-service.js";
 import { generateDraft } from "../lib/server/services/draft-service.js";
 
-const USER_EMAIL = process.env.CAREEROS_MCP_USER ?? process.env.ADMIN_EMAIL;
-if (!USER_EMAIL) {
-  console.error("CAREEROS_MCP_USER or ADMIN_EMAIL env var is required");
-  process.exit(1);
+// USER_EMAIL is resolved lazily so this module can be imported for testing
+// without requiring env vars. Only main() enforces the requirement.
+function getUserEmail(): string {
+  return process.env.CAREEROS_MCP_USER ?? process.env.ADMIN_EMAIL ?? "";
 }
 
-const server = new McpServer({
+export const server = new McpServer({
   name: "careeros",
   version: "0.1.0",
 });
@@ -45,7 +45,7 @@ server.registerTool(
     },
   },
   async ({ status, bucket, limit }) => {
-    let apps = applicationRepo.list(USER_EMAIL!);
+    let apps = applicationRepo.list(getUserEmail());
     if (status) apps = apps.filter(a => a.status === status);
     if (bucket) apps = apps.filter(a => a.bucket === bucket);
     const result = apps.slice(0, limit).map(a => ({
@@ -82,7 +82,7 @@ server.registerTool(
   },
   async ({ query, regions, minScore, recommendation }) => {
     // Treat all query inputs as inert data — never eval, never exec.
-    let apps = applicationRepo.list(USER_EMAIL!);
+    let apps = applicationRepo.list(getUserEmail());
     if (query) {
       const q = query.toLowerCase();
       apps = apps.filter(a =>
@@ -126,7 +126,7 @@ server.registerTool(
     },
   },
   async ({ applicationId, status }) => {
-    applicationRepo.update(USER_EMAIL!, applicationId, { status });
+    applicationRepo.update(getUserEmail(), applicationId, { status });
     return { content: [{ type: "text", text: JSON.stringify({ ok: true, applicationId, status }) }] };
   },
 );
@@ -143,16 +143,16 @@ server.registerTool(
     },
   },
   async ({ applicationId }) => {
-    const app = applicationRepo.getById(USER_EMAIL!, applicationId);
+    const app = applicationRepo.getById(getUserEmail(), applicationId);
     if (!app) return { content: [{ type: "text", text: JSON.stringify({ error: "Application not found" }) }], isError: true };
 
-    const profile = settingsRepo.getModelSettings(USER_EMAIL!);
-    const buckets = settingsRepo.getCompanyTargets(USER_EMAIL!);
-    const profileData = (await import("../lib/server/repositories/profile-repo.js")).profileRepo.get(USER_EMAIL!);
+    const profile = settingsRepo.getModelSettings(getUserEmail());
+    const buckets = settingsRepo.getCompanyTargets(getUserEmail());
+    const profileData = (await import("../lib/server/repositories/profile-repo.js")).profileRepo.get(getUserEmail());
     if (!profileData) return { content: [{ type: "text", text: JSON.stringify({ error: "Profile not found; set up your profile first" }) }], isError: true };
 
     const providerSettings = { provider: profile.provider as any, model: profile.model };
-    const bucketList = buckets.map(b => ({ id: b.name, name: b.name, description: b.description }));
+    const bucketList = buckets.map(b => ({ id: b.id, name: b.name, description: b.sector }));
 
     const result = await scoreJob({
       jdText: app.jdRaw,
@@ -167,7 +167,7 @@ server.registerTool(
       providerSettings,
     });
 
-    applicationRepo.update(USER_EMAIL!, applicationId, { score: result.totalScore, bucket: result.archetype?.primary ?? app.bucket });
+    applicationRepo.update(getUserEmail(), applicationId, { score: result.totalScore, bucket: result.archetype?.primary ?? app.bucket });
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );
@@ -185,13 +185,13 @@ server.registerTool(
     },
   },
   async ({ applicationId, kind }) => {
-    const app = applicationRepo.getById(USER_EMAIL!, applicationId);
+    const app = applicationRepo.getById(getUserEmail(), applicationId);
     if (!app) return { content: [{ type: "text", text: JSON.stringify({ error: "Application not found" }) }], isError: true };
 
-    const profileData = (await import("../lib/server/repositories/profile-repo.js")).profileRepo.get(USER_EMAIL!);
+    const profileData = (await import("../lib/server/repositories/profile-repo.js")).profileRepo.get(getUserEmail());
     if (!profileData) return { content: [{ type: "text", text: JSON.stringify({ error: "Profile not found" }) }], isError: true };
 
-    const modelSettings = settingsRepo.getModelSettings(USER_EMAIL!);
+    const modelSettings = settingsRepo.getModelSettings(getUserEmail());
     const providerSettings = { provider: modelSettings.provider as any, model: modelSettings.model };
 
     const result = await generateDraft({ action: kind as any, profile: profileData, app, providerSettings });
@@ -209,12 +209,12 @@ server.registerTool(
     inputSchema: {
       kind: z.string().describe("Action kind, e.g. 'send_email', 'submit_application'"),
       applicationId: z.string().optional(),
-      payload: z.record(z.unknown()).optional(),
+      payload: z.record(z.string(), z.unknown()).optional(),
     },
   },
   async ({ kind, applicationId, payload }) => {
-    const approvalId = approvalRepo.create(USER_EMAIL!, { kind, applicationId, payload });
-    notificationRepo.add(USER_EMAIL!, {
+    const approvalId = approvalRepo.create(getUserEmail(), { kind, applicationId, payload });
+    notificationRepo.add(getUserEmail(), {
       type: "approval_pending",
       title: `Action awaiting approval: ${kind}`,
       body: applicationId ? `Application ${applicationId}` : "",
@@ -237,7 +237,7 @@ server.registerTool(
     },
   },
   async ({ status }) => {
-    const approvals = approvalRepo.list(USER_EMAIL!, status as any);
+    const approvals = approvalRepo.list(getUserEmail(), status as any);
     const safe = approvals.map(a => ({
       id: a.id,
       action: a.action,
@@ -259,14 +259,14 @@ server.registerTool(
     inputSchema: {
       applicationId: z.string(),
       channel: z.enum(["email", "linkedin_manual", "other"]),
-      payload: z.record(z.unknown()),
+      payload: z.record(z.string(), z.unknown()),
       approvalToken: z.string().optional().describe("Single-use token from the human-approved resolve step"),
     },
   },
   async ({ applicationId, channel, payload, approvalToken }) => {
     // Payload from external/scraped context is treated as inert data — never eval, never shell.
     const gateResult = requireApproval(
-      USER_EMAIL!,
+      getUserEmail(),
       { kind: "recordSend", applicationId, payload: { channel, ...payload } },
       approvalToken,
     );
@@ -276,9 +276,9 @@ server.registerTool(
     }
 
     // Token was valid — record the send.
-    applicationRepo.update(USER_EMAIL!, applicationId, {
+    applicationRepo.update(getUserEmail(), applicationId, {
       emailEvents: [
-        ...(applicationRepo.getById(USER_EMAIL!, applicationId)?.emailEvents ?? []),
+        ...(applicationRepo.getById(getUserEmail(), applicationId)?.emailEvents ?? []),
         { channel, payload, sentAt: new Date().toISOString(), approvalId: gateResult.approvalId },
       ],
     });
@@ -300,16 +300,16 @@ server.registerTool(
     },
   },
   async ({ applicationId, when, note }) => {
-    const app = applicationRepo.getById(USER_EMAIL!, applicationId);
+    const app = applicationRepo.getById(getUserEmail(), applicationId);
     if (!app) return { content: [{ type: "text", text: JSON.stringify({ error: "Application not found" }) }], isError: true };
 
-    const approvalId = approvalRepo.create(USER_EMAIL!, {
+    const approvalId = approvalRepo.create(getUserEmail(), {
       kind: "follow_up",
       applicationId,
       payload: { when, note: note ?? "" },
     });
 
-    notificationRepo.add(USER_EMAIL!, {
+    notificationRepo.add(getUserEmail(), {
       type: "follow_up_scheduled",
       title: `Follow-up scheduled: ${app.company} - ${app.role}`,
       body: note ?? "",
@@ -325,15 +325,23 @@ server.registerTool(
 // Start
 // ---------------------------------------------------------------------------
 async function main() {
+  const userEmail = process.env.CAREEROS_MCP_USER ?? process.env.ADMIN_EMAIL;
+  if (!userEmail) {
+    console.error("CAREEROS_MCP_USER or ADMIN_EMAIL env var is required");
+    process.exit(1);
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write("CareerOS MCP server running on stdio\n");
 }
 
-main().catch(err => {
-  console.error("MCP server fatal error:", err);
-  process.exit(1);
-});
+// Only start when run as entry point, not when imported for testing.
+if (process.env.NODE_ENV !== "test") {
+  main().catch(err => {
+    console.error("MCP server fatal error:", err);
+    process.exit(1);
+  });
+}
 
 /** Exported for testing: the list of tool names registered on this server. */
 export function getRegisteredToolNames(): string[] {
