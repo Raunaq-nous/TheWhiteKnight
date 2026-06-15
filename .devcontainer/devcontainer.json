@@ -1,0 +1,25 @@
+{
+  "name": "CareerOS",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+
+  // python3 is required by node-gyp to compile better-sqlite3.
+  // build-essential is already present in the base image.
+  "onCreateCommand": "sudo apt-get install -y python3 2>/dev/null || true",
+
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "CareerOS",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
+}
