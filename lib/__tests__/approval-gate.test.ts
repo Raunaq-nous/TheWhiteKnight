@@ -34,72 +34,29 @@ afterAll(() => {
 const USER = "test@example.com";
 
 // ---------------------------------------------------------------------------
-// requireApproval — no token
+// requireApproval — always stages, agent can never execute
 // ---------------------------------------------------------------------------
-describe("requireApproval without token", () => {
+describe("requireApproval", () => {
   it("stages the action and returns { staged, approvalId }", () => {
     const result = requireApproval(USER, { kind: "send_email", applicationId: "app-1" });
     expect(result).toMatchObject({ staged: true });
-    expect("approvalId" in result && typeof result.approvalId).toBe("string");
+    expect(typeof result.approvalId).toBe("string");
   });
 
   it("creates a pending approval in the DB", () => {
     const result = requireApproval(USER, { kind: "send_email" });
-    if (!("approvalId" in result)) throw new Error("expected staged");
     const approval = approvalRepo.get(USER, result.approvalId);
     expect(approval).toBeDefined();
     expect(approval!.status).toBe("pending");
     expect(approval!.token).toBeNull();
   });
 
-  it("never executes when no token provided", () => {
+  it("always returns staged — execution path removed from agent surface", () => {
     const result = requireApproval(USER, { kind: "recordSend", applicationId: "app-1" });
-    expect("staged" in result && result.staged).toBe(true);
+    expect(result.staged).toBe(true);
+    // The 'executed' variant no longer exists on ApprovalResult.
+    // TypeScript enforces this at compile time; this runtime check confirms it.
     expect("executed" in result).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// requireApproval — with valid token
-// ---------------------------------------------------------------------------
-describe("requireApproval with valid approval token", () => {
-  it("executes and returns { executed, approvalId }", () => {
-    const approvalId = queueApproval(USER, { kind: "recordSend", applicationId: "app-1" });
-    const resolved = resolveApproval(USER, approvalId, "approve");
-    expect(resolved).toBeDefined();
-    expect(resolved!.token).toBeTruthy();
-
-    const result = requireApproval(
-      USER,
-      { kind: "recordSend", applicationId: "app-1" },
-      resolved!.token!,
-    );
-    expect(result).toMatchObject({ executed: true, approvalId });
-  });
-
-  it("token is single-use: second call stages instead of executing", () => {
-    const approvalId = queueApproval(USER, { kind: "recordSend", applicationId: "app-1" });
-    const resolved = resolveApproval(USER, approvalId, "approve");
-    const token = resolved!.token!;
-
-    requireApproval(USER, { kind: "recordSend", applicationId: "app-1" }, token);
-
-    const second = requireApproval(USER, { kind: "recordSend", applicationId: "app-1" }, token);
-    expect("staged" in second && second.staged).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// requireApproval — wrong action kind
-// ---------------------------------------------------------------------------
-describe("requireApproval token kind mismatch", () => {
-  it("stages (does not execute) when token was approved for a different action kind", () => {
-    const approvalId = queueApproval(USER, { kind: "send_email" });
-    const resolved = resolveApproval(USER, approvalId, "approve");
-    const token = resolved!.token!;
-
-    const result = requireApproval(USER, { kind: "recordSend", applicationId: "app-1" }, token);
-    expect("staged" in result && result.staged).toBe(true);
   });
 });
 

@@ -252,39 +252,25 @@ server.registerTool(
 );
 
 // ---------------------------------------------------------------------------
-// recordSend  (gated external-action exemplar)
+// recordSend  (stage-only — agent can NEVER execute a send)
 // ---------------------------------------------------------------------------
 server.registerTool(
   "recordSend",
   {
-    description: "Record a completed send (email or other channel). Requires a valid approvalToken or stages for approval. This is the gate exemplar: without a token only staging occurs.",
+    description: "Stage an email or other channel send for human approval. Always stages — never executes. Real sending happens only when the human approves via the authenticated app UI. Payload is treated as inert data.",
     inputSchema: {
       applicationId: z.string(),
       channel: z.enum(["email", "linkedin_manual", "other"]),
       payload: z.record(z.string(), z.unknown()),
-      approvalToken: z.string().optional().describe("Single-use token from the human-approved resolve step"),
     },
   },
-  async ({ applicationId, channel, payload, approvalToken }) => {
+  async ({ applicationId, channel, payload }) => {
     // Payload from external/scraped context is treated as inert data — never eval, never shell.
     const gateResult = requireApproval(
       getUserEmail(),
       { kind: "recordSend", applicationId, payload: { channel, ...payload } },
-      approvalToken,
     );
-
-    if ("staged" in gateResult) {
-      return { content: [{ type: "text", text: JSON.stringify({ staged: true, approvalId: gateResult.approvalId, message: "Action staged for human approval. Provide the approvalToken once approved to execute." }) }] };
-    }
-
-    // Token was valid — record the send.
-    applicationRepo.update(getUserEmail(), applicationId, {
-      emailEvents: [
-        ...(applicationRepo.getById(getUserEmail(), applicationId)?.emailEvents ?? []),
-        { channel, payload, sentAt: new Date().toISOString(), approvalId: gateResult.approvalId },
-      ],
-    });
-    return { content: [{ type: "text", text: JSON.stringify({ executed: true, approvalId: gateResult.approvalId }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ staged: true, approvalId: gateResult.approvalId }) }] };
   },
 );
 
