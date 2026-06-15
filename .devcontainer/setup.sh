@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Runs once when the Codespace/devcontainer is first created.
-# Requires Codespaces secrets injected as env vars — see devcontainer.json.
+# All values come from Codespaces secrets — see .devcontainer/README.md.
 set -euo pipefail
 
 echo "=== CareerOS devcontainer setup ==="
+
+# ── Build tools for better-sqlite3 native module ────────────────────────────
+echo "[setup] Installing python3 + build-essential (required for better-sqlite3)"
+sudo apt-get update -y -qq
+sudo apt-get install -y -qq python3 build-essential
 
 # ── Write .env from Codespaces secrets ──────────────────────────────────────
 echo "[setup] Writing .env"
@@ -36,23 +41,23 @@ CAREEROS_DB_PATH=$PWD/private/careeros.db
 ENV_EOF
 
 chmod 600 .env
-echo "[setup] .env written"
+echo "[setup] .env written (mode 600)"
 
 # ── Write admin profile if secret is present ─────────────────────────────────
 if [[ -n "${ADMIN_PROFILE_JSON:-}" ]]; then
   printf '%s\n' "$ADMIN_PROFILE_JSON" > private/admin-profile.json
   chmod 600 private/admin-profile.json
-  echo "[setup] private/admin-profile.json written"
+  echo "[setup] private/admin-profile.json written (mode 600)"
 else
-  echo "[setup] ADMIN_PROFILE_JSON not set; create private/admin-profile.json manually if needed"
+  echo "[setup] ADMIN_PROFILE_JSON not set; create private/admin-profile.json manually if needed."
 fi
 
-# ── Install deps (retry once) ────────────────────────────────────────────────
+# ── npm install (retry once on failure) ──────────────────────────────────────
 echo "[setup] npm install"
 if ! npm install; then
-  echo "[setup] retrying npm install in 10s"
-  sleep 10
+  echo "[setup] First attempt failed; retrying in 15s"
+  sleep 15
   npm install
 fi
 
-echo "=== CareerOS devcontainer setup complete. Run 'npm run dev' to start. ==="
+echo "=== CareerOS setup complete. start.sh will launch the dev server on next start. ==="
