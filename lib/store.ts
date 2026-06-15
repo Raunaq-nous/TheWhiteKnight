@@ -61,6 +61,12 @@ export type Application = {
   resumeVersions: any[];
   notes: string;
   emailEvents: any[];
+  stagedForms?: Array<{
+    screenshotRef: string;
+    filledFields: Array<{ field: string; value: string }>;
+    stagedAt: string;
+    formUrl?: string;
+  }>;
   createdAt: string;
   updatedAt: string;
   days?: number;
