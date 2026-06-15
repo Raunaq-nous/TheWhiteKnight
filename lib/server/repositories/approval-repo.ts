@@ -102,3 +102,15 @@ export const approvalRepo: ApprovalRepository = {
     return rowToApproval({ ...row, status: "consumed", consumed_at: now });
   },
 };
+
+/**
+ * Mark an approval consumed without requiring a token. Only for internal service
+ * use (e.g. followup-service marking a scheduled task as processed). Never expose
+ * this to the agent or any MCP tool.
+ */
+export function markApprovalConsumed(id: string): void {
+  const now = new Date().toISOString();
+  getDb().prepare(
+    "UPDATE approvals SET status = 'consumed', consumed_at = ? WHERE id = ?"
+  ).run(now, id);
+}
