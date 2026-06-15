@@ -1,0 +1,338 @@
+#cloud-config
+# deploy/cloud-init.yaml — CareerOS cloud-init bootstrap
+# Ubuntu 22.04 / 24.04 · x86_64 · arm64
+#
+# Paste the ENTIRE contents of this file into your cloud provider's
+# "user data" or "cloud config" field (see deploy/README.md).
+#
+# ────────────────────────────────────────────────────────────────────
+# STEP 1: Fill in every REPLACE_ME value in the write_files section.
+# STEP 2: Paste the filled file into your provider's user-data field.
+# STEP 3: Boot the instance — no further action needed.
+# STEP 4: Track progress: ssh root@<ip> && tail -f /var/log/careeros-setup.log
+# ────────────────────────────────────────────────────────────────────
+# SECURITY: Never commit a copy that contains real secrets.
+# ────────────────────────────────────────────────────────────────────
+
+write_files:
+  - path: /root/careeros-setup.sh
+    permissions: '0700'
+    content: |
+      #!/usr/bin/env bash
+      # CareerOS server bootstrap — embedded by cloud-init.yaml
+      set -euo pipefail
+
+      # ============================================================
+      # PLACEHOLDERS — fill these in before pasting.
+      # ============================================================
+
+      DUCKDNS_SUBDOMAIN="REPLACE_ME"
+      DUCKDNS_TOKEN="REPLACE_ME"
+
+      ADMIN_EMAIL="REPLACE_ME"
+      ADMIN_PASSWORD="REPLACE_ME"
+
+      SESSION_SECRET="REPLACE_ME"
+      SETUP_SECRET="REPLACE_ME"
+      CRON_SECRET="REPLACE_ME"
+
+      UPSTASH_REDIS_REST_URL="REPLACE_ME"
+      UPSTASH_REDIS_REST_TOKEN="REPLACE_ME"
+
+      TOGETHER_API_KEY="REPLACE_ME"
+      RESEND_API_KEY="REPLACE_ME"
+      OPENROUTER_API_KEY="REPLACE_ME"
+
+      REPO_URL="https://github.com/raunaq-nous/thewhiteknight"
+      BRANCH="claude/analyze-repo-structure-pXSLI"
+
+      AI_MODEL="deepseek-ai/DeepSeek-V4-Pro"
+      AI_VISION_MODEL="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
+
+      ADMIN_PROFILE_JSON='{"name":"REPLACE_ME","email":"REPLACE_ME","phone":"REPLACE_ME","location":"REPLACE_ME","linkedin":"https://linkedin.com/in/REPLACE_ME","website":"https://REPLACE_ME","summary":"REPLACE_ME","experience":[],"education":[],"skills":[]}'
+
+      # ============================================================
+
+      LOG=/var/log/careeros-setup.log
+      DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+      CAREEROS_HOME=/home/careeros
+      REPO_DIR="$CAREEROS_HOME/app"
+
+      mkdir -p "$(dirname "$LOG")"
+      exec > >(tee -a "$LOG") 2>&1
+
+      log()    { printf '[%s] %s\n' "$(date -u +%T)" "$*"; }
+      banner() { log ""; log "══════════════════════════════════"; log "  $*"; log "══════════════════════════════════"; }
+
+      wait_apt_lock() {
+        local i=0
+        while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 \
+           || fuser /var/lib/apt/lists/lock     >/dev/null 2>&1; do
+          ((i++)); (( i % 6 == 0 )) && log "Waiting for apt lock (${i}0s)..."
+          sleep 10
+        done
+      }
+
+      apt_install() {
+        wait_apt_lock
+        DEBIAN_FRONTEND=noninteractive apt-get install -y \
+          -o Dpkg::Options::='--force-confnew' "$@"
+      }
+
+      banner "CareerOS bootstrap started $(date -u)"
+
+      # ── Step 1: system baseline ──────────────────────────────────
+      banner "Step 1: system baseline"
+      wait_apt_lock
+      DEBIAN_FRONTEND=noninteractive apt-get update -y
+      apt_install ufw curl git build-essential python3 gnupg ca-certificates \
+        debian-keyring debian-archive-keyring apt-transport-https
+
+      ufw --force reset
+      ufw default deny incoming
+      ufw default allow outgoing
+      ufw allow ssh
+      ufw allow 80/tcp
+      ufw allow 443/tcp
+      ufw --force enable
+
+      id -u careeros &>/dev/null || useradd -m -s /bin/bash careeros
+      log "Step 1 done"
+
+      # ── Step 2: Node 20 ──────────────────────────────────────────
+      banner "Step 2: Node 20 + pm2"
+      if ! command -v node &>/dev/null || [[ "$(node -v | cut -d. -f1)" != "v20" ]]; then
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+        apt_install nodejs
+      fi
+      log "node $(node -v) · npm $(npm -v)"
+      npm install -g pm2 --silent
+      log "Step 2 done"
+
+      # ── Step 3: clone repo ───────────────────────────────────────
+      banner "Step 3: clone repo"
+      if [[ -d "$REPO_DIR/.git" ]]; then
+        su - careeros -c "
+          git -C '$REPO_DIR' fetch origin
+          git -C '$REPO_DIR' checkout '$BRANCH'
+          git -C '$REPO_DIR' reset --hard 'origin/$BRANCH'
+        "
+      else
+        su - careeros -c "git clone --depth 1 --branch '$BRANCH' '$REPO_URL' '$REPO_DIR'"
+      fi
+      log "Step 3 done"
+
+      # ── Step 4: write .env + private profile ─────────────────────
+      banner "Step 4: write .env + private profile"
+      mkdir -p "$REPO_DIR/private"
+
+      cat > "$REPO_DIR/.env" << ENV_EOF
+      NODE_ENV=production
+      ADMIN_EMAIL=${ADMIN_EMAIL}
+      UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
+      UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+      SESSION_SECRET=${SESSION_SECRET}
+      SETUP_SECRET=${SETUP_SECRET}
+      CRON_SECRET=${CRON_SECRET}
+      TOGETHER_API_KEY=${TOGETHER_API_KEY}
+      AI_MODEL=${AI_MODEL}
+      AI_VISION_MODEL=${AI_VISION_MODEL}
+      OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      RESEND_API_KEY=${RESEND_API_KEY}
+      CAREEROS_PRIVATE_DIR=${REPO_DIR}/private
+      CAREEROS_DB_PATH=${REPO_DIR}/private/careeros.db
+      ENV_EOF
+
+      printf '%s\n' "$ADMIN_PROFILE_JSON" > "$REPO_DIR/private/admin-profile.json"
+      chown -R careeros:careeros "$REPO_DIR"
+      chmod 600 "$REPO_DIR/.env" "$REPO_DIR/private/admin-profile.json"
+      log "Step 4 done"
+
+      # ── Step 5: npm install + build ──────────────────────────────
+      banner "Step 5: npm install + build"
+      npm_build() {
+        su - careeros -c "cd '$REPO_DIR' && npm install" && \
+        su - careeros -c "cd '$REPO_DIR' && npm run build"
+      }
+      if ! npm_build; then
+        log "First attempt failed; retrying in 15s"
+        sleep 15; npm_build
+      fi
+      log "Step 5 done"
+
+      # ── Step 6: PM2 ──────────────────────────────────────────────
+      banner "Step 6: PM2"
+      su - careeros -c "pm2 delete careeros 2>/dev/null || true"
+      su - careeros -c "cd '$REPO_DIR' && pm2 start npm --name careeros -- start"
+      su - careeros -c "pm2 save"
+      STARTUP_CMD=$(env PATH="$PATH:/usr/bin:/usr/local/bin" \
+        pm2 startup systemd -u careeros --hp "$CAREEROS_HOME" --silent | grep 'sudo env' || true)
+      if [[ -n "$STARTUP_CMD" ]]; then eval "$STARTUP_CMD"
+      else env PATH="$PATH:/usr/bin:/usr/local/bin" \
+        pm2 startup systemd -u careeros --hp "$CAREEROS_HOME" | tail -1 | bash || true; fi
+      systemctl enable pm2-careeros 2>/dev/null || true
+      log "Step 6 done"
+
+      # ── Step 7: DuckDNS ──────────────────────────────────────────
+      banner "Step 7: DuckDNS"
+      DUCKDNS_API="https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
+      UPDATE_RESULT=$(curl -sf "$DUCKDNS_API" 2>&1 || echo "ERROR")
+      log "DuckDNS update: $UPDATE_RESULT"
+      (crontab -l 2>/dev/null | grep -v 'duckdns.org/update'; \
+        echo "*/5 * * * * curl -sf '${DUCKDNS_API}' >/dev/null 2>&1") | crontab -
+      log "Step 7 done"
+
+      # ── Step 8: Caddy ────────────────────────────────────────────
+      banner "Step 8: Caddy"
+      if ! command -v caddy &>/dev/null; then
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+          | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+          | tee /etc/apt/sources.list.d/caddy-stable.list
+        wait_apt_lock && apt-get update -y
+        apt_install caddy
+      fi
+      cat > /etc/caddy/Caddyfile << CADDY_EOF
+      ${DOMAIN} {
+          reverse_proxy localhost:3000
+      }
+      CADDY_EOF
+      systemctl enable caddy
+      systemctl restart caddy
+      log "Step 8 done"
+
+      # ── Step 9: wait for app + admin setup ───────────────────────
+      banner "Step 9: wait for app + admin setup"
+      APP_UP=false
+      for i in $(seq 1 72); do
+        if curl -sf http://localhost:3000 >/dev/null 2>&1; then
+          APP_UP=true; log "App responded on attempt $i"; break
+        fi
+        log "Waiting... attempt $i/72"; sleep 5
+      done
+
+      if [[ "$APP_UP" != "true" ]]; then
+        log "WARNING: app did not respond within 6 min; skipping admin setup"
+      else
+        SETUP_HTTP=$(curl -sf -w '\n%{http_code}' -X POST http://localhost:3000/api/admin/setup \
+          -H "Content-Type: application/json" \
+          -d "{\"setupSecret\":\"${SETUP_SECRET}\",\"adminPassword\":\"${ADMIN_PASSWORD}\"}" \
+          2>&1 || echo -e "\nCURL_FAILED")
+        HTTP_CODE=$(printf '%s' "$SETUP_HTTP" | tail -1)
+        SETUP_BODY=$(printf '%s' "$SETUP_HTTP" | head -1)
+        if [[ "$HTTP_CODE" == "200" ]]; then log "Admin account created"
+        elif [[ "$HTTP_CODE" == "409" ]]; then log "Admin already exists (OK)"
+        else log "WARNING: admin setup HTTP $HTTP_CODE — $SETUP_BODY"; fi
+      fi
+      log "Step 9 done"
+
+      # ── Step 10: optional Hermes stage ───────────────────────────
+      banner "Step 10: optional Hermes stage"
+
+      run_hermes() {
+        set -euo pipefail
+        local INSTALLER_URL=""
+        for url in \
+          "https://raw.githubusercontent.com/NousResearch/hermes/main/install.sh" \
+          "https://install.hermes-ai.dev/install.sh"; do
+          if curl -sf --max-time 10 --head "$url" >/dev/null 2>&1; then
+            INSTALLER_URL="$url"; break
+          fi
+        done
+        [[ -z "$INSTALLER_URL" ]] && { log "[hermes] installer not reachable"; return 1; }
+        curl -fsSL "$INSTALLER_URL" | bash
+        HERMES_BIN=$(command -v hermes 2>/dev/null || echo "")
+        [[ -z "$HERMES_BIN" ]] && { log "[hermes] binary not found"; return 1; }
+        mkdir -p "$CAREEROS_HOME/.config/hermes"
+        cat > "$CAREEROS_HOME/.config/hermes/config.yaml" << HERMES_CONF
+      provider: openrouter
+      openrouter:
+        api_key: "${OPENROUTER_API_KEY}"
+        model: "anthropic/claude-opus-4"
+      mcp_servers:
+        careeros:
+          command: npm
+          args: ["--prefix","${REPO_DIR}","run","mcp:dev"]
+          env:
+            CAREEROS_PRIVATE_DIR: "${REPO_DIR}/private"
+            CAREEROS_DB_PATH: "${REPO_DIR}/private/careeros.db"
+            ADMIN_EMAIL: "${ADMIN_EMAIL}"
+            NODE_ENV: "production"
+      HERMES_CONF
+        chown -R careeros:careeros "$CAREEROS_HOME/.config/hermes"
+        chmod 600 "$CAREEROS_HOME/.config/hermes/config.yaml"
+        TEST_OUT=$(su - careeros -c "'$HERMES_BIN' mcp test careeros 2>&1" || echo "MCP_TEST_FAILED")
+        log "[hermes] MCP test: $TEST_OUT"
+      }
+
+      if ! run_hermes 2>&1; then
+        log "Hermes did not complete — writing /root/HERMES-NEXT-STEPS.txt"
+        cat > /root/HERMES-NEXT-STEPS.txt << 'HERMES_STEPS'
+      CareerOS — Manual Hermes Setup
+      ================================
+      The Hermes auto-install did not complete. Steps to finish manually:
+
+      1. Find the current installer in mcp/HERMES.md or at the official Hermes
+         documentation and install it:
+           curl -fsSL <installer-url> | bash
+
+      2. Write ~/.config/hermes/config.yaml (path may vary — check `hermes --help`):
+           provider: openrouter
+           openrouter:
+             api_key: <OPENROUTER_API_KEY>
+             model: anthropic/claude-opus-4
+           mcp_servers:
+             careeros:
+               command: npm
+               args: ["--prefix","/home/careeros/app","run","mcp:dev"]
+               env:
+                 CAREEROS_PRIVATE_DIR: /home/careeros/app/private
+                 CAREEROS_DB_PATH: /home/careeros/app/private/careeros.db
+                 ADMIN_EMAIL: <ADMIN_EMAIL>
+                 NODE_ENV: production
+
+      3. hermes mcp test careeros
+
+      4. See /home/careeros/app/mcp/HERMES.md for full integration details.
+      HERMES_STEPS
+      fi
+      log "Step 10 done"
+
+      # ── Step 11: summary ─────────────────────────────────────────
+      banner "Step 11: final summary"
+      LIVE_URL="https://${DOMAIN}"
+      PM2_STATUS=$(su - careeros -c "pm2 list 2>&1" | grep careeros | \
+        awk '{for(i=1;i<=NF;i++) if($i~/online|stopped|errored/) {print $i; exit}}' || echo "unknown")
+      CADDY_STATUS=$(systemctl is-active caddy 2>/dev/null || echo "unknown")
+      APP_LOCAL=$(curl -sf http://localhost:3000 >/dev/null 2>&1 && echo "responding" || echo "not responding")
+
+      cat > /root/CAREEROS-STATUS.txt << SUMM
+      CareerOS Bootstrap Summary
+      ===========================
+      Completed : $(date -u)
+      Live URL  : ${LIVE_URL}
+      App user  : careeros
+      Repo      : ${REPO_DIR}
+      Log       : ${LOG}
+
+      Service status
+        pm2 careeros : ${PM2_STATUS}
+        caddy        : ${CADDY_STATUS}
+        app (local)  : ${APP_LOCAL}
+
+      Useful commands
+        su - careeros -c 'pm2 logs careeros'
+        systemctl status caddy
+        tail -f ${LOG}
+
+      Next
+        1. Open ${LIVE_URL} in a browser (TLS provisions in 30-60s)
+        2. Log in with ${ADMIN_EMAIL}
+        3. If Hermes pending: see /root/HERMES-NEXT-STEPS.txt
+      SUMM
+
+      cat /root/CAREEROS-STATUS.txt
+      log "=== Bootstrap complete ==="
+
+runcmd:
+  - [bash, /root/careeros-setup.sh]
