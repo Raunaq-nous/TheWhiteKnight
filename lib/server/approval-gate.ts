@@ -3,33 +3,19 @@ import { approvalRepo } from "./repositories/approval-repo";
 import type { ApprovalAction } from "./repositories/types";
 import { notifyOperator } from "./channels/notify-operator";
 
-export type ApprovalResult =
-  | { staged: true; approvalId: string }
-  | { executed: true; approvalId: string };
+export type ApprovalResult = { staged: true; approvalId: string };
 
 /**
  * Gate for any external action that requires human approval.
  *
- * - No token or invalid token: stages the action (returns { staged, approvalId }).
- * - Valid, unconsumed, matching token: consumes it and returns { executed, approvalId }.
- *
- * Token minting (resolve) is intentionally NOT exposed here. It is only reachable
- * via the JWT-gated app API route so the agent can never self-approve.
+ * Always stages — the agent can never execute. Real execution happens only
+ * when a human approves via the JWT-gated /api/approvals/[id] route, which
+ * mints a token, calls approval-executor, and consumes — all server-side.
  */
 export function requireApproval(
   userEmail: string,
   action: ApprovalAction,
-  approvalToken?: string,
 ): ApprovalResult {
-  if (approvalToken) {
-    const consumed = approvalRepo.consume(approvalToken, {
-      kind: action.kind,
-      applicationId: action.applicationId,
-    });
-    if (consumed) {
-      return { executed: true, approvalId: consumed.id };
-    }
-  }
   const approvalId = approvalRepo.create(userEmail, action);
   notifyOperator(userEmail, approvalId, action).catch(() => {});
   return { staged: true, approvalId };

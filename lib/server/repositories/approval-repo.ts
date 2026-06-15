@@ -114,3 +114,8 @@ export function markApprovalConsumed(id: string): void {
     "UPDATE approvals SET status = 'consumed', consumed_at = ? WHERE id = ?"
   ).run(now, id);
 }
+
+/** Compute the canonical digest for an action. Exported for executor tamper-check. */
+export function computeActionDigest(action: ApprovalAction): string {
+  return computeDigest(action);
+}
