@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Runs every time the Codespace/devcontainer starts.
-# Starts the dev server, waits for it, runs one-time admin setup, publishes port.
+# Starts the production server, waits for it, runs one-time admin setup, publishes port.
 set -euo pipefail
 
-echo "[start] Starting CareerOS dev server on port 3000..."
-npm run dev &
+echo "[start] Starting CareerOS on port 3000..."
+npm start &
 DEV_PID=$!
 
-# ── Wait up to 60s for port 3000 ─────────────────────────────────────────────
+# -- Wait up to 60s for port 3000 --------------------------------------------
 echo "[start] Waiting for port 3000..."
 TRIES=0
 until curl -sf http://localhost:3000 >/dev/null 2>&1; do
@@ -21,7 +21,7 @@ until curl -sf http://localhost:3000 >/dev/null 2>&1; do
 done
 echo "[start] Port 3000 is up."
 
-# ── Admin setup (idempotent; 409 = already exists, that is fine) ─────────────
+# -- Admin setup (idempotent; 409 = already exists, that is fine) ------------
 if [[ -n "${SETUP_SECRET:-}" && -n "${ADMIN_PASSWORD:-}" ]]; then
   HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST http://localhost:3000/api/admin/setup \
@@ -38,12 +38,12 @@ else
   echo "[start] To create the admin account, POST /api/admin/setup with setupSecret + adminPassword."
 fi
 
-# ── Make port 3000 public in Codespaces ──────────────────────────────────────
+# -- Make port 3000 public in Codespaces -------------------------------------
 if [[ -n "${CODESPACE_NAME:-}" ]]; then
   gh codespace ports visibility 3000:public -c "$CODESPACE_NAME" 2>/dev/null \
     && echo "[start] Port 3000 is now public." \
     || echo "[start] Auto-publish failed. Manual: Ports tab -> right-click 3000 -> Port Visibility -> Public"
 fi
 
-echo "[start] CareerOS running. Streaming dev server output..."
+echo "[start] CareerOS running. Streaming server output..."
 wait "$DEV_PID"
