@@ -4,8 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { saveProfile, getSeedProfile, Profile, RoleType, ROLE_TYPES } from "../../lib/profile";
 
-const RAUNAQ_EMAIL = "raunaq1509@gmail.com";
-
 const STEPS = ["Role", "Identity", "Targets", "Narrative", "Compensation", "CV & Skills"];
 
 type RoleConfig = {
@@ -218,8 +216,6 @@ export default function OnboardPage() {
     }).catch(() => {});
   }, []);
 
-  const isRaunaq = userEmail === RAUNAQ_EMAIL;
-
   const handleLoadSeed = () => {
     saveProfile(getSeedProfile());
     router.push("/");
@@ -313,18 +309,6 @@ export default function OnboardPage() {
             Set up your profile
           </div>
         </div>
-
-        {isRaunaq && (
-          <div style={{ background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.3)", borderRadius: "var(--radius)", padding: 20, marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-            <div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-primary)", marginBottom: 4 }}>Welcome back, Raunaq.</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--text-secondary)" }}>Load your saved profile, or start fresh below.</div>
-            </div>
-            <button className="btn btn-primary" onClick={handleLoadSeed} style={{ whiteSpace: "nowrap", padding: "8px 16px" }}>
-              LOAD MY PROFILE
-            </button>
-          </div>
-        )}
 
         <div style={{ display: "flex", gap: 6, marginBottom: 32 }}>
           {STEPS.map((s, i) => (

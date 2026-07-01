@@ -1,5 +1,7 @@
 // Settings for non-LLM integrations: contact discovery, email sending, job scanning.
 
+import { getCache, updateCacheIntegrationSettings, wt_saveSettings } from "./data-cache";
+
 export type IntegrationSettings = {
   exaApiKey?: string;
   apolloApiKey?: string;
@@ -12,19 +14,15 @@ export type IntegrationSettings = {
   adzunaAppKey?: string;
 };
 
-const KEY = "careeros_integration_settings";
-const DEFAULT: IntegrationSettings = {};
-
 export function getIntegrationSettings(): IntegrationSettings {
-  if (typeof window === "undefined") return DEFAULT;
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return DEFAULT;
-  try { return JSON.parse(raw); } catch { return DEFAULT; }
+  return getCache().integrationSettings ?? {};
 }
 
-export function saveIntegrationSettings(s: IntegrationSettings) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY, JSON.stringify(s));
+export function saveIntegrationSettings(s: IntegrationSettings): void {
+  updateCacheIntegrationSettings(s);
+  wt_saveSettings("integration_settings", s).catch(e =>
+    console.error("[CareerOS] saveIntegrationSettings failed:", e)
+  );
 }
 
 export const INTEGRATION_OPTIONS = [

@@ -16,3 +16,8 @@ Thumbs.db
 extracted/
 extracted-files/
 tsconfig.tsbuildinfo
+private/
+persona-unzipped/
+config/profile.yml
+config/target-roles.yml
+persona/

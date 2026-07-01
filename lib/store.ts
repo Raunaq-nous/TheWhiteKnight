@@ -1,3 +1,10 @@
+import {
+  getCache,
+  wt_saveApplication,
+  wt_updateApplication,
+  wt_deleteApplication,
+} from "./data-cache";
+
 export type InterviewRound = "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
 
 export type Interview = {
@@ -54,6 +61,12 @@ export type Application = {
   resumeVersions: any[];
   notes: string;
   emailEvents: any[];
+  stagedForms?: Array<{
+    screenshotRef: string;
+    filledFields: Array<{ field: string; value: string }>;
+    stagedAt: string;
+    formUrl?: string;
+  }>;
   createdAt: string;
   updatedAt: string;
   days?: number;
@@ -77,57 +90,23 @@ export type TargetBucket = {
 };
 
 export function getApplications(): Application[] {
-  if (typeof window === "undefined") return [];
-  const data = localStorage.getItem("careeros_apps");
-  if (!data) return [];
-  try {
-    const apps = JSON.parse(data);
-    if (!Array.isArray(apps)) return [];
-    return apps.map((app: any) => ({
-      ...app,
-      days: Math.floor((Date.now() - new Date(app.capturedAt).getTime()) / (1000 * 60 * 60 * 24))
-    }));
-  } catch {
-    return [];
-  }
+  return getCache().applications;
 }
 
-export function saveApplication(app: Application) {
-  if (typeof window === "undefined") return;
-  const raw = localStorage.getItem("careeros_apps");
-  const apps: Application[] = raw ? JSON.parse(raw) : [];
-  const existingIndex = apps.findIndex(a => a.id === app.id);
-  if (existingIndex >= 0) {
-    apps[existingIndex] = app;
-  } else {
-    apps.push(app);
-  }
-  localStorage.setItem("careeros_apps", JSON.stringify(apps));
-  window.dispatchEvent(new Event("careeros-data-change"));
+export function saveApplication(app: Application): void {
+  wt_saveApplication(app).catch(e => console.error("[CareerOS] saveApplication failed:", e));
 }
 
 export function getApplication(slug: string): Application | undefined {
-  return getApplications().find(a => a.slug === slug);
+  return getCache().applications.find(a => a.slug === slug);
 }
 
-export function updateApplication(id: string, changes: Partial<Application>) {
-  if (typeof window === "undefined") return;
-  const raw = localStorage.getItem("careeros_apps");
-  const apps: Application[] = raw ? JSON.parse(raw) : [];
-  const idx = apps.findIndex(a => a.id === id);
-  if (idx >= 0) {
-    apps[idx] = { ...apps[idx], ...changes, updatedAt: new Date().toISOString() };
-    localStorage.setItem("careeros_apps", JSON.stringify(apps));
-    window.dispatchEvent(new Event("careeros-data-change"));
-  }
+export function updateApplication(id: string, changes: Partial<Application>): void {
+  wt_updateApplication(id, changes).catch(e => console.error("[CareerOS] updateApplication failed:", e));
 }
 
-export function deleteApplication(id: string) {
-  if (typeof window === "undefined") return;
-  const raw = localStorage.getItem("careeros_apps");
-  const apps: Application[] = raw ? JSON.parse(raw) : [];
-  localStorage.setItem("careeros_apps", JSON.stringify(apps.filter(a => a.id !== id)));
-  window.dispatchEvent(new Event("careeros-data-change"));
+export function deleteApplication(id: string): void {
+  wt_deleteApplication(id).catch(e => console.error("[CareerOS] deleteApplication failed:", e));
 }
 
 export function generateSlug(company: string, role: string) {
@@ -137,4 +116,3 @@ export function generateSlug(company: string, role: string) {
 export function generateId() {
   return Math.random().toString(36).substr(2, 9);
 }
-

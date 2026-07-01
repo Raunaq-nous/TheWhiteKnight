@@ -7,6 +7,7 @@ import { MODEL_OPTIONS, getModelSettings, saveModelSettings, ModelProvider } fro
 import { INTEGRATION_OPTIONS, getIntegrationSettings, saveIntegrationSettings, IntegrationSettings } from "../../lib/integration-settings";
 
 type InviteCode = { code: string; used: boolean; usedBy: string | null; createdAt: string };
+const LAST_BACKUP_KEY = "careeros_last_backup_at";
 
 export default function SettingsPage() {
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>("together");
@@ -19,6 +20,11 @@ export default function SettingsPage() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [newCode, setNewCode] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<"merge" | "replace">("merge");
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
 
   useEffect(() => {
     const s = getModelSettings();
@@ -27,6 +33,7 @@ export default function SettingsPage() {
       setApiKeys(prev => ({ ...prev, [s.provider]: s.apiKey! }));
     }
     setIntegrations(getIntegrationSettings());
+    setLastBackup(localStorage.getItem(LAST_BACKUP_KEY));
     fetch("/api/auth/me").then(r => r.json()).then(d => {
       if (d.user?.isAdmin) {
         setIsAdmin(true);
@@ -57,6 +64,49 @@ export default function SettingsPage() {
   const copyInviteLink = (code: string) => {
     const url = `${window.location.origin}/register?invite=${code}`;
     navigator.clipboard.writeText(url).then(() => { setCopiedCode(code); setTimeout(() => setCopiedCode(null), 2000); }).catch(() => {});
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/data/export", { credentials: "include" });
+      if (!res.ok) { setImportStatus("Export failed: " + res.status); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ?? "careeros-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      const now = new Date().toISOString();
+      localStorage.setItem(LAST_BACKUP_KEY, now);
+      setLastBackup(now);
+    } catch (e: any) {
+      setImportStatus("Export error: " + e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importFile) return;
+    setImportStatus("Reading file...");
+    try {
+      const text = await importFile.text();
+      const data = JSON.parse(text);
+      const res = await fetch("/api/data/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ data, mode: importMode }),
+      });
+      const result = await res.json();
+      if (!res.ok) { setImportStatus("Import failed: " + (result.error ?? res.status)); return; }
+      setImportStatus(`Imported: ${result.imported?.applications ?? 0} applications, ${result.imported?.contacts ?? 0} contacts. Reload to see changes.`);
+      setImportFile(null);
+    } catch (e: any) {
+      setImportStatus("Import error: " + e.message);
+    }
   };
 
   const handleIntSave = () => {
@@ -305,6 +355,70 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+
+        {/* Export / Import */}
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginTop: 24 }}>
+          <div className="label" style={{ marginBottom: 16 }}>DATA EXPORT / IMPORT</div>
+
+          {/* Backup reminder */}
+          {lastBackup ? (
+            <div style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginBottom: 12 }}>
+              Last export: {new Date(lastBackup).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+            </div>
+          ) : (
+            <div style={{ background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.3)", borderRadius: "var(--radius)", padding: "8px 12px", marginBottom: 12, fontSize: "0.625rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+              No export on record. Export a backup so you can restore data if needed.
+            </div>
+          )}
+
+          <button
+            className="btn btn-primary"
+            style={{ marginBottom: 20 }}
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting ? "EXPORTING..." : "EXPORT ALL DATA"}
+          </button>
+
+          <div className="label" style={{ fontSize: "0.5625rem", marginBottom: 8 }}>IMPORT FROM JSON BACKUP</div>
+          <div style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginBottom: 8, lineHeight: 1.5 }}>
+            Merge: adds/updates records; safe to re-run. Replace: wipes all data first, then restores.<br />
+            Note: cross-origin migration (e.g. Vercel demo to local) requires export then import — localStorage auto-migration only works same-origin.
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            {(["merge", "replace"] as const).map(m => (
+              <button key={m} className={`btn${importMode === m ? " btn-primary" : ""}`}
+                style={{ fontSize: "0.5rem", padding: "3px 10px" }}
+                onClick={() => setImportMode(m)}>
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="file"
+              accept=".json"
+              onChange={e => setImportFile(e.target.files?.[0] ?? null)}
+              style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-primary)", flex: 1 }}
+            />
+            <button
+              className="btn"
+              style={{ fontSize: "0.625rem", padding: "6px 12px" }}
+              disabled={!importFile}
+              onClick={handleImport}
+            >
+              IMPORT
+            </button>
+          </div>
+
+          {importStatus && (
+            <div style={{ marginTop: 10, fontSize: "0.625rem", fontFamily: "var(--font-mono)", color: importStatus.startsWith("Import") && !importStatus.includes("failed") && !importStatus.includes("error") ? "var(--success)" : "var(--error)" }}>
+              {importStatus}
+            </div>
+          )}
+        </div>
       </main>
       <Footer />
     </div>

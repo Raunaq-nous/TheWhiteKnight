@@ -1,0 +1,25 @@
+services:
+  careeros:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Required — set these in a .env file next to docker-compose.yml
+      # or export them in your shell before running docker compose up.
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY}
+      AI_MODEL: ${AI_MODEL:-deepseek-ai/DeepSeek-V4-Pro}
+      AI_VISION_MODEL: ${AI_VISION_MODEL:-meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8}
+      UPSTASH_REDIS_REST_URL: ${UPSTASH_REDIS_REST_URL}
+      UPSTASH_REDIS_REST_TOKEN: ${UPSTASH_REDIS_REST_TOKEN}
+      SESSION_SECRET: ${SESSION_SECRET}
+      SETUP_SECRET: ${SETUP_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # Single env var covers both the DB and the admin-profile.json seed.
+      # Both live inside the mounted volume so they survive image rebuilds.
+      CAREEROS_PRIVATE_DIR: /data/private
+    volumes:
+      # Mount the private/ directory from the host into the container.
+      # This is where careeros.db and admin-profile.json live.
+      # The path on the left is relative to this docker-compose.yml file.
+      - ./private:/data/private

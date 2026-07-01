@@ -5,23 +5,34 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "mcp:dev": "tsx --tsconfig mcp/tsconfig.json mcp/server.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/pdf-parse": "^1.1.5",
     "@upstash/redis": "^1.37.0",
     "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.10.0",
     "jose": "^6.2.3",
     "next": "^16.2.4",
     "pdf-parse": "^1.1.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "resend": "^6.12.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "@vitest/coverage-v8": "^4.1.8",
+    "tsx": "^4.22.4",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.8"
   }
 }

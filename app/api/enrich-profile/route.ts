@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
+import { ProfileSuggestionResultSchema } from "../../../lib/schemas";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -65,7 +66,8 @@ Output JSON only:
     const data = await chatJSON<{ suggestions: ProfileSuggestion[] }>(
       [{ role: "user", content: prompt }],
       { temperature: 0, maxTokens: 600 },
-      providerSettings
+      providerSettings,
+      ProfileSuggestionResultSchema
     );
 
     const suggestions = (data.suggestions ?? []).filter(

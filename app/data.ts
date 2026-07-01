@@ -1,24 +1,10 @@
-export interface Application {
-  slug: string;
-  company: string;
-  role: string;
-  location: string;
-  status: "sourced" | "reviewed" | "applied" | "interview" | "offer" | "rejected";
-  score: number;
-  days: number;
-  bucket: string;
-  remote: boolean;
-  source: string;
-  capturedAt: string;
-  nextAction: string;
-  contacts: string[];
-}
+import type { Application } from "../lib/store";
 
 export const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 export const BUCKETS = ["MBB Strategy", "AI Product", "Chief of Staff", "Strategy Ops"] as const;
 
-export const applications: Application[] = [
+export const applications = [
   {
     slug: "bain-project-leader",
     company: "Bain & Company",
@@ -169,4 +155,4 @@ export const applications: Application[] = [
     nextAction: "Awaiting response",
     contacts: []
   }
-];
+] as unknown as Application[];

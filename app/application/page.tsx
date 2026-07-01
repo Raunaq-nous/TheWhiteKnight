@@ -65,12 +65,8 @@ function ApplicationDetail() {
   if (loadingApp) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>LOADING...</div>;
   if (!slug) return <div style={{ padding: 48, textAlign: "center", fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>NO APPLICATION SELECTED</div>;
   if (!app) {
-    let storedSlugs: string[] = [];
-    try {
-      const raw = typeof window !== "undefined" ? localStorage.getItem("careeros_apps") : null;
-      const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) storedSlugs = parsed.map((a: any) => a.slug).filter(Boolean);
-    } catch {}
+    const { getApplications } = require("../../lib/store");
+    const storedSlugs: string[] = getApplications().map((a: any) => a.slug).filter(Boolean);
     return (
       <div style={{ padding: 48, maxWidth: 480, margin: "0 auto", fontFamily: "var(--font-mono)" }}>
         <div style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 12, color: "var(--text-primary)" }}>APPLICATION NOT FOUND</div>
@@ -78,14 +74,14 @@ function ApplicationDetail() {
         {storedSlugs.length > 0 ? (
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", marginBottom: 6 }}>Stored applications ({storedSlugs.length}):</div>
-            {storedSlugs.map(s => (
+            {storedSlugs.map((s: string) => (
               <div key={s}>
                 <a href={`/application/?slug=${s}`} style={{ fontSize: "0.75rem", color: "var(--accent)", display: "block", padding: "2px 0" }}>{s}</a>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ fontSize: "0.75rem", color: "var(--error)", marginBottom: 24 }}>No applications found in localStorage on this browser.</div>
+          <div style={{ fontSize: "0.75rem", color: "var(--error)", marginBottom: 24 }}>No applications found in the database for this device.</div>
         )}
         <a href="/" style={{ fontSize: "0.75rem", color: "var(--accent)" }}>← BACK TO PIPELINE</a>
       </div>

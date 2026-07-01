@@ -81,7 +81,7 @@ export function ContactsPanel({ app, profile, onClose }: { app: Application; pro
     const cardKey = c.linkedinUrl ?? c.email ?? c.name;
     setDrafting(`${cardKey}-${action}`);
 
-    const stored: Contact = addContact({
+    const stored: Contact = await addContact({
       name: c.name,
       title: c.title,
       company: c.company,

@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chatJSON, ProviderSettings } from "../../../lib/ai-client";
-import { afScoringPrompt, AFScoreResult } from "../../../lib/prompts";
+import { checkRateLimit } from "../../../lib/rate-limit";
+import { ProviderSettings } from "../../../lib/ai-client";
+import { scoreJob } from "../../../lib/server/services/scoring-service";
 import type { Profile } from "../../../lib/profile";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") ?? "local";
+  const rl = checkRateLimit(`score:${ip}`, 40, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: "Rate limit exceeded" }, {
+      status: 429,
+      headers: { "Retry-After": String(rl.retryAfterSecs) }
+    });
+  }
   try {
     const { jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings } = await req.json() as {
       jdText: string;
@@ -27,24 +36,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing target archetypes (buckets)" }, { status: 400 });
     }
 
-    const result = await chatJSON<AFScoreResult>(
-      [{ role: "user", content: afScoringPrompt(profile, jdText, { company, role, location, seniority, sector, remote }, buckets) }],
-      { temperature: 0.2, maxTokens: 3000 },
-      providerSettings
-    );
-
-    const totalScore10 = Math.max(0, Math.min(10, result.global * 2));
-    const recommendationLabel =
-      result.recommendation === "apply_immediately" ? "Apply Immediately" :
-      result.recommendation === "apply" ? "Apply" :
-      result.recommendation === "review_manually" ? "Review Manually" : "Skip";
-
-    return NextResponse.json({
-      ...result,
-      totalScore: totalScore10,
-      recommendationLabel,
-      parsed: result.jdParsed,
-    });
+    const result = await scoreJob({ jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings });
+    return NextResponse.json(result);
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Scoring failed" }, { status: 500 });
   }

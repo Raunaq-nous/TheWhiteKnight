@@ -1,6 +1,8 @@
-// Client-side notification / action queue stored in localStorage.
+// Notification/approval queue — reads from cache, writes through to server.
 // Every high-stakes action (send DM, send outreach, follow up) queues here
 // and waits for explicit user confirmation before anything is executed.
+
+import { getCache, wt_addNotification, wt_updateNotification } from "./data-cache";
 
 export type NotifType =
   | "pending_dm"
@@ -8,8 +10,10 @@ export type NotifType =
   | "pending_outreach"
   | "pending_ceo_email"
   | "followup_reminder"
+  | "follow_up_scheduled"
   | "interview_reminder"
   | "offer_deadline"
+  | "approval_pending"
   | "info";
 
 export type Notification = {
@@ -33,41 +37,26 @@ export type Notification = {
   sentAt?: string;
 };
 
-const KEY = "careeros_notifications";
-
-function load(): Notification[] {
-  if (typeof window === "undefined") return [];
-  try { return JSON.parse(localStorage.getItem(KEY) ?? "[]"); } catch { return []; }
-}
-
-function save(notifs: Notification[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY, JSON.stringify(notifs));
-  window.dispatchEvent(new Event("careeros-notif-change"));
-}
-
 export function getNotifications(): Notification[] {
-  return load().filter(n => !n.dismissed).sort((a, b) =>
-    (a.dueAt ?? a.createdAt) < (b.dueAt ?? b.createdAt) ? -1 : 1
-  );
+  return getCache().notifications
+    .filter(n => !n.dismissed)
+    .sort((a, b) => ((a.dueAt ?? a.createdAt) < (b.dueAt ?? b.createdAt) ? -1 : 1));
 }
 
-export function addNotification(n: Omit<Notification, "id" | "createdAt" | "dismissed">): string {
-  const all = load();
-  const id = Math.random().toString(36).slice(2, 10);
-  all.push({ ...n, id, createdAt: new Date().toISOString(), dismissed: false });
-  save(all);
-  return id;
+export function addNotification(n: Omit<Notification, "id" | "createdAt" | "dismissed">): Promise<string> {
+  return wt_addNotification(n);
 }
 
 export function dismissNotification(id: string): void {
-  const all = load().map(n => n.id === id ? { ...n, dismissed: true } : n);
-  save(all);
+  wt_updateNotification(id, { dismissed: true }).catch(e =>
+    console.error("[CareerOS] dismissNotification failed:", e)
+  );
 }
 
 export function updateNotification(id: string, changes: Partial<Notification>): void {
-  const all = load().map(n => n.id === id ? { ...n, ...changes } : n);
-  save(all);
+  wt_updateNotification(id, changes).catch(e =>
+    console.error("[CareerOS] updateNotification failed:", e)
+  );
 }
 
 export function markSent(id: string): void {
@@ -94,7 +83,7 @@ export function queueDM(
   role: string,
   generatedContent: string,
   contact?: { name: string; linkedinUrl?: string; contactId?: string }
-): string {
+): Promise<string> {
   return addNotification({
     type: "pending_dm",
     title: contact ? `Send LinkedIn DM to ${contact.name} — ${company}` : `Send LinkedIn DM — ${company}`,
@@ -115,7 +104,7 @@ export function queueReferralDM(
   role: string,
   generatedContent: string,
   contact: { name: string; linkedinUrl?: string; contactId?: string }
-): string {
+): Promise<string> {
   return addNotification({
     type: "pending_referral_dm",
     title: `Referral DM to ${contact.name} — ${company}`,
@@ -136,7 +125,7 @@ export function queueOutreach(
   role: string,
   generatedContent: string,
   contact?: { name: string; email?: string; linkedinUrl?: string; contactId?: string }
-): string {
+): Promise<string> {
   return addNotification({
     type: "pending_outreach",
     title: contact ? `Send HM Outreach to ${contact.name} — ${company}` : `Send HM Outreach — ${company}`,
@@ -158,7 +147,7 @@ export function queueCEOEmail(
   role: string,
   generatedContent: string,
   contact?: { name: string; email?: string; linkedinUrl?: string; contactId?: string }
-): string {
+): Promise<string> {
   return addNotification({
     type: "pending_ceo_email",
     title: contact ? `CEO Cold Email to ${contact.name} — ${company}` : `CEO Cold Email — ${company}`,
@@ -176,5 +165,7 @@ export function queueCEOEmail(
 
 export function getUnreadCount(): number {
   const now = new Date().toISOString();
-  return load().filter(n => !n.dismissed && !n.sent && (!n.dueAt || n.dueAt <= now)).length;
+  return getCache().notifications.filter(
+    n => !n.dismissed && !n.sent && (!n.dueAt || n.dueAt <= now)
+  ).length;
 }

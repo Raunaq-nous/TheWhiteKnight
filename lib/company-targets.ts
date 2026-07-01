@@ -176,23 +176,22 @@ export const DEFAULT_COMPANY_TARGETS: CompanyTarget[] = [
   ...INDIA_REGIONAL,
 ];
 
-const TARGETS_KEY = "careeros_company_targets";
+import { getCache, updateCacheCompanyTargets, wt_saveSettings } from "./data-cache";
 
 export function getCompanyTargets(): CompanyTarget[] {
-  if (typeof window === "undefined") return DEFAULT_COMPANY_TARGETS;
-  const raw = localStorage.getItem(TARGETS_KEY);
-  if (!raw) return DEFAULT_COMPANY_TARGETS;
-  try { return JSON.parse(raw); } catch { return DEFAULT_COMPANY_TARGETS; }
+  const cached = getCache().companyTargets;
+  return cached.length > 0 ? cached : DEFAULT_COMPANY_TARGETS;
 }
 
-export function saveCompanyTargets(targets: CompanyTarget[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TARGETS_KEY, JSON.stringify(targets));
+export function saveCompanyTargets(targets: CompanyTarget[]): void {
+  updateCacheCompanyTargets(targets);
+  wt_saveSettings("company_targets", targets).catch(e =>
+    console.error("[CareerOS] saveCompanyTargets failed:", e)
+  );
 }
 
-export function resetCompanyTargets() {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TARGETS_KEY, JSON.stringify(DEFAULT_COMPANY_TARGETS));
+export function resetCompanyTargets(): void {
+  saveCompanyTargets(DEFAULT_COMPANY_TARGETS);
 }
 
 export function getEnabledTargets(region?: Region, sector?: Sector): CompanyTarget[] {

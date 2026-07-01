@@ -1,0 +1,21 @@
+{
+  "name": "CareerOS",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "CareerOS",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
+}
