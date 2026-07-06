@@ -15,7 +15,13 @@ set -euo pipefail
 # NEVER commit a copy with real values — see deploy/README.md.
 # ============================================================
 
-# DuckDNS — free subdomain + auto-renewing DNS
+# SITE_DOMAIN — set this to skip DuckDNS entirely and use your own domain
+# (e.g. one you already point at this server's IP with an A/AAAA record).
+# Caddy will request its Let's Encrypt cert for this domain over HTTP.
+# Leave empty to fall back to the DuckDNS flow below.
+SITE_DOMAIN=""                         # e.g. careeros.example.com
+
+# DuckDNS — free subdomain + auto-renewing DNS (used only if SITE_DOMAIN is empty)
 # Register at https://www.duckdns.org → "Domains"
 DUCKDNS_SUBDOMAIN="REPLACE_ME"          # e.g. my-careeros
 DUCKDNS_TOKEN="REPLACE_ME"              # shown on your DuckDNS dashboard
@@ -69,7 +75,11 @@ PROFILE_END
 # ============================================================
 
 LOG=/var/log/careeros-setup.log
-DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+if [[ -n "$SITE_DOMAIN" ]]; then
+  DOMAIN="$SITE_DOMAIN"
+else
+  DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+fi
 CAREEROS_HOME=/home/careeros
 REPO_DIR="$CAREEROS_HOME/app"
 
@@ -235,16 +245,21 @@ log "Step 6 done"
 
 # ────────────────────────────────────────────────────────────
 # 7. DuckDNS — immediate update + cron every 5 min
+#    Skipped entirely when SITE_DOMAIN is set (step 6b already ran instead).
 # ────────────────────────────────────────────────────────────
 banner "Step 7: DuckDNS"
-DUCKDNS_API="https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
-UPDATE_RESULT=$(curl -sf "$DUCKDNS_API" 2>&1 || echo "ERROR")
-log "DuckDNS immediate update: $UPDATE_RESULT"
+if [[ -n "$SITE_DOMAIN" ]]; then
+  log "SITE_DOMAIN set (${SITE_DOMAIN}); skipping DuckDNS update"
+else
+  DUCKDNS_API="https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip="
+  UPDATE_RESULT=$(curl -sf "$DUCKDNS_API" 2>&1 || echo "ERROR")
+  log "DuckDNS immediate update: $UPDATE_RESULT"
 
-# Idempotent crontab — remove old entry, add fresh one
-(crontab -l 2>/dev/null | grep -v 'duckdns.org/update'; \
-  echo "*/5 * * * * curl -sf '${DUCKDNS_API}' >/dev/null 2>&1") | crontab -
-log "DuckDNS cron set (every 5 min)"
+  # Idempotent crontab — remove old entry, add fresh one
+  (crontab -l 2>/dev/null | grep -v 'duckdns.org/update'; \
+    echo "*/5 * * * * curl -sf '${DUCKDNS_API}' >/dev/null 2>&1") | crontab -
+  log "DuckDNS cron set (every 5 min)"
+fi
 log "Step 7 done"
 
 # ────────────────────────────────────────────────────────────
