@@ -3,8 +3,9 @@ import { getSession } from "../../../../lib/session";
 
 export const runtime = "nodejs";
 
+// Session status check — always returns 200 JSON, even when logged out,
+// so the client never has to distinguish "unauthenticated" from "network/parse error".
 export async function GET() {
   const session = await getSession();
-  if (!session) return NextResponse.json({ user: null }, { status: 401 });
-  return NextResponse.json({ user: session });
+  return NextResponse.json({ authenticated: !!session, user: session });
 }
