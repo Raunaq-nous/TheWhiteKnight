@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { setCache, runMigration } from "../lib/data-cache";
+import { useRouter, usePathname } from "next/navigation";
+import { setCache, runMigration, fetchAuthedJson } from "../lib/data-cache";
+
+// Pages that must render without a session (middleware already allows these through).
+const PUBLIC_PAGES = ["/login", "/register", "/onboard", "/admin/setup"];
 
 // Blocks rendering until the server data is loaded into the in-memory cache.
 // All lib/store.ts, lib/profile.ts, etc. functions read from the cache and
@@ -9,35 +13,40 @@ import { setCache, runMigration } from "../lib/data-cache";
 export default function DataProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      try {
-        const res = await fetch("/api/data/bootstrap", { credentials: "include" });
-        if (!res.ok) {
-          if (res.status === 401) {
-            // Not logged in — still render (login/onboard pages must work).
-            setReady(true);
-            return;
+      const result = await fetchAuthedJson("/api/data/bootstrap");
+      if (cancelled) return;
+
+      if (!result.ok) {
+        if (result.unauthenticated) {
+          // Not logged in. Public pages (login/register/onboard) render as-is;
+          // anything else sends the user to the login form instead of crashing
+          // on an HTML body.
+          if (!PUBLIC_PAGES.some(p => pathname?.startsWith(p))) {
+            router.replace("/login");
           }
-          throw new Error(`Bootstrap failed: ${res.status}`);
+          setReady(true);
+          return;
         }
-        const data = await res.json();
-        if (cancelled) return;
-        setCache(data);
-        await runMigration();
-        if (cancelled) return;
-        setReady(true);
-      } catch (e: any) {
-        if (!cancelled) setError(e.message ?? "Failed to load data");
+        setError(result.error ?? `Bootstrap failed: ${result.status ?? "unknown"}`);
+        return;
       }
+
+      setCache(result.data);
+      await runMigration();
+      if (cancelled) return;
+      setReady(true);
     }
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [pathname, router]);
 
   if (error) {
     return (

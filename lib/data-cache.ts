@@ -41,6 +41,43 @@ const EMPTY: CacheData = {
 let cache: CacheData = { ...EMPTY };
 let hydrated = false;
 
+// --- Safe authed fetch ---
+// Never JSON.parse a redirect or HTML body. A protected endpoint should either
+// return real JSON or a clean 401; anything else (a followed redirect landing on
+// the HTML /login page, a blocked opaque redirect) is treated as "not logged in".
+export type AuthedFetchResult =
+  | { ok: true; data: any }
+  | { ok: false; unauthenticated: true }
+  | { ok: false; unauthenticated: false; status?: number; error?: string };
+
+export async function fetchAuthedJson(url: string, init: RequestInit = {}): Promise<AuthedFetchResult> {
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, credentials: "include", redirect: "manual" });
+  } catch (e: any) {
+    return { ok: false, unauthenticated: false, error: e?.message ?? "Network error" };
+  }
+
+  // Blocked/opaque redirect, or an explicit 3xx — the server tried to send us to /login.
+  if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+    return { ok: false, unauthenticated: true };
+  }
+  if (res.status === 401) {
+    return { ok: false, unauthenticated: true };
+  }
+  if (!res.ok) {
+    return { ok: false, unauthenticated: false, status: res.status };
+  }
+
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    // Got HTML (or something else) where JSON was expected — never JSON.parse this.
+    return { ok: false, unauthenticated: true };
+  }
+
+  return { ok: true, data: await res.json() };
+}
+
 export function setCache(data: Partial<CacheData>) {
   cache = { ...EMPTY, ...data };
   hydrated = true;
@@ -314,8 +351,8 @@ export async function runMigration() {
     });
     if (res.ok) {
       // Reload cache from server after migration
-      const fresh = await fetch("/api/data/bootstrap", { credentials: "include" });
-      if (fresh.ok) setCache(await fresh.json());
+      const fresh = await fetchAuthedJson("/api/data/bootstrap");
+      if (fresh.ok) setCache(fresh.data);
     }
   }
 
