@@ -11,6 +11,8 @@ import {
 } from "../lib/notifications";
 import { getIntegrationSettings } from "../lib/integration-settings";
 import { markContacted } from "../lib/contacts-store";
+import { getApplication } from "../lib/store";
+import { showToast } from "../lib/toast";
 
 const TYPE_COLORS: Record<string, string> = {
   pending_dm: "var(--accent)",
@@ -36,6 +38,11 @@ const TYPE_LABELS: Record<string, string> = {
 
 const EMAIL_TYPES = new Set(["pending_outreach", "pending_ceo_email"]);
 const LINKEDIN_TYPES = new Set(["pending_dm", "pending_referral_dm"]);
+
+function textToHtml(text: string): string {
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#222;max-width:600px">${escaped.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, "<br/>")}</p>`).join("")}</body></html>`;
+}
 
 function isDue(n: Notification): boolean {
   if (n.sent || n.dismissed) return false;
@@ -99,7 +106,10 @@ export function NotificationBell() {
     }
   };
 
-  const sendEmailNow = async (n: Notification) => {
+  // Stages the outreach email as a "recordSend" approval instead of sending it
+  // directly. Nothing goes out until a human approves it on /approvals — same
+  // gated path the MCP tools and follow-up service use.
+  const stageEmailForApproval = async (n: Notification) => {
     if (!n.generatedContent) return;
     const integ = getIntegrationSettings();
     if (!integ.resendApiKey || !integ.senderEmail) {
@@ -112,26 +122,30 @@ export function NotificationBell() {
     }
     setSendingId(n.id);
     try {
-      const res = await fetch("/api/send/email", {
+      const application = n.applicationSlug ? getApplication(n.applicationSlug) : undefined;
+      const res = await fetch("/api/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: n.contactEmail,
-          subject: "Hi",
-          body: n.generatedContent,
-          resendApiKey: integ.resendApiKey,
-          senderEmail: integ.senderEmail,
-          senderName: integ.senderName,
+          kind: "recordSend",
+          applicationId: application?.id,
+          payload: {
+            channel: "email",
+            to: n.contactEmail,
+            subject: n.generatedSubject || "Hi",
+            html: textToHtml(n.generatedContent),
+            text: n.generatedContent,
+          },
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Send failed");
-      markSent(n.id);
-      if (n.contactId) markContacted(n.contactId);
-      setStatusMsg({ id: n.id, text: "Sent.", kind: "ok" });
-      setTimeout(() => { setStatusMsg(null); refresh(); }, 1500);
+      if (!res.ok) throw new Error(data.error ?? "Failed to stage for approval");
+      dismissNotification(n.id);
+      setStatusMsg({ id: n.id, text: "Staged — approve on /approvals to send.", kind: "ok" });
+      setTimeout(() => { setStatusMsg(null); refresh(); }, 2000);
     } catch (e: any) {
       setStatusMsg({ id: n.id, text: e.message, kind: "err" });
+      showToast(e.message ?? "Failed to stage send for approval", "error");
     } finally {
       setSendingId(null);
     }
@@ -242,8 +256,8 @@ export function NotificationBell() {
                         </button>
                       )}
                       {!editing && isEmail && n.generatedContent && (
-                        <button onClick={() => sendEmailNow(n)} disabled={sendingId === n.id} style={{ ...inboxBtn, color: "var(--success)", borderColor: "var(--success)" }}>
-                          {sendingId === n.id ? "SENDING..." : "SEND NOW"}
+                        <button onClick={() => stageEmailForApproval(n)} disabled={sendingId === n.id} style={{ ...inboxBtn, color: "var(--success)", borderColor: "var(--success)" }}>
+                          {sendingId === n.id ? "STAGING..." : "STAGE FOR APPROVAL"}
                         </button>
                       )}
                       {!editing && isEmail && n.contactEmail && (

@@ -4,6 +4,7 @@ import {
   wt_updateApplication,
   wt_deleteApplication,
 } from "./data-cache";
+import { showToast } from "./toast";
 
 export type InterviewRound = "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
 
@@ -93,20 +94,43 @@ export function getApplications(): Application[] {
   return getCache().applications;
 }
 
-export function saveApplication(app: Application): void {
-  wt_saveApplication(app).catch(e => console.error("[CareerOS] saveApplication failed:", e));
+// Each of these returns true on success, false on failure, and surfaces a
+// toast on failure so a rejected write-through is never silently swallowed.
+export async function saveApplication(app: Application): Promise<boolean> {
+  try {
+    await wt_saveApplication(app);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveApplication failed:", e);
+    showToast(e?.message ?? "Failed to save application", "error");
+    return false;
+  }
 }
 
 export function getApplication(slug: string): Application | undefined {
   return getCache().applications.find(a => a.slug === slug);
 }
 
-export function updateApplication(id: string, changes: Partial<Application>): void {
-  wt_updateApplication(id, changes).catch(e => console.error("[CareerOS] updateApplication failed:", e));
+export async function updateApplication(id: string, changes: Partial<Application>): Promise<boolean> {
+  try {
+    await wt_updateApplication(id, changes);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] updateApplication failed:", e);
+    showToast(e?.message ?? "Failed to update application", "error");
+    return false;
+  }
 }
 
-export function deleteApplication(id: string): void {
-  wt_deleteApplication(id).catch(e => console.error("[CareerOS] deleteApplication failed:", e));
+export async function deleteApplication(id: string): Promise<boolean> {
+  try {
+    await wt_deleteApplication(id);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] deleteApplication failed:", e);
+    showToast(e?.message ?? "Failed to delete application", "error");
+    return false;
+  }
 }
 
 export function generateSlug(company: string, role: string) {

@@ -6,6 +6,7 @@ import {
   wt_updateContact,
   wt_deleteContact,
 } from "./data-cache";
+import { showToast } from "./toast";
 
 export type ContactRole = "hiring_manager" | "referral_candidate" | "ceo" | "executive" | "recruiter" | "other";
 
@@ -60,20 +61,34 @@ export function addContact(c: Omit<Contact, "id" | "createdAt" | "tags" | "appli
   return wt_addContact(c);
 }
 
-export function updateContact(id: string, changes: Partial<Contact>): void {
-  wt_updateContact(id, changes).catch(e => console.error("[CareerOS] updateContact failed:", e));
+export async function updateContact(id: string, changes: Partial<Contact>): Promise<boolean> {
+  try {
+    await wt_updateContact(id, changes);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] updateContact failed:", e);
+    showToast(e?.message ?? "Failed to update contact", "error");
+    return false;
+  }
 }
 
-export function deleteContact(id: string): void {
-  wt_deleteContact(id).catch(e => console.error("[CareerOS] deleteContact failed:", e));
+export async function deleteContact(id: string): Promise<boolean> {
+  try {
+    await wt_deleteContact(id);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] deleteContact failed:", e);
+    showToast(e?.message ?? "Failed to delete contact", "error");
+    return false;
+  }
 }
 
-export function markContacted(id: string): void {
-  updateContact(id, { lastContactedAt: new Date().toISOString() });
+export function markContacted(id: string): Promise<boolean> {
+  return updateContact(id, { lastContactedAt: new Date().toISOString() });
 }
 
-export function attachContactToApplication(contactId: string, slug: string): void {
+export function attachContactToApplication(contactId: string, slug: string): Promise<boolean> {
   const c = getCache().contacts.find(x => x.id === contactId);
-  if (!c || c.applicationSlugs.includes(slug)) return;
-  updateContact(contactId, { applicationSlugs: [...c.applicationSlugs, slug] });
+  if (!c || c.applicationSlugs.includes(slug)) return Promise.resolve(true);
+  return updateContact(contactId, { applicationSlugs: [...c.applicationSlugs, slug] });
 }
