@@ -177,21 +177,27 @@ export const DEFAULT_COMPANY_TARGETS: CompanyTarget[] = [
 ];
 
 import { getCache, updateCacheCompanyTargets, wt_saveSettings } from "./data-cache";
+import { showToast } from "./toast";
 
 export function getCompanyTargets(): CompanyTarget[] {
   const cached = getCache().companyTargets;
   return cached.length > 0 ? cached : DEFAULT_COMPANY_TARGETS;
 }
 
-export function saveCompanyTargets(targets: CompanyTarget[]): void {
+export async function saveCompanyTargets(targets: CompanyTarget[]): Promise<boolean> {
   updateCacheCompanyTargets(targets);
-  wt_saveSettings("company_targets", targets).catch(e =>
-    console.error("[CareerOS] saveCompanyTargets failed:", e)
-  );
+  try {
+    await wt_saveSettings("company_targets", targets);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveCompanyTargets failed:", e);
+    showToast(e?.message ?? "Failed to save company targets", "error");
+    return false;
+  }
 }
 
-export function resetCompanyTargets(): void {
-  saveCompanyTargets(DEFAULT_COMPANY_TARGETS);
+export function resetCompanyTargets(): Promise<boolean> {
+  return saveCompanyTargets(DEFAULT_COMPANY_TARGETS);
 }
 
 export function getEnabledTargets(region?: Region, sector?: Sector): CompanyTarget[] {

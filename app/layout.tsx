@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import DataProvider from "./DataProvider";
+import ToastHost from "./toast-host";
 
 export const metadata: Metadata = {
   title: "CareerOS",
@@ -36,7 +37,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/TheWhiteKnight/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: setInitialTheme }} />
       </head>
-      <body><DataProvider>{children}</DataProvider></body>
+      <body>
+        <DataProvider>{children}</DataProvider>
+        <ToastHost />
+      </body>
     </html>
   );
 }

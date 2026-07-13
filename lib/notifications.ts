@@ -3,6 +3,7 @@
 // and waits for explicit user confirmation before anything is executed.
 
 import { getCache, wt_addNotification, wt_updateNotification } from "./data-cache";
+import { showToast } from "./toast";
 
 export type NotifType =
   | "pending_dm"
@@ -47,20 +48,30 @@ export function addNotification(n: Omit<Notification, "id" | "createdAt" | "dism
   return wt_addNotification(n);
 }
 
-export function dismissNotification(id: string): void {
-  wt_updateNotification(id, { dismissed: true }).catch(e =>
-    console.error("[CareerOS] dismissNotification failed:", e)
-  );
+export async function dismissNotification(id: string): Promise<boolean> {
+  try {
+    await wt_updateNotification(id, { dismissed: true });
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] dismissNotification failed:", e);
+    showToast(e?.message ?? "Failed to dismiss notification", "error");
+    return false;
+  }
 }
 
-export function updateNotification(id: string, changes: Partial<Notification>): void {
-  wt_updateNotification(id, changes).catch(e =>
-    console.error("[CareerOS] updateNotification failed:", e)
-  );
+export async function updateNotification(id: string, changes: Partial<Notification>): Promise<boolean> {
+  try {
+    await wt_updateNotification(id, changes);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] updateNotification failed:", e);
+    showToast(e?.message ?? "Failed to update notification", "error");
+    return false;
+  }
 }
 
-export function markSent(id: string): void {
-  updateNotification(id, { sent: true, sentAt: new Date().toISOString() });
+export function markSent(id: string): Promise<boolean> {
+  return updateNotification(id, { sent: true, sentAt: new Date().toISOString() });
 }
 
 export function scheduleFollowUp(applicationSlug: string, company: string, role: string, daysFromNow = 7): void {

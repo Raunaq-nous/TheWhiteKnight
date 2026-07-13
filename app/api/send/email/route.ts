@@ -1,58 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sendEmail } from "../../../../lib/resend-client";
+import { getSession } from "../../../../lib/session";
+import { approvalRepo } from "../../../../lib/server/repositories/approval-repo";
+import { executeApproval } from "../../../../lib/server/services/approval-executor";
 
 export const runtime = "nodejs";
 
-export type SendEmailRequest = {
-  to: string;
-  subject: string;
-  body: string;             // plain text body; we'll wrap in basic HTML
-  resendApiKey: string;
-  senderEmail: string;
-  senderName?: string;
-  replyTo?: string;
-};
-
-function bodyToHtml(text: string): string {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  return `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#222;max-width:600px">${escaped.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, "<br/>")}</p>`).join("")}</body></html>`;
-}
-
-// Strip "Subject: ..." line from body if present (since LLM outputs include it)
-function extractSubject(body: string, fallback: string): { subject: string; body: string } {
-  const m = body.match(/^Subject:\s*(.+?)(?:\r?\n)+/i);
-  if (m) {
-    return { subject: m[1].trim(), body: body.slice(m[0].length).trimStart() };
-  }
-  return { subject: fallback, body };
-}
-
+// This route never sends directly. It only re-executes an approval that has
+// already been staged (queueApproval) and approved by a human on /approvals —
+// the same execution path /api/approvals/[id] uses. There is no way to send
+// an email through this route without a prior, recorded human approval.
 export async function POST(req: NextRequest) {
-  try {
-    const data = await req.json() as SendEmailRequest;
-    const { to, resendApiKey, senderEmail, senderName, replyTo } = data;
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (!to || !data.body) return NextResponse.json({ error: "Missing recipient or body" }, { status: 400 });
-    if (!resendApiKey) return NextResponse.json({ error: "Resend API key missing. Add it in Settings." }, { status: 400 });
-    if (!senderEmail) return NextResponse.json({ error: "Sender email missing. Set it in Settings." }, { status: 400 });
-
-    const { subject, body } = extractSubject(data.body, data.subject || "Hi");
-    const from = senderName ? `${senderName} <${senderEmail}>` : senderEmail;
-
-    const result = await sendEmail(resendApiKey, {
-      from,
-      to,
-      subject,
-      text: body,
-      html: bodyToHtml(body),
-      reply_to: replyTo ?? senderEmail,
-    });
-
-    return NextResponse.json({ ok: true, id: result.id, sentAt: new Date().toISOString() });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message ?? "Send failed" }, { status: 500 });
+  const { approvalId } = await req.json().catch(() => ({})) as { approvalId?: string };
+  if (!approvalId) {
+    return NextResponse.json(
+      { error: "approvalId is required — email sends must be staged via POST /api/approvals and approved on /approvals first" },
+      { status: 400 },
+    );
   }
+
+  const approval = approvalRepo.get(session.email, approvalId);
+  if (!approval) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
+  if (approval.action.kind !== "recordSend") {
+    return NextResponse.json({ error: "Approval is not a recordSend action" }, { status: 400 });
+  }
+  if (approval.status !== "approved" || !approval.token) {
+    return NextResponse.json(
+      { error: `This send has not been approved yet (status: ${approval.status}). Approve it on /approvals first.` },
+      { status: 409 },
+    );
+  }
+
+  const result = await executeApproval(session.email, approvalId, approval.token);
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, error: result.error, retryable: result.retryable }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, detail: result.detail });
 }

@@ -30,12 +30,13 @@ const taStyle: React.CSSProperties = { ...inputStyle, resize: "vertical" };
 
 function nanoid() { return Math.random().toString(36).slice(2, 9); }
 
+type SaveState = "idle" | "saving" | "saved" | "auto-saved" | "error";
+
 export default function ProfileEditPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tab, setTab] = useState<Tab>("PERSONAL");
-  const [saved, setSaved] = useState(false);
-  const [autoSaved, setAutoSaved] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
 
@@ -49,10 +50,12 @@ export default function ProfileEditPage() {
     if (!profile) return;
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      saveProfile(profile);
-      setAutoSaved(true);
-      setTimeout(() => setAutoSaved(false), 2000);
+    autoSaveTimer.current = setTimeout(async () => {
+      setSaveState("saving");
+      const ok = await saveProfile(profile);
+      if (!ok) { setSaveState("idle"); return; }
+      setSaveState("auto-saved");
+      setTimeout(() => setSaveState(s => (s === "auto-saved" ? "idle" : s)), 2000);
     }, 1500);
     return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
   }, [profile]);
@@ -67,16 +70,22 @@ export default function ProfileEditPage() {
 
   const set = (key: keyof Profile, val: any) => setProfile(prev => prev ? { ...prev, [key]: val } : prev);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!profile) return;
-    saveProfile(profile);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    setSaveState("saving");
+    const ok = await saveProfile(profile);
+    if (!ok) { setSaveState("error"); return; }
+    setSaveState("saved");
+    setTimeout(() => setSaveState(s => (s === "saved" ? "idle" : s)), 2500);
   };
 
-  const handleSaveAndExit = () => {
+  const handleSaveAndExit = async () => {
     if (!profile) return;
-    saveProfile(profile);
+    setSaveState("saving");
+    const ok = await saveProfile(profile);
+    if (!ok) { setSaveState("error"); return; }
+    // Only navigate away once the write-through PUT has actually succeeded —
+    // navigating on a fire-and-forget save is what made edits look "lost".
     router.push("/profile/");
   };
 
@@ -141,6 +150,20 @@ export default function ProfileEditPage() {
 
   const btnStyle: React.CSSProperties = { padding: "6px 12px", fontSize: "0.625rem" };
   const dangerBtnStyle: React.CSSProperties = { ...btnStyle, borderColor: "var(--error)", color: "var(--error)" };
+  const isSaving = saveState === "saving";
+
+  const SaveIndicator = () => {
+    if (saveState === "saving") {
+      return <span style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>SAVING...</span>;
+    }
+    if (saveState === "saved" || saveState === "auto-saved") {
+      return <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{saveState === "auto-saved" ? "AUTO-SAVED" : "SAVED"}</span>;
+    }
+    if (saveState === "error") {
+      return <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>SAVE FAILED — SEE TOAST</span>;
+    }
+    return null;
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -154,10 +177,10 @@ export default function ProfileEditPage() {
             <span className="label" style={{ marginLeft: 12, color: "var(--text-tertiary)" }}>{profile.name}</span>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {(saved || autoSaved) && <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{autoSaved ? "AUTO-SAVED" : "SAVED"}</span>}
-            <button className="btn" onClick={() => router.push("/profile/")}>CANCEL</button>
-            <button className="btn" onClick={handleSave}>SAVE DRAFT</button>
-            <button className="btn btn-primary" onClick={handleSaveAndExit}>SAVE & VIEW</button>
+            <SaveIndicator />
+            <button className="btn" onClick={() => router.push("/profile/")} disabled={isSaving}>CANCEL</button>
+            <button className="btn" onClick={handleSave} disabled={isSaving}>SAVE DRAFT</button>
+            <button className="btn btn-primary" onClick={handleSaveAndExit} disabled={isSaving}>SAVE & VIEW</button>
           </div>
         </div>
 
@@ -477,10 +500,10 @@ export default function ProfileEditPage() {
 
         {/* Bottom save bar */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 32, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-          {(saved || autoSaved) && <span style={{ color: "var(--success)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", alignSelf: "center" }}>{autoSaved ? "AUTO-SAVED" : "SAVED"}</span>}
-          <button className="btn" onClick={() => router.push("/profile/")}>CANCEL</button>
-          <button className="btn" onClick={handleSave}>SAVE DRAFT</button>
-          <button className="btn btn-primary" onClick={handleSaveAndExit}>SAVE & VIEW PROFILE</button>
+          <span style={{ alignSelf: "center" }}><SaveIndicator /></span>
+          <button className="btn" onClick={() => router.push("/profile/")} disabled={isSaving}>CANCEL</button>
+          <button className="btn" onClick={handleSave} disabled={isSaving}>SAVE DRAFT</button>
+          <button className="btn btn-primary" onClick={handleSaveAndExit} disabled={isSaving}>SAVE & VIEW PROFILE</button>
         </div>
       </main>
       <Footer />

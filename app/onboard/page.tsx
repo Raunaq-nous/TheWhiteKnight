@@ -205,6 +205,7 @@ export default function OnboardPage() {
   const [resumeFiles, setResumeFiles] = useState<string[]>([]);
   const [uploadingResume, setUploadingResume] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [finishing, setFinishing] = useState(false);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -265,7 +266,7 @@ export default function OnboardPage() {
     }
   };
 
-  const handleFinish = () => {
+  const handleFinish = async () => {
     const now = new Date().toISOString();
     const final: Profile = {
       ...profile,
@@ -275,7 +276,12 @@ export default function OnboardPage() {
       createdAt: now,
       updatedAt: now,
     };
-    saveProfile(final);
+    setFinishing(true);
+    const ok = await saveProfile(final);
+    setFinishing(false);
+    // Don't navigate away until the profile actually persisted — saveProfile
+    // already surfaced a toast on failure, so the user can retry from here.
+    if (!ok) return;
     router.push("/");
   };
 
@@ -552,8 +558,8 @@ export default function OnboardPage() {
               NEXT
             </button>
           ) : (
-            <button className="btn btn-primary" onClick={handleFinish} style={{ padding: "10px 24px" }}>
-              FINISH — ENTER CAREEROS
+            <button className="btn btn-primary" onClick={handleFinish} disabled={finishing} style={{ padding: "10px 24px" }}>
+              {finishing ? "SAVING..." : "FINISH — ENTER CAREEROS"}
             </button>
           )}
         </div>

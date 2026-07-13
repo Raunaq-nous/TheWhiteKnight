@@ -1,4 +1,5 @@
 import { getCache, updateCacheModelSettings, wt_saveSettings } from "./data-cache";
+import { showToast } from "./toast";
 
 export type ModelProvider = "together" | "anthropic" | "openai";
 
@@ -48,9 +49,14 @@ export function getModelSettings(): ModelSettings {
   return getCache().modelSettings ?? DEFAULT;
 }
 
-export function saveModelSettings(settings: ModelSettings): void {
+export async function saveModelSettings(settings: ModelSettings): Promise<boolean> {
   updateCacheModelSettings(settings);
-  wt_saveSettings("model_settings", settings).catch(e =>
-    console.error("[CareerOS] saveModelSettings failed:", e)
-  );
+  try {
+    await wt_saveSettings("model_settings", settings);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveModelSettings failed:", e);
+    showToast(e?.message ?? "Failed to save model settings", "error");
+    return false;
+  }
 }

@@ -1,6 +1,7 @@
 // Settings for non-LLM integrations: contact discovery, email sending, job scanning.
 
 import { getCache, updateCacheIntegrationSettings, wt_saveSettings } from "./data-cache";
+import { showToast } from "./toast";
 
 export type IntegrationSettings = {
   exaApiKey?: string;
@@ -18,11 +19,16 @@ export function getIntegrationSettings(): IntegrationSettings {
   return getCache().integrationSettings ?? {};
 }
 
-export function saveIntegrationSettings(s: IntegrationSettings): void {
+export async function saveIntegrationSettings(s: IntegrationSettings): Promise<boolean> {
   updateCacheIntegrationSettings(s);
-  wt_saveSettings("integration_settings", s).catch(e =>
-    console.error("[CareerOS] saveIntegrationSettings failed:", e)
-  );
+  try {
+    await wt_saveSettings("integration_settings", s);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveIntegrationSettings failed:", e);
+    showToast(e?.message ?? "Failed to save integration settings", "error");
+    return false;
+  }
 }
 
 export const INTEGRATION_OPTIONS = [

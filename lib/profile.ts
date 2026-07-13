@@ -1,4 +1,5 @@
 import { getCache, wt_saveProfile } from "./data-cache";
+import { showToast } from "./toast";
 
 export type ExperienceEntry = {
   id: string;
@@ -104,8 +105,18 @@ export function getProfile(): Profile | null {
   return getCache().profile;
 }
 
-export function saveProfile(profile: Profile): void {
-  wt_saveProfile(profile).catch(e => console.error("[CareerOS] saveProfile failed:", e));
+// Returns true on success, false on failure (and surfaces a toast either way
+// the caller doesn't have to). Callers that need to block navigation on
+// failure (e.g. the profile editor) should await this and check the result.
+export async function saveProfile(profile: Profile): Promise<boolean> {
+  try {
+    await wt_saveProfile(profile);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveProfile failed:", e);
+    showToast(e?.message ?? "Failed to save profile", "error");
+    return false;
+  }
 }
 
 export function hasProfile(): boolean {

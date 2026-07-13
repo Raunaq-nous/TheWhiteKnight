@@ -7,6 +7,7 @@ import { TargetBucket, Application, generateId, generateSlug, saveApplication } 
 import { getModelSettings } from "./model-settings";
 import { AFScoreResult } from "./prompts";
 import { getCache, updateCacheBatchState, wt_saveSettings } from "./data-cache";
+import { showToast } from "./toast";
 
 export type BatchInput = {
   company: string;
@@ -40,10 +41,17 @@ export function loadBatchState(): BatchState | null {
   return getCache().batchState;
 }
 
-export function saveBatchState(s: BatchState | null): void {
+export async function saveBatchState(s: BatchState | null): Promise<boolean> {
   updateCacheBatchState(s);
   window.dispatchEvent(new Event("careeros-batch-change"));
-  wt_saveSettings("batch_state", s).catch(e => console.error("[CareerOS] saveBatchState failed:", e));
+  try {
+    await wt_saveSettings("batch_state", s);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveBatchState failed:", e);
+    showToast(e?.message ?? "Failed to save batch progress", "error");
+    return false;
+  }
 }
 
 export function clearBatchState() { saveBatchState(null); }
