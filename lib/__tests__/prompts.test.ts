@@ -130,7 +130,7 @@ describe("prompt builder snapshots", () => {
   });
 
   it("resumePrompt matches snapshot", () => {
-    const output = resumePrompt(MOCK_PROFILE, MOCK_APP);
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
     expect(output).toMatchSnapshot();
   });
 
@@ -153,14 +153,29 @@ describe("prompt builder snapshots", () => {
   });
 
   it("resumePrompt includes all experience entries", () => {
-    const output = resumePrompt(MOCK_PROFILE, MOCK_APP);
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
     expect(output).toContain("Acme AI");
     expect(output).toContain("DataCo");
   });
 
   it("resumePrompt includes anti-hallucination rules", () => {
-    const output = resumePrompt(MOCK_PROFILE, MOCK_APP);
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
     expect(output).toContain("ANTI-HALLUCINATION RULES");
+  });
+
+  it("resumePrompt applies archetype-specific section order and rules", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("education-first");
+    expect(consulting).toContain("Do NOT include a summary for this archetype");
+
+    const product = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
+    expect(product).toContain("experience-first");
+  });
+
+  it("resumePrompt instructs JSON output with bullet priority ranking", () => {
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "ai_ml_engineering");
+    expect(output).toContain("BULLET PRIORITY");
+    expect(output).toContain('"priority": number');
   });
 
   it("coverLetterPrompt includes no em dashes rule", () => {

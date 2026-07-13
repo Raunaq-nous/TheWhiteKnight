@@ -264,7 +264,7 @@ Alex Chen"
 `;
 
 exports[`prompt builder snapshots > resumePrompt matches snapshot 1`] = `
-"You are a senior resume strategist. Write a tailored, ATS-optimized resume for Alex Chen applying for the Product Manager, API Platform role at OpenAI.
+"You are a senior resume strategist specializing in Product Management hiring. Write a tailored resume for Alex Chen applying for the Product Manager, API Platform role at OpenAI.
 
 CANDIDATE PROFILE — SOURCE OF TRUTH (all data below is verified; never add, invent, or extrapolate)
 Name: Alex Chen
@@ -331,53 +331,56 @@ MUST-LIST TECH SKILLS (only if candidate actually has them per profile): REST AP
 ---
 
 ANTI-HALLUCINATION RULES — READ THESE FIRST, VIOLATING THEM IS A CRITICAL ERROR:
-1. NEVER invent, guess, or extrapolate ANY fact. Every claim must exist in the CANDIDATE PROFILE above.
+1. NEVER invent, guess, or extrapolate ANY fact. Every claim must exist in the CANDIDATE PROFILE.
 2. Education: copy institution names, degree names, and years EXACTLY as written in the profile. Do not alter, abbreviate, or guess. Do not add any education entry not listed.
 3. Company names: copy exactly. Do not rename, consolidate, or infer employer names.
 4. Metrics and numbers: use only numbers from the profile. NEVER invent percentages, revenue figures, team sizes, or timelines.
 5. Skills: only list skills that appear in the profile's SKILLS section. Do not add "presumed" skills.
 6. Projects: only reference projects listed in the profile. Do not fabricate project names.
 
-EXPERIENCE INCLUSION RULES:
-- There are 2 experience entries in the profile. You MUST include ALL 2 of them in the Experience section.
-- For each entry, keep 2-4 bullets, reordering so JD-relevant bullets come first.
-- You may trim low-relevance bullets but MUST NOT drop entire experience entries.
-- Preserve the exact company name and tenure for every entry.
+VOICE — the candidate's own voice/tone notes are binding style law, not background color. Follow them exactly, including any banned words or phrasing they list.
 
 STYLE RULES:
-- STRICT ONE PAGE. Target 520-600 words for the entire resume (excluding headers and section titles). If you exceed 600 words, cut the least JD-relevant bullets first. Never exceed 3 bullets per experience entry.
-- Every bullet: strong past-tense action verb + specific action + outcome (quantified if profile has the number).
 - No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
 - Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
 - Vary verbs. Do not start two consecutive bullets with the same word.
-- Summary: 2 sentences max. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.
-- Skills section: maximum 3 skill categories, each with no more than 6 items. Do not pad this section.
 
-ROLE-SPECIFIC GUIDANCE (this candidate is in: product, 7 years exp):
-- EMPHASIS: Lead with user/business outcomes: MAU growth, retention, NPS, conversion, revenue per user, time-to-launch. Show 0-to-1 vs scaling roles distinctly. Mention cross-functional partners (eng, design, data, GTM) when scope justifies.
-- VOICE: Frame bullets around 'problem → bet → outcome'. Avoid 'managed product' — say what shipped and what changed.
+EXPERIENCE INCLUSION RULES:
+- There are 2 experience entries in the profile. You MUST include ALL 2 of them.
+- Rank bullets by relevance to THIS job using the priority field below — do not just reorder, actually cut bullets that are weak for this JD (keep 2-4 per entry, the strongest first).
+- MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
+- Preserve the exact company name and tenure for every entry.
 
-OUTPUT FORMAT — markdown only, nothing before or after:
-# Alex Chen
-alex@example.com | +1 555 0100 | San Francisco, CA | [LinkedIn](https://linkedin.com/in/alexchen) | [GitHub](https://github.com/alexchen)
+PROFILE SUMMARY:
+- Allowed only as a 1-2 line positioning statement for career-switchers into product; otherwise omit.
+- If a summary is written: 2-3 lines MAX, specifically tied to THIS role at THIS company, leading with the single most relevant proof point. No filler adjectives, never generic.
 
-## Summary
-[2-3 sentences]
-
-## Experience
-[List ALL 2 entries from the profile. Each in format:]
-### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
-- [Most JD-relevant bullet]
-- [Next bullet]
-- [...]
-
-## Skills
-**[Category]:** [comma-separated, JD terminology where applicable]
-
-## Education
-B.S. in Computer Science | MIT | 2014 - 2018
+ARCHETYPE — Product Management:
+- SECTION ORDER: experience-first.
+- BULLET STYLE: Task-Action-Result. Frame as problem -> bet -> outcome. Every bullet needs a product metric (user growth %, retention, revenue, engagement, NPS, time-to-launch).
+- EMPHASIZE: Cross-functional leadership (eng/design/data/GTM), product sense, measurable shipped outcomes. Senior PMs lead with strategy/scope owned; early-career PMs lead with shipped impact.
+- OMIT: "Managed the roadmap" or similar scope statements with no attached metric.
+- CERTIFICATIONS: Include only if squarely product-relevant (e.g. a recognized PM certification). Cap at 2.
 
 
 
-Output the markdown now. No preamble. No explanation. Markdown only."
+SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
+
+OUTPUT — a single JSON object, nothing before or after, matching exactly this shape:
+{
+  "name": string,
+  "contactLine": string (pre-joined "email | phone | location | LinkedIn | GitHub | Portfolio", omitting any field the profile doesn't have),
+  "summary": string,
+  "sectionOrder": "education-first" | "experience-first",
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ],
+  "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
+  "skills": [ { "category": string, "items": string[] } ],
+  "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used),
+  "certifications": [ { "name": string, "issuer": string (optional), "date": string (optional) } ] (optional, omit key entirely if none qualify),
+  "leadership": string[] (optional, omit key entirely unless the archetype calls for a Leadership & Activities section)
+}
+
+BULLET PRIORITY — every bullet needs a "priority" integer: 1 = most relevant to this JD, must survive any cut. Higher numbers = progressively safer to cut first if the page runs long. Rank every bullet honestly; do not mark everything priority 1.
+
+Output the JSON now. No preamble, no markdown code fence, no explanation."
 `;
