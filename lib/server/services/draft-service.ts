@@ -1,7 +1,8 @@
 import "server-only";
 import { chat, chatJSON, ProviderSettings } from "../../ai-client";
-import { normalizeTextForATS } from "../../ats";
 import { SkillGapResultSchema } from "../../schemas";
+import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../resume-schema";
+import { detectResumeArchetype } from "../../resume-archetype";
 import {
   GenerationAction,
   ContactProfile,
@@ -43,13 +44,22 @@ export async function generateDraft(input: DraftInput): Promise<unknown> {
     );
   }
 
+  if (action === "resume") {
+    const archetype = detectResumeArchetype(profile, app);
+    const data = await chatJSON<ResumeContent>(
+      [{ role: "user", content: resumePrompt(profile, app, archetype) }],
+      { temperature: 0.6, maxTokens: 4000 },
+      providerSettings,
+      ResumeContentSchema,
+    );
+    return { data: normalizeResumeContent(data), archetype };
+  }
+
   let prompt = "";
   let temperature = 0.7;
   let maxTokens = 2500;
 
-  if (action === "resume") {
-    prompt = resumePrompt(profile, app); temperature = 0.6; maxTokens = 4000;
-  } else if (action === "cover-letter") {
+  if (action === "cover-letter") {
     prompt = coverLetterPrompt(profile, app); temperature = 0.7; maxTokens = 2000;
   } else if (action === "executive-summary") {
     prompt = executiveSummaryPrompt(profile, app); temperature = 0.6; maxTokens = 3000;
@@ -82,6 +92,5 @@ export async function generateDraft(input: DraftInput): Promise<unknown> {
     providerSettings,
   );
 
-  if (action === "resume") return { text: normalizeTextForATS(text) };
   return { text };
 }

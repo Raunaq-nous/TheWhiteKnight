@@ -1,5 +1,7 @@
 import { Profile } from "./profile";
 import { Application } from "./store";
+import { ResumeArchetype, RESUME_SPECS } from "./resume-archetype";
+import { ResumeContent } from "./resume-schema";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -172,130 +174,51 @@ ${app.jdRaw ? app.jdRaw.slice(0, 3000) : "(Not available, using structured data 
 `.trim();
 }
 
-// Per-role-type resume structure guidance. Each block returns:
-//   - sectionOrder: how the output template orders the resume
-//   - emphasis: what each bullet should emphasise
-//   - voiceQuirk: optional one-line stylistic instruction
-function getResumeStructureGuidance(roleType: string | undefined, yoeNum: number): {
-  sectionOrder: "exp-first" | "edu-first" | "projects-first";
-  emphasis: string;
-  voiceQuirk: string;
-  extraSection: string;
-} {
-  const rt = roleType ?? "professional";
+// Shared instruction block for both the initial resume generation and refine
+// passes — anything that must hold true regardless of archetype or edit.
+const RESUME_BASE_RULES = `ANTI-HALLUCINATION RULES — READ THESE FIRST, VIOLATING THEM IS A CRITICAL ERROR:
+1. NEVER invent, guess, or extrapolate ANY fact. Every claim must exist in the CANDIDATE PROFILE.
+2. Education: copy institution names, degree names, and years EXACTLY as written in the profile. Do not alter, abbreviate, or guess. Do not add any education entry not listed.
+3. Company names: copy exactly. Do not rename, consolidate, or infer employer names.
+4. Metrics and numbers: use only numbers from the profile. NEVER invent percentages, revenue figures, team sizes, or timelines.
+5. Skills: only list skills that appear in the profile's SKILLS section. Do not add "presumed" skills.
+6. Projects: only reference projects listed in the profile. Do not fabricate project names.
 
-  // Student / Intern / <2 yoe: education first
-  if (rt === "other" && yoeNum < 2) {
-    return {
-      sectionOrder: "edu-first",
-      emphasis: "Lead with academic strength, projects, and coursework. Use experience bullets for internships and part-time roles.",
-      voiceQuirk: "",
-      extraSection: "## Relevant Coursework\n[3-5 most relevant courses or research areas if listed in profile education achievements]",
-    };
-  }
+VOICE — the candidate's own voice/tone notes are binding style law, not background color. Follow them exactly, including any banned words or phrasing they list.
 
-  switch (rt) {
-    case "strategy-consulting":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead each bullet with quantified business impact: revenue captured, cost saved, % uplift, deals closed, market sized. Show consulting toolkit: analytical frameworks, executive communication, due diligence depth.",
-        voiceQuirk: 'Weave "first principles" naturally once in the Summary.',
-        extraSection: "",
-      };
+STYLE RULES:
+- No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
+- Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
+- Vary verbs. Do not start two consecutive bullets with the same word.`;
 
-    case "ai-tech":
-    case "engineering":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead with technical scale and impact: latency improvements, throughput, model accuracy gains, system reliability, users served. Mention specific tools, languages, and architectures by name. Reference GitHub projects when relevant.",
-        voiceQuirk: "Use precise technical terminology — say 'shipped a multi-agent RAG pipeline with sub-300ms p95 latency' not 'built an AI system'.",
-        extraSection: profile_hasProjects(profile_from_closure) ? "## Notable Builds\n[2-3 highest-impact projects from profile with stack + outcome on one line each]" : "",
-      };
-
-    case "design":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead with named brands shipped for, scope of work (identity, web, packaging, motion, etc.), and measurable outcomes if available (engagement lift, brand recall, award recognition). Mention specific tools (Figma, After Effects, Adobe Suite). The portfolio link in the header is critical — it carries the visual proof.",
-        voiceQuirk: "Pick verbs that signal craft: shipped, art-directed, illustrated, prototyped, defined. Not 'leveraged' or 'spearheaded'.",
-        extraSection: "## Tools\n[Comma-separated list of design tools and skills from profile, e.g. Figma, Adobe Creative Suite, Webflow, After Effects]",
-      };
-
-    case "product":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead with user/business outcomes: MAU growth, retention, NPS, conversion, revenue per user, time-to-launch. Show 0-to-1 vs scaling roles distinctly. Mention cross-functional partners (eng, design, data, GTM) when scope justifies.",
-        voiceQuirk: "Frame bullets around 'problem → bet → outcome'. Avoid 'managed product' — say what shipped and what changed.",
-        extraSection: "",
-      };
-
-    case "marketing":
-    case "sales":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead with quota attainment, pipeline generated, revenue closed, growth multipliers, ROAS, CAC, channels owned. Be ruthless about numbers — never use 'managed' or 'oversaw' without an outcome attached.",
-        voiceQuirk: "Every bullet should contain at least one number when possible.",
-        extraSection: "",
-      };
-
-    case "finance":
-    case "operations":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead with scale of P&L owned, deals modelled/closed, processes built or saved (in hours or $), audits cleared. Demonstrate analytical rigor through tool fluency (Excel, SQL, Tableau, ERP systems).",
-        voiceQuirk: "Pair process discipline with business outcome — 'cut close cycle from 12d to 4d, unlocking real-time CFO reporting'.",
-        extraSection: "",
-      };
-
-    case "data":
-    case "research":
-      return {
-        sectionOrder: rt === "research" ? "edu-first" : "exp-first",
-        emphasis: "Lead with rigorous methodology: model type, dataset size, sample power, evaluation metric. Tie every project to a business or research outcome.",
-        voiceQuirk: "Use precise quantitative language. Distinguish exploratory from production work.",
-        extraSection: rt === "research" && profile_hasPubs(profile_from_closure) ? "## Selected Publications\n[2-4 most relevant publications from profile, copied verbatim]" : "",
-      };
-
-    case "creative":
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead with named work, the role you played (writer, director, producer, designer), audience scale (views, plays, units sold, screens), and any awards or notable critical reception. The portfolio link is essential.",
-        voiceQuirk: "Use verbs of craft and authorship. Mention collaborators only when they sharpen the achievement.",
-        extraSection: "",
-      };
-
-    default:
-      return {
-        sectionOrder: "exp-first",
-        emphasis: "Lead each bullet with action + scope + outcome. Quantify where the profile provides numbers.",
-        voiceQuirk: "",
-        extraSection: "",
-      };
-  }
+function resumeOutputFormatInstructions(): string {
+  return `OUTPUT — a single JSON object, nothing before or after, matching exactly this shape:
+{
+  "name": string,
+  "contactLine": string (pre-joined "email | phone | location | LinkedIn | GitHub | Portfolio", omitting any field the profile doesn't have),
+  "summary": string,
+  "sectionOrder": "education-first" | "experience-first",
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ],
+  "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
+  "skills": [ { "category": string, "items": string[] } ],
+  "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used),
+  "certifications": [ { "name": string, "issuer": string (optional), "date": string (optional) } ] (optional, omit key entirely if none qualify),
+  "leadership": string[] (optional, omit key entirely unless the archetype calls for a Leadership & Activities section)
 }
 
-// Helper closures bound when called (avoid TS narrowing issues by passing profile in)
-let profile_from_closure: Profile;
-function profile_hasProjects(p: Profile) { return (p?.projects ?? []).length >= 2; }
-function profile_hasPubs(p: Profile) { return (p?.publications ?? []).length >= 1; }
+BULLET PRIORITY — every bullet needs a "priority" integer: 1 = most relevant to this JD, must survive any cut. Higher numbers = progressively safer to cut first if the page runs long. Rank every bullet honestly; do not mark everything priority 1.
 
-export function resumePrompt(profile: Profile, app: Application): string {
-  profile_from_closure = profile;
+Output the JSON now. No preamble, no markdown code fence, no explanation.`;
+}
+
+export function resumePrompt(profile: Profile, app: Application, archetype: ResumeArchetype): string {
   const atsKeywords = app.jdParsed?.keywords?.join(", ") ?? "";
   const keyReqs = app.jdParsed?.keyRequirements?.join("; ") ?? "";
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
-
-  // Build the exact education and experience blocks for the output template
-  const eduBlock = (profile.education ?? []).map(ed => {
-    let line = `${ed.degree}${ed.field ? ` in ${ed.field}` : ""} | ${ed.institution} | ${ed.years}`;
-    if (ed.gpa) line += ` | GPA: ${ed.gpa}`;
-    return line;
-  }).join("\n") || "(copy from profile above)";
-
   const expCount = profile.experience.length;
-  const yoeNum = parseInt((profile.yearsOfExperience || "0").replace(/[^0-9]/g, ""), 10) || 0;
-  const guidance = getResumeStructureGuidance(profile.roleType, yoeNum);
+  const spec = RESUME_SPECS[archetype];
 
-  return `You are a senior resume strategist. Write a tailored, ATS-optimized resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
+  return `You are a senior resume strategist specializing in ${spec.label} hiring. Write a tailored resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
 
 ${buildProfileContext(profile)}
 
@@ -309,68 +232,68 @@ ${techSkills ? `MUST-LIST TECH SKILLS (only if candidate actually has them per p
 
 ---
 
-ANTI-HALLUCINATION RULES — READ THESE FIRST, VIOLATING THEM IS A CRITICAL ERROR:
-1. NEVER invent, guess, or extrapolate ANY fact. Every claim must exist in the CANDIDATE PROFILE above.
-2. Education: copy institution names, degree names, and years EXACTLY as written in the profile. Do not alter, abbreviate, or guess. Do not add any education entry not listed.
-3. Company names: copy exactly. Do not rename, consolidate, or infer employer names.
-4. Metrics and numbers: use only numbers from the profile. NEVER invent percentages, revenue figures, team sizes, or timelines.
-5. Skills: only list skills that appear in the profile's SKILLS section. Do not add "presumed" skills.
-6. Projects: only reference projects listed in the profile. Do not fabricate project names.
+${RESUME_BASE_RULES}
 
 EXPERIENCE INCLUSION RULES:
-- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them in the Experience section.
-- For each entry, keep 2-4 bullets, reordering so JD-relevant bullets come first.
-- You may trim low-relevance bullets but MUST NOT drop entire experience entries.
+- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
+- Rank bullets by relevance to THIS job using the priority field below — do not just reorder, actually cut bullets that are weak for this JD (keep 2-4 per entry, the strongest first).
+- MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
 - Preserve the exact company name and tenure for every entry.
 
-STYLE RULES:
-- STRICT ONE PAGE. Target 520-600 words for the entire resume (excluding headers and section titles). If you exceed 600 words, cut the least JD-relevant bullets first. Never exceed 3 bullets per experience entry.
-- Every bullet: strong past-tense action verb + specific action + outcome (quantified if profile has the number).
-- No em dashes. No smart quotes. No unicode bullets — plain hyphens only.
-- Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
-- Vary verbs. Do not start two consecutive bullets with the same word.
-- Summary: 2 sentences max. Lead with years + domain + distinctive angle. Weave 3-5 JD keywords.
-- Skills section: maximum 3 skill categories, each with no more than 6 items. Do not pad this section.
+PROFILE SUMMARY:
+- ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
+- If a summary is written: 2-3 lines MAX, specifically tied to THIS role at THIS company, leading with the single most relevant proof point. No filler adjectives, never generic.
 
-ROLE-SPECIFIC GUIDANCE (this candidate is in: ${profile.roleType ?? "general"}, ${yoeNum} years exp):
-- EMPHASIS: ${guidance.emphasis}
-${guidance.voiceQuirk ? `- VOICE: ${guidance.voiceQuirk}` : ""}
+ARCHETYPE — ${spec.label}:
+- SECTION ORDER: ${spec.sectionOrder}.
+- BULLET STYLE: ${spec.bulletPattern}
+- EMPHASIZE: ${spec.emphasize}
+- OMIT: ${spec.omit}
+- CERTIFICATIONS: ${spec.certificationPolicy}
+${spec.extraSection === "leadership" ? '- Include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people, drawn only from real profile content (roles, projects, or education achievements that show this).' : ""}
+${spec.extraSection === "projects" ? '- Include a "projects" array with the 2-3 highest-impact profile projects most relevant to this JD, one line each.' : ""}
 
-OUTPUT FORMAT — markdown only, nothing before or after:
-# ${profile.name}
-${profile.email} | ${profile.phone} | ${profile.location}${profile.linkedin ? ` | [LinkedIn](${profile.linkedin})` : ""}${profile.github ? ` | [GitHub](${profile.github})` : ""}${profile.portfolio ? ` | [Portfolio](${profile.portfolio})` : ""}
+SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
 
-## Summary
-[2-3 sentences]
-${guidance.sectionOrder === "edu-first" ? `
-## Education
-${eduBlock}
-${guidance.extraSection ? `\n${guidance.extraSection}\n` : ""}
-## Experience
-[List ALL ${expCount} entries. If no experience, omit this section.]
-### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
-- [Most JD-relevant bullet]
-- [Next bullet]
+${resumeOutputFormatInstructions()}`;
+}
 
-## Skills
-**[Category]:** [comma-separated, JD terminology where applicable]
-` : `
-## Experience
-[List ALL ${expCount} entries from the profile. Each in format:]
-### [Exact Role from Profile] | [Exact Company from Profile] | [Exact Tenure from Profile]
-- [Most JD-relevant bullet]
-- [Next bullet]
-- [...]
+export function resumeRefinePrompt(
+  profile: Profile,
+  app: Application,
+  archetype: ResumeArchetype,
+  currentContent: ResumeContent,
+  instruction: string,
+): string {
+  const spec = RESUME_SPECS[archetype];
+  return `You are refining a ${spec.label} resume for ${profile.name} applying to the ${app.role} role at ${app.company}.
 
-## Skills
-**[Category]:** [comma-separated, JD terminology where applicable]
-${guidance.extraSection ? `\n${guidance.extraSection}\n` : ""}
-## Education
-${eduBlock}
-`}
-${(profile.certifications ?? []).length > 0 ? `\n## Certifications\n${(profile.certifications ?? []).map(c => `- ${c.name} — ${c.issuer} (${c.date})`).join("\n")}` : ""}
+${buildProfileContext(profile)}
 
-Output the markdown now. No preamble. No explanation. Markdown only.`;
+---
+
+CURRENT RESUME (JSON):
+${JSON.stringify(currentContent, null, 2)}
+
+---
+
+USER REFINEMENT INSTRUCTION:
+${instruction}
+
+---
+
+${RESUME_BASE_RULES}
+
+RULES:
+1. Apply ONLY what the instruction requests. Do not rewrite parts that were not mentioned.
+2. NEVER invent facts, metrics, education, or experience not in the CANDIDATE PROFILE.
+3. Education, company names, and tenures must remain exactly as in the profile unless the instruction specifically targets them.
+4. Keep every experience entry present (you may add/remove/reprioritize bullets, never drop an entire entry) unless the instruction says otherwise.
+5. Preserve the "priority" ranking convention: 1 = most relevant, higher = more cuttable. Re-rank if the instruction changes emphasis (e.g. "emphasize AI" should lower the priority number on AI-relevant bullets).
+
+ARCHETYPE reference (still applies unless the instruction overrides it): section order ${spec.sectionOrder}, summary ${spec.summaryAllowed ? "allowed" : "omitted"}, certifications: ${spec.certificationPolicy}
+
+${resumeOutputFormatInstructions()}`;
 }
 
 export function coverLetterPrompt(profile: Profile, app: Application): string {

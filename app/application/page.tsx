@@ -9,11 +9,14 @@ import { getProfile } from "../../lib/profile";
 import { NLUpdateResult } from "../../lib/prompts";
 import { getModelSettings } from "../../lib/model-settings";
 import { getIntegrationSettings } from "../../lib/integration-settings";
-import { generateTailoredResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, refineGeneration, GenerationAction, SkillGapResult } from "../../lib/generate";
+import { generateTailoredResume, refineResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, refineGeneration, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
 import { FormQASection } from "../form-qa-section";
 import { ProfileEnrichmentBanner, ProfileSuggestion } from "../profile-enrichment-banner";
+import { ResumeContent, resumeContentToMarkdown } from "../../lib/resume-schema";
+import { ResumeArchetype, RESUME_ARCHETYPE_LABELS } from "../../lib/resume-archetype";
+import { ResumeExportView } from "../resume-document";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -47,6 +50,15 @@ function ApplicationDetail() {
   const [editingResume, setEditingResume] = useState(false);
   const [resumeEditText, setResumeEditText] = useState("");
   const [resumeSaved, setResumeSaved] = useState(false);
+  const [resumeContent, setResumeContent] = useState<ResumeContent | null>(null);
+  const [resumeArchetypeChoice, setResumeArchetypeChoice] = useState<ResumeArchetype | "auto">("auto");
+  const [resumeArchetypeUsed, setResumeArchetypeUsed] = useState<ResumeArchetype | null>(null);
+  const [resumeGenerating, setResumeGenerating] = useState(false);
+  const [resumeGenError, setResumeGenError] = useState("");
+  const [showResumeExport, setShowResumeExport] = useState(false);
+  const [resumeRefineText, setResumeRefineText] = useState("");
+  const [resumeRefining, setResumeRefining] = useState(false);
+  const [resumeRefineError, setResumeRefineError] = useState("");
   const [researchingPitch, setResearchingPitch] = useState(false);
   const [enrichSuggestions, setEnrichSuggestions] = useState<ProfileSuggestion[]>([]);
 
@@ -58,6 +70,11 @@ function ApplicationDetail() {
       setNoteText(found.notes ?? "");
       setNextActionText(found.nextAction ?? "");
       if (found.resumeMarkdown) setSavedResume(found.resumeMarkdown);
+      if (found.resumeContent) setResumeContent(found.resumeContent);
+      if (found.resumeArchetype) {
+        setResumeArchetypeChoice(found.resumeArchetype);
+        setResumeArchetypeUsed(found.resumeArchetype);
+      }
     }
     setLoadingApp(false);
   }, [slug]);
@@ -117,7 +134,57 @@ function ApplicationDetail() {
     setEditingNextAction(false);
   };
 
+  // Resume generation produces structured content (ResumeContent), not a
+  // markdown string, so it's kept out of the generic handleGenerate/aiOutput
+  // flow below and given its own handler + render surface (ResumeExportView).
+  const persistResumeContent = (data: ResumeContent, archetype: ResumeArchetype) => {
+    if (!app) return;
+    const md = resumeContentToMarkdown(data);
+    setResumeContent(data);
+    setResumeArchetypeUsed(archetype);
+    setSavedResume(md);
+    updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md });
+    setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md } : prev);
+  };
+
+  const handleGenerateResume = async () => {
+    const profile = getProfile();
+    if (!profile) { setResumeGenError("No profile found. Set up your profile first."); return; }
+    if (!app) return;
+    setResumeGenerating(true);
+    setResumeGenError("");
+    try {
+      const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
+      const { data, archetype } = await generateTailoredResume(profile, app, override);
+      persistResumeContent(data, archetype);
+      setShowResumeExport(true);
+    } catch (e: any) {
+      setResumeGenError(e.message || "Resume generation failed.");
+    } finally {
+      setResumeGenerating(false);
+    }
+  };
+
+  const handleRefineResume = async () => {
+    if (!resumeContent || !resumeRefineText.trim() || !app) return;
+    const profile = getProfile();
+    if (!profile) { setResumeRefineError("No profile found."); return; }
+    setResumeRefining(true);
+    setResumeRefineError("");
+    try {
+      const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
+      const { data, archetype } = await refineResume(profile, app, resumeContent, resumeRefineText.trim(), override);
+      persistResumeContent(data, archetype);
+      setResumeRefineText("");
+    } catch (e: any) {
+      setResumeRefineError(e.message || "Refine failed.");
+    } finally {
+      setResumeRefining(false);
+    }
+  };
+
   const handleGenerate = async (action: GenerationAction) => {
+    if (action === "resume") { handleGenerateResume(); return; }
     const profile = getProfile();
     if (!profile) {
       setGenError("No profile found. Set up your profile first.");
@@ -137,13 +204,7 @@ function ApplicationDetail() {
         setAiOutput(null);
       } else {
         let content = "";
-        if (action === "resume") {
-          content = await generateTailoredResume(profile, app);
-          updateApplication(app.id, { resumeMarkdown: content });
-          setSavedResume(content);
-          setApp(prev => prev ? { ...prev, resumeMarkdown: content } : prev);
-        }
-        else if (action === "cover-letter") content = await generateCoverLetter(profile, app);
+        if (action === "cover-letter") content = await generateCoverLetter(profile, app);
         else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app);
         else if (action === "problem-solver") {
           setResearchingPitch(true);
@@ -423,6 +484,7 @@ window.addEventListener('load', function() {
   };
 
   return (
+    <>
     <main className="container" style={{ paddingTop: 32, paddingBottom: 64, flex: 1 }}>
       {/* Profile Enrichment Banner */}
       {enrichSuggestions.length > 0 && (
@@ -634,8 +696,8 @@ window.addEventListener('load', function() {
                 {app.nextAction && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {/tailor|resume|cv/i.test(app.nextAction) && (
-                      <button className="btn btn-primary" style={{ fontSize: "0.6875rem", padding: "6px 14px" }} onClick={() => handleGenerate("resume")} disabled={!!generating}>
-                        {generating === "resume" ? "GENERATING..." : "TAILOR RESUME →"}
+                      <button className="btn btn-primary" style={{ fontSize: "0.6875rem", padding: "6px 14px" }} onClick={handleGenerateResume} disabled={resumeGenerating}>
+                        {resumeGenerating ? "GENERATING..." : "TAILOR RESUME →"}
                       </button>
                     )}
                     {/apply/i.test(app.nextAction) && app.sourceUrl && (
@@ -674,10 +736,27 @@ window.addEventListener('load', function() {
           {/* Actions */}
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 16 }}>ACTIONS</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <button className="btn btn-primary" onClick={() => handleGenerate("resume")} disabled={!!generating}>
-                {generating === "resume" ? "GENERATING..." : "TAILOR RESUME"}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <select
+                value={resumeArchetypeChoice}
+                onChange={e => setResumeArchetypeChoice(e.target.value as ResumeArchetype | "auto")}
+                disabled={resumeGenerating}
+                title="Resume archetype — controls section order, bullet style, and what to emphasize/omit"
+                style={{ padding: "6px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+              >
+                <option value="auto">AUTO-DETECT ARCHETYPE</option>
+                {(Object.keys(RESUME_ARCHETYPE_LABELS) as ResumeArchetype[]).map(k => (
+                  <option key={k} value={k}>{RESUME_ARCHETYPE_LABELS[k]}</option>
+                ))}
+              </select>
+              <button className="btn btn-primary" onClick={handleGenerateResume} disabled={resumeGenerating}>
+                {resumeGenerating ? "GENERATING..." : "TAILOR RESUME"}
               </button>
+              {resumeArchetypeUsed && !resumeGenerating && (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--text-tertiary)" }}>
+                  as {RESUME_ARCHETYPE_LABELS[resumeArchetypeUsed]}
+                </span>
+              )}
               <button className="btn" onClick={() => handleGenerate("cover-letter")} disabled={!!generating}>
                 {generating === "cover-letter" ? "GENERATING..." : "COVER LETTER"}
               </button>
@@ -704,6 +783,14 @@ window.addEventListener('load', function() {
               </button>
               <button className="btn" style={{ borderColor: "var(--error)", color: "var(--error)" }} onClick={handleArchive}>ARCHIVE</button>
             </div>
+            {resumeGenError && (
+              <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{resumeGenError}</span>
+                {resumeGenError.includes("profile") && (
+                  <Link href="/profile/" className="btn" style={{ textDecoration: "none", fontSize: "0.625rem", padding: "4px 8px" }}>SET UP PROFILE</Link>
+                )}
+              </div>
+            )}
             {genError && (
               <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>{genError}</span>
@@ -811,11 +898,76 @@ window.addEventListener('load', function() {
             </div>
           )}
 
-          {/* Saved Resume */}
-          {savedResume && (
+          {/* Saved Resume — structured (new) */}
+          {resumeContent && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                <div className="label">
+                  SAVED RESUME{resumeArchetypeUsed ? ` — ${RESUME_ARCHETYPE_LABELS[resumeArchetypeUsed]}` : ""}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => { navigator.clipboard.writeText(resumeContentToMarkdown(resumeContent)); }}>COPY</button>
+                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => {
+                    const md = resumeContentToMarkdown(resumeContent);
+                    const filename = `${app.company.toLowerCase().replace(/\s+/g, "-")}-${app.role.toLowerCase().replace(/\s+/g, "-")}-resume.md`;
+                    const blob = new Blob([md], { type: "text/markdown" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url; a.download = filename;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  }}>DOWNLOAD .MD</button>
+                  <button className="btn btn-primary" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => setShowResumeExport(true)}>
+                    PREVIEW &amp; EXPORT
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.7 }}>
+                {resumeContent.summary && <p style={{ margin: "0 0 8px", fontStyle: "italic" }}>{resumeContent.summary}</p>}
+                <p style={{ margin: 0, color: "var(--text-tertiary)" }}>
+                  {resumeContent.experience.length} experience entr{resumeContent.experience.length === 1 ? "y" : "ies"} ·{" "}
+                  {resumeContent.experience.reduce((n, e) => n + e.bullets.length, 0)} bullets ·{" "}
+                  {resumeContent.skills.length} skill categor{resumeContent.skills.length === 1 ? "y" : "ies"}
+                  {resumeContent.certifications?.length ? ` · ${resumeContent.certifications.length} certification${resumeContent.certifications.length === 1 ? "" : "s"}` : ""}
+                </p>
+              </div>
+
+              {/* Iterate with AI */}
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px dashed var(--border)" }}>
+                <div className="label" style={{ fontSize: "0.625rem", color: "var(--accent)", marginBottom: 8 }}>ITERATE</div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginBottom: 8, lineHeight: 1.5 }}>
+                  Examples: "emphasize AI", "more consulting-structured", "drop certifications", "tighten the summary", "fill more of the page".
+                </div>
+                <textarea
+                  value={resumeRefineText}
+                  onChange={e => setResumeRefineText(e.target.value)}
+                  placeholder="What should change?"
+                  rows={2}
+                  disabled={resumeRefining}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleRefineResume(); }
+                  }}
+                  style={{ width: "100%", padding: 10, background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", resize: "vertical", borderRadius: 4 }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5625rem", color: "var(--text-tertiary)" }}>Cmd/Ctrl+Enter to send</span>
+                  <button className="btn btn-primary" style={{ padding: "6px 14px", fontSize: "0.75rem" }} onClick={handleRefineResume} disabled={!resumeRefineText.trim() || resumeRefining}>
+                    {resumeRefining ? "REFINING..." : "APPLY EDIT"}
+                  </button>
+                </div>
+                {resumeRefineError && (
+                  <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.6875rem" }}>{resumeRefineError}</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Saved Resume — legacy plain-text fallback (resumes generated before the structured rebuild) */}
+          {!resumeContent && savedResume && (
             <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-                <div className="label">SAVED RESUME</div>
+                <div className="label">SAVED RESUME (LEGACY FORMAT)</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => { navigator.clipboard.writeText(savedResume); }}>COPY</button>
                   <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => {
@@ -842,6 +994,9 @@ window.addEventListener('load', function() {
                   }}>EXPORT PDF</button>
                   {resumeSaved && <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5625rem", color: "var(--success)", alignSelf: "center" }}>SAVED</span>}
                 </div>
+              </div>
+              <div style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginBottom: 12 }}>
+                Generated before the resume rebuild — click TAILOR RESUME above to regenerate in the new one-page format.
               </div>
               {editingResume ? (
                 <textarea
@@ -1158,6 +1313,10 @@ window.addEventListener('load', function() {
         </div>
       </div>
     </main>
+    {showResumeExport && resumeContent && (
+      <ResumeExportView content={resumeContent} onClose={() => setShowResumeExport(false)} />
+    )}
+    </>
   );
 }
 

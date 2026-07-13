@@ -5,6 +5,8 @@ import {
   wt_deleteApplication,
 } from "./data-cache";
 import { showToast } from "./toast";
+import type { ResumeContent } from "./resume-schema";
+import type { ResumeArchetype } from "./resume-archetype";
 
 export type InterviewRound = "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
 
@@ -73,6 +75,11 @@ export type Application = {
   days?: number;
   formAnswers?: Array<{ question: string; answer: string }>;
   resumeMarkdown?: string;
+  // Structured resume content (role-adaptive rebuild). resumeMarkdown above is
+  // kept as a derived/plain-text fallback for resumes generated before this
+  // existed, and for copy/download compatibility.
+  resumeContent?: ResumeContent;
+  resumeArchetype?: ResumeArchetype;
 };
 
 export type TargetBucket = {
