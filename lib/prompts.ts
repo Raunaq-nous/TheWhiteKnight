@@ -29,7 +29,7 @@ export type LegitimacySignal = {
 };
 
 export type AFScoreResult = {
-  archetype: { primary: string; secondary?: string };
+  archetype: { primary: string; secondary?: string | null };
   scores: {
     cv_match: AFScoreBlock;
     north_star: AFScoreBlock;
@@ -42,7 +42,7 @@ export type AFScoreResult = {
   legitimacy: {
     tier: "high_confidence" | "proceed_with_caution" | "suspicious";
     signals: LegitimacySignal[];
-    notes?: string;
+    notes?: string | null;
   };
   jdParsed: {
     keyRequirements: string[];

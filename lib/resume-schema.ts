@@ -12,21 +12,29 @@ export const ResumeBulletSchema = z.object({
   priority: z.number().int().min(1),
 });
 
+// NOTE ON .nullable().optional(): every optional field below is marked both
+// nullable AND optional. Models routinely emit an explicit `null` for a field
+// they're told is optional (rather than omitting the key), and .optional()
+// alone only tolerates a missing/undefined key, not a literal null — that
+// mismatch is exactly what caused the "expected string, received null" bug.
+// All consuming code already uses `?.`/`&&` truthiness checks, which treat
+// null and undefined identically, so no downstream changes were needed.
+
 export const ResumeExperienceEntrySchema = z.object({
   company: z.string(),
   role: z.string(),
   tenure: z.string(),
-  location: z.string().optional(),
+  location: z.string().nullable().optional(),
   bullets: z.array(ResumeBulletSchema),
 });
 
 export const ResumeEducationEntrySchema = z.object({
   institution: z.string(),
   degree: z.string(),
-  field: z.string().optional(),
+  field: z.string().nullable().optional(),
   years: z.string(),
-  gpa: z.string().optional(),
-  achievements: z.array(z.string()).optional(),
+  gpa: z.string().nullable().optional(),
+  achievements: z.array(z.string()).nullable().optional(),
 });
 
 export const ResumeSkillGroupSchema = z.object({
@@ -37,13 +45,13 @@ export const ResumeSkillGroupSchema = z.object({
 export const ResumeProjectSchema = z.object({
   name: z.string(),
   description: z.string(),
-  repoUrl: z.string().optional(),
+  repoUrl: z.string().nullable().optional(),
 });
 
 export const ResumeCertificationSchema = z.object({
   name: z.string(),
-  issuer: z.string().optional(),
-  date: z.string().optional(),
+  issuer: z.string().nullable().optional(),
+  date: z.string().nullable().optional(),
 });
 
 export const ResumeContentSchema = z.object({
@@ -54,9 +62,9 @@ export const ResumeContentSchema = z.object({
   experience: z.array(ResumeExperienceEntrySchema),
   education: z.array(ResumeEducationEntrySchema),
   skills: z.array(ResumeSkillGroupSchema),
-  projects: z.array(ResumeProjectSchema).optional(),
-  certifications: z.array(ResumeCertificationSchema).optional(),
-  leadership: z.array(z.string()).optional().describe("Leadership & Activities bullets — consulting archetype only"),
+  projects: z.array(ResumeProjectSchema).nullable().optional(),
+  certifications: z.array(ResumeCertificationSchema).nullable().optional(),
+  leadership: z.array(z.string()).nullable().optional().describe("Leadership & Activities bullets — consulting archetype only"),
 });
 
 export type ResumeBullet = z.infer<typeof ResumeBulletSchema>;
