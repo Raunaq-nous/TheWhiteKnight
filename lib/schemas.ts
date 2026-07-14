@@ -25,7 +25,9 @@ const LegitimacySignalSchema = z.object({
 export const AFScoreResultSchema = z.object({
   archetype: z.object({
     primary: z.string(),
-    secondary: z.string().optional(),
+    // The prompt explicitly tells the model "string or null" — .optional()
+    // alone only tolerates a missing key, not an explicit null value.
+    secondary: z.string().nullable().optional(),
   }),
   scores: z.object({
     cv_match: AFScoreBlockSchema,
@@ -39,7 +41,8 @@ export const AFScoreResultSchema = z.object({
   legitimacy: z.object({
     tier: z.enum(["high_confidence", "proceed_with_caution", "suspicious"]),
     signals: z.array(LegitimacySignalSchema),
-    notes: z.string().optional(),
+    // Same "string or null" contract as archetype.secondary above.
+    notes: z.string().nullable().optional(),
   }),
   jdParsed: z.object({
     keyRequirements: z.array(z.string()),

@@ -41,7 +41,7 @@ export type Application = {
   jdParsed: any;
   bucketName?: string;
   afScore?: {
-    archetype: { primary: string; secondary?: string };
+    archetype: { primary: string; secondary?: string | null };
     scores: {
       cv_match: { score: number; reasoning: string; evidence?: string[]; gaps?: string[] };
       north_star: { score: number; reasoning: string };
@@ -54,7 +54,7 @@ export type Application = {
     legitimacy: {
       tier: "high_confidence" | "proceed_with_caution" | "suspicious";
       signals: { signal: string; finding: string; weight: "positive" | "neutral" | "concerning" }[];
-      notes?: string;
+      notes?: string | null;
     };
   };
   nextAction: string;
