@@ -17,6 +17,9 @@ import { ProfileEnrichmentBanner, ProfileSuggestion } from "../profile-enrichmen
 import { ResumeContent, resumeContentToMarkdown } from "../../lib/resume-schema";
 import { ResumeArchetype, RESUME_ARCHETYPE_LABELS } from "../../lib/resume-archetype";
 import { ResumeExportView } from "../resume-document";
+import { extractProfileData } from "../../lib/profile-enrichment";
+import { diffExtractionAgainstProfile, MergeDiffItem } from "../../lib/profile-merge";
+import { ProfileMergeReview } from "../profile-merge-review";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -59,6 +62,8 @@ function ApplicationDetail() {
   const [resumeRefineText, setResumeRefineText] = useState("");
   const [resumeRefining, setResumeRefining] = useState(false);
   const [resumeRefineError, setResumeRefineError] = useState("");
+  const [resumeEditEnrichItems, setResumeEditEnrichItems] = useState<MergeDiffItem[] | null>(null);
+  const [checkingResumeEditEnrichment, setCheckingResumeEditEnrichment] = useState(false);
   const [researchingPitch, setResearchingPitch] = useState(false);
   const [enrichSuggestions, setEnrichSuggestions] = useState<ProfileSuggestion[]>([]);
 
@@ -180,6 +185,35 @@ function ApplicationDetail() {
       setResumeRefineError(e.message || "Refine failed.");
     } finally {
       setResumeRefining(false);
+    }
+  };
+
+  // Feature 3: when a manually-edited resume contains a detail not already
+  // on the profile, detect it and offer to save it back (preview + accept/
+  // reject) — editing a resume enriches the source profile.
+  const handleSaveResumeEdit = async () => {
+    if (!app) return;
+    const beforeText = savedResume ?? "";
+    const afterText = resumeEditText;
+    updateApplication(app.id, { resumeMarkdown: afterText });
+    setSavedResume(afterText);
+    setApp(prev => prev ? { ...prev, resumeMarkdown: afterText } : prev);
+    setEditingResume(false);
+    setResumeSaved(true);
+    setTimeout(() => setResumeSaved(false), 2000);
+
+    if (afterText.trim() === beforeText.trim() || afterText.trim().length < 30) return;
+    const profile = getProfile();
+    if (!profile) return;
+    setCheckingResumeEditEnrichment(true);
+    try {
+      const extracted = await extractProfileData(afterText, profile, beforeText);
+      const diff = diffExtractionAgainstProfile(extracted, profile);
+      if (diff.length > 0) setResumeEditEnrichItems(diff);
+    } catch {
+      // Non-critical — the resume edit itself already saved successfully.
+    } finally {
+      setCheckingResumeEditEnrichment(false);
     }
   };
 
@@ -972,12 +1006,7 @@ window.addEventListener('load', function() {
                   <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => { navigator.clipboard.writeText(savedResume); }}>COPY</button>
                   <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => {
                     if (editingResume) {
-                      updateApplication(app.id, { resumeMarkdown: resumeEditText });
-                      setSavedResume(resumeEditText);
-                      setApp(prev => prev ? { ...prev, resumeMarkdown: resumeEditText } : prev);
-                      setEditingResume(false);
-                      setResumeSaved(true);
-                      setTimeout(() => setResumeSaved(false), 2000);
+                      handleSaveResumeEdit();
                     } else {
                       setResumeEditText(savedResume);
                       setEditingResume(true);
@@ -1010,6 +1039,22 @@ window.addEventListener('load', function() {
                   {savedResume}
                 </pre>
               )}
+            </div>
+          )}
+
+          {/* Feature 3: learn from resume edits — offered right after saving a manual edit */}
+          {checkingResumeEditEnrichment && (
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", color: "var(--text-tertiary)", marginBottom: 16 }}>
+              Checking your edit for new profile details...
+            </div>
+          )}
+          {resumeEditEnrichItems && resumeEditEnrichItems.length > 0 && (
+            <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
+              <div className="label" style={{ color: "var(--accent)" }}>YOUR EDIT ADDED NEW DETAILS — SAVE TO PROFILE?</div>
+              <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)", marginTop: 6 }}>
+                Found in the resume text you just edited, not yet on your profile.
+              </div>
+              <ProfileMergeReview items={resumeEditEnrichItems} onDone={() => setResumeEditEnrichItems(null)} />
             </div>
           )}
 

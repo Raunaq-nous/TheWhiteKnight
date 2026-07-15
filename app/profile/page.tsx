@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { getProfile, saveProfile, getSeedProfile, Profile } from "../../lib/profile";
+import { ProfileEnrichBox } from "../profile-enrich-box";
+import { ProfileInterviewBox } from "../profile-interview-box";
 
 function ContactLink({ href, label }: { href: string; label: string }) {
   const url = href.startsWith("http") ? href : `https://${href}`;
@@ -91,6 +93,9 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+        <ProfileEnrichBox />
+        <ProfileInterviewBox />
 
         <div className="app-two-col">
           {/* Left column */}
