@@ -2,6 +2,7 @@ import { Profile } from "./profile";
 import { Application } from "./store";
 import { ResumeArchetype, RESUME_SPECS } from "./resume-archetype";
 import { ResumeContent } from "./resume-schema";
+import { BulletCandidate } from "./profile-bullet-quality";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -1124,20 +1125,31 @@ Omit any top-level key entirely if you found nothing for it. Output the JSON now
 // incorporation. Targets the weakest/most-generic bullets specifically.
 // ---------------------------------------------------------------------------
 
-export function profileQuestionsPrompt(profile: Profile, excludeQuestionTexts: string[] = []): string {
+export function profileQuestionsPrompt(
+  profile: Profile,
+  candidates: BulletCandidate[],
+  excludeQuestionTexts: string[] = [],
+): string {
   const excludeBlock = excludeQuestionTexts.length > 0
     ? `\nDo NOT repeat or closely rephrase any of these already-asked questions:\n${excludeQuestionTexts.map(q => `- ${q}`).join("\n")}\n`
     : "";
 
-  return `You are a career coach reviewing ${profile.name}'s profile to find the weakest, most generic bullets and ask sharp, specific follow-up questions to strengthen them.
+  const candidateBlock = candidates
+    .map((c, i) => `${i + 1}. [${c.targetType}] ${c.targetLabel}\n   "${c.currentText}"`)
+    .join("\n");
+
+  return `You are a career coach helping ${profile.name} strengthen their profile with sharp, specific follow-up questions.
 
 ${buildProfileContext(profile)}
 
 ---
 
-TASK: Scan every bullet in EXPERIENCE and every project in PROJECTS. Identify the ones that are weakest — generic action statements with no quantified outcome, no scale, no specific numbers (deal size, revenue, time saved, headcount, %, users, etc). Ignore bullets that are already well-quantified.
+A deterministic pre-filter has already scanned every experience bullet and project description and flagged the ones with NO quantification at all (no digit, no %, no currency symbol, no scale keyword like revenue/users/headcount/deal/margin/time). These are the ONLY candidates you may pick from — do not consider or invent any bullet not listed here, and do not pick anything already quantified.
 
-Pick the 2-3 WEAKEST bullets/projects (prioritize by how generic/unquantified they are) and write one targeted, specific question for each that would let the candidate supply the missing number or detail. Good questions ask for a concrete, answerable fact — e.g. "For the India market-entry project, what was the measurable outcome — deal size, revenue impact, or time saved?" or "How many people did you lead on the multi-plant capital program?" Bad questions are vague ("tell me more about this").
+CANDIDATE BULLETS/DESCRIPTIONS (pre-filtered, unquantified):
+${candidateBlock}
+
+TASK: Pick the 2-3 HIGHEST-IMPACT candidates from the list above — the ones where a missing number would matter most to a hiring manager reading this profile (prefer the candidate's most recent/senior roles and headline-relevant work over minor ones). For each, write one targeted, specific question that would let the candidate supply the missing number or detail. Good questions ask for a concrete, answerable fact — e.g. "For the India market-entry project, what was the measurable outcome — deal size, revenue impact, or time saved?" or "How many people did you lead on the multi-plant capital program?" Bad questions are vague ("tell me more about this").
 ${excludeBlock}
 Output ONLY raw JSON matching exactly this shape, nothing before or after:
 {
@@ -1145,15 +1157,15 @@ Output ONLY raw JSON matching exactly this shape, nothing before or after:
     {
       "id": "short slug, e.g. bain-2025-bullet-1",
       "targetType": "experience" | "project",
-      "targetId": "the exact company name (for experience) or project name (for project), copied exactly from the profile above",
-      "targetLabel": "human-readable label, e.g. 'Bain & Company — India market entry bullet'",
-      "currentText": "the exact current bullet/description text, copied verbatim from the profile",
+      "targetId": "the exact targetId from the candidate list above, copied exactly",
+      "targetLabel": "the exact targetLabel from the candidate list above, copied exactly",
+      "currentText": "the exact current bullet/description text, copied verbatim from the candidate list above",
       "question": "the specific follow-up question"
     }
   ]
 }
 
-If every bullet is already well-quantified, return { "questions": [] }. Output the JSON now. No preamble, no explanation.`;
+Pick at most 3, from the candidates listed above only. Output the JSON now. No preamble, no explanation.`;
 }
 
 export function bulletRewritePrompt(

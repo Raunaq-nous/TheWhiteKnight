@@ -56,21 +56,26 @@ describe("profileExtractionPrompt", () => {
 });
 
 describe("profileQuestionsPrompt", () => {
-  it("instructs targeting the weakest/most generic bullets", () => {
-    const output = profileQuestionsPrompt(MOCK_PROFILE);
-    expect(output).toContain("weakest");
-    expect(output).toContain("generic");
+  const CANDIDATES = [
+    { targetType: "experience" as const, targetId: "Acme AI", targetLabel: "Acme AI — Senior PM", currentText: "Managed the product roadmap" },
+  ];
+
+  it("only lists the pre-filtered candidates, not a raw profile scan instruction", () => {
+    const output = profileQuestionsPrompt(MOCK_PROFILE, CANDIDATES);
     expect(output).toContain("Alex Chen");
+    expect(output).toContain("Managed the product roadmap");
+    expect(output).toContain("pre-filter");
+    expect(output).toContain("ONLY candidates you may pick from");
   });
 
   it("includes previously-asked questions to avoid repeats", () => {
-    const output = profileQuestionsPrompt(MOCK_PROFILE, ["How big was the team?"]);
+    const output = profileQuestionsPrompt(MOCK_PROFILE, CANDIDATES, ["How big was the team?"]);
     expect(output).toContain("Do NOT repeat");
     expect(output).toContain("How big was the team?");
   });
 
   it("omits the exclude block when no prior questions exist", () => {
-    const output = profileQuestionsPrompt(MOCK_PROFILE, []);
+    const output = profileQuestionsPrompt(MOCK_PROFILE, CANDIDATES, []);
     expect(output).not.toContain("Do NOT repeat");
   });
 });
