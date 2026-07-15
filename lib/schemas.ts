@@ -167,3 +167,78 @@ export const DiscoveredCompaniesResultSchema = z.object({
 export const FormQAResultSchema = z.object({
   qa: z.array(z.object({ question: z.string(), answer: z.string() })),
 });
+
+// ---------------------------------------------------------------------------
+// ProfileExtractionResult — returned by /api/profile/extract (Features 1 & 3)
+// Candidate entities extracted from freeform text. Matching against the
+// existing profile happens deterministically in lib/profile-merge.ts, not
+// here — the model only needs to propose clean structured entities.
+// ---------------------------------------------------------------------------
+
+export const ProfileExtractionResultSchema = z.object({
+  experience: z.array(z.object({
+    company: z.string(),
+    role: z.string(),
+    tenure: z.string(),
+    location: z.string().nullable().optional(),
+    bullets: z.array(z.string()),
+  })).nullable().optional(),
+  education: z.array(z.object({
+    institution: z.string(),
+    degree: z.string(),
+    field: z.string().nullable().optional(),
+    years: z.string(),
+    gpa: z.string().nullable().optional(),
+    achievements: z.array(z.string()).nullable().optional(),
+  })).nullable().optional(),
+  projects: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    stack: z.string().nullable().optional(),
+    outcomes: z.string().nullable().optional(),
+    repoUrl: z.string().nullable().optional(),
+  })).nullable().optional(),
+  publications: z.array(z.object({
+    title: z.string(),
+    publication: z.string(),
+    year: z.string(),
+    url: z.string().nullable().optional(),
+  })).nullable().optional(),
+  certifications: z.array(z.object({
+    name: z.string(),
+    issuer: z.string().nullable().optional(),
+    date: z.string().nullable().optional(),
+    relevance: z.string().nullable().optional(),
+  })).nullable().optional(),
+  skills: z.array(z.object({
+    category: z.string(),
+    items: z.array(z.string()),
+  })).nullable().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// ProfileQuestionsResult — returned by /api/profile/questions (Feature 2)
+// ---------------------------------------------------------------------------
+
+export const ProfileQuestionSchema = z.object({
+  id: z.string(),
+  targetType: z.enum(["experience", "project"]),
+  targetId: z.string(),
+  targetLabel: z.string(),
+  currentText: z.string(),
+  question: z.string(),
+});
+
+export const ProfileQuestionsResultSchema = z.object({
+  questions: z.array(ProfileQuestionSchema),
+});
+
+export type ProfileQuestion = z.infer<typeof ProfileQuestionSchema>;
+
+// ---------------------------------------------------------------------------
+// BulletRewriteResult — returned by /api/profile/rewrite-bullet (Feature 2)
+// ---------------------------------------------------------------------------
+
+export const BulletRewriteResultSchema = z.object({
+  rewrittenText: z.string(),
+});

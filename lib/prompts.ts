@@ -1071,3 +1071,116 @@ export function nlUpdatePrompt(text: string, app: Application): string {
     "- reminderDays: set to 7 if they just applied, 1 if interview is tomorrow, null if no clear follow-up needed",
   ].join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Profile enrichment (Features 1 & 3) — extract candidate entities from
+// freeform text. Matching/merging against the existing profile is
+// deterministic (lib/profile-merge.ts), not the model's job — this prompt
+// only needs to propose clean structured entities and avoid re-proposing
+// things clearly already in the profile.
+// ---------------------------------------------------------------------------
+
+export function profileExtractionPrompt(text: string, profile: Profile, diffAgainstText?: string): string {
+  return `You extract structured career information from freeform text for ${profile.name}'s profile.
+
+${buildProfileContext(profile)}
+
+---
+
+${diffAgainstText ? `PREVIOUS VERSION OF THE TEXT (for reference only — do not re-extract anything already covered here):
+${diffAgainstText.slice(0, 4000)}
+
+---
+
+NEW/EDITED TEXT — extract ONLY details that are new here compared to the previous version above AND not already in the candidate profile:
+${text.slice(0, 4000)}` : `TEXT TO EXTRACT FROM:
+${text.slice(0, 6000)}`}
+
+---
+
+RULES:
+1. NEVER invent facts. Extract only what is explicitly stated or very strongly implied in the text.
+2. Do not re-propose anything that is already clearly present in the candidate profile above (same company, same institution, same project name, same skill). It is fine to propose additional bullets/details for something already in the profile — just don't repeat what's already there.
+3. Experience bullets: action + specific detail + outcome, in the candidate's own words where possible — do not embellish or add fake metrics.
+4. Only include a field if the text actually supports it. Omit fields entirely rather than guessing (e.g. omit "gpa" if no GPA is mentioned).
+5. Skills: group into sensible categories (e.g. "Technical", "Leadership"). Only extract skills explicitly named in the text.
+6. If nothing new and extractable is found for a category, omit that array entirely (or return it empty).
+
+Output ONLY raw JSON matching exactly this shape, nothing before or after:
+{
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string (optional), "bullets": string[] } ],
+  "education": [ { "institution": string, "degree": string, "field": string (optional), "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
+  "projects": [ { "name": string, "description": string, "stack": string (optional), "outcomes": string (optional), "repoUrl": string (optional) } ],
+  "publications": [ { "title": string, "publication": string, "year": string, "url": string (optional) } ],
+  "certifications": [ { "name": string, "issuer": string (optional), "date": string (optional), "relevance": string (optional) } ],
+  "skills": [ { "category": string, "items": string[] } ]
+}
+
+Omit any top-level key entirely if you found nothing for it. Output the JSON now. No preamble, no explanation.`;
+}
+
+// ---------------------------------------------------------------------------
+// Interactive profile interview (Feature 2) — question generation + answer
+// incorporation. Targets the weakest/most-generic bullets specifically.
+// ---------------------------------------------------------------------------
+
+export function profileQuestionsPrompt(profile: Profile, excludeQuestionTexts: string[] = []): string {
+  const excludeBlock = excludeQuestionTexts.length > 0
+    ? `\nDo NOT repeat or closely rephrase any of these already-asked questions:\n${excludeQuestionTexts.map(q => `- ${q}`).join("\n")}\n`
+    : "";
+
+  return `You are a career coach reviewing ${profile.name}'s profile to find the weakest, most generic bullets and ask sharp, specific follow-up questions to strengthen them.
+
+${buildProfileContext(profile)}
+
+---
+
+TASK: Scan every bullet in EXPERIENCE and every project in PROJECTS. Identify the ones that are weakest — generic action statements with no quantified outcome, no scale, no specific numbers (deal size, revenue, time saved, headcount, %, users, etc). Ignore bullets that are already well-quantified.
+
+Pick the 2-3 WEAKEST bullets/projects (prioritize by how generic/unquantified they are) and write one targeted, specific question for each that would let the candidate supply the missing number or detail. Good questions ask for a concrete, answerable fact — e.g. "For the India market-entry project, what was the measurable outcome — deal size, revenue impact, or time saved?" or "How many people did you lead on the multi-plant capital program?" Bad questions are vague ("tell me more about this").
+${excludeBlock}
+Output ONLY raw JSON matching exactly this shape, nothing before or after:
+{
+  "questions": [
+    {
+      "id": "short slug, e.g. bain-2025-bullet-1",
+      "targetType": "experience" | "project",
+      "targetId": "the exact company name (for experience) or project name (for project), copied exactly from the profile above",
+      "targetLabel": "human-readable label, e.g. 'Bain & Company — India market entry bullet'",
+      "currentText": "the exact current bullet/description text, copied verbatim from the profile",
+      "question": "the specific follow-up question"
+    }
+  ]
+}
+
+If every bullet is already well-quantified, return { "questions": [] }. Output the JSON now. No preamble, no explanation.`;
+}
+
+export function bulletRewritePrompt(
+  profile: Profile,
+  targetLabel: string,
+  currentText: string,
+  question: string,
+  answer: string,
+): string {
+  return `You are rewriting one resume bullet for ${profile.name} to incorporate a new quantified detail they just supplied.
+
+CONTEXT: ${targetLabel}
+
+CURRENT BULLET:
+"${currentText}"
+
+QUESTION ASKED:
+"${question}"
+
+CANDIDATE'S ANSWER:
+"${answer}"
+
+RULES:
+1. Rewrite the bullet to naturally incorporate the specific detail(s) from the candidate's answer. Do not invent any number or fact not present in the answer.
+2. If the answer doesn't actually contain a usable fact (e.g. "I don't know" or "not sure"), return the CURRENT bullet unchanged.
+3. Keep it one line, action-verb-first, no em dashes, no smart quotes, no banned resume filler ("passionate about", "leveraged", "spearheaded", "synergies").
+4. Do not change parts of the bullet unrelated to the question/answer.
+
+Output ONLY raw JSON: { "rewrittenText": "the rewritten bullet" }. No preamble, no explanation.`;
+}
