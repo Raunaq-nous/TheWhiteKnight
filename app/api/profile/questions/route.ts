@@ -3,6 +3,7 @@ import { checkRateLimit } from "../../../../lib/rate-limit";
 import { chatJSON, ProviderSettings } from "../../../../lib/ai-client";
 import { ProfileQuestionsResultSchema, ProfileQuestion } from "../../../../lib/schemas";
 import { profileQuestionsPrompt } from "../../../../lib/prompts";
+import { getWeakBulletCandidates } from "../../../../lib/profile-bullet-quality";
 import type { Profile } from "../../../../lib/profile";
 
 export const runtime = "nodejs";
@@ -29,8 +30,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing profile" }, { status: 400 });
     }
 
+    // Deterministic pre-filter: only bullets/descriptions with zero
+    // quantification signal become LLM candidates at all. If none exist,
+    // skip the AI call entirely — every bullet is already quantified.
+    const candidates = getWeakBulletCandidates(profile);
+    if (candidates.length === 0) {
+      return NextResponse.json({ questions: [] });
+    }
+
     const data = await chatJSON<{ questions: ProfileQuestion[] }>(
-      [{ role: "user", content: profileQuestionsPrompt(profile, excludeQuestionTexts ?? []) }],
+      [{ role: "user", content: profileQuestionsPrompt(profile, candidates, excludeQuestionTexts ?? []) }],
       { temperature: 0.4, maxTokens: 1200 },
       providerSettings,
       ProfileQuestionsResultSchema,
