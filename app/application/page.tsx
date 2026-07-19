@@ -1359,7 +1359,7 @@ window.addEventListener('load', function() {
       </div>
     </main>
     {showResumeExport && resumeContent && (
-      <ResumeExportView content={resumeContent} onClose={() => setShowResumeExport(false)} />
+      <ResumeExportView content={resumeContent} archetype={resumeArchetypeUsed} onClose={() => setShowResumeExport(false)} />
     )}
     </>
   );

@@ -9,6 +9,7 @@
 
 import { Profile, RoleType } from "./profile";
 import type { Application } from "./store";
+import type { ResumeContent, ResumeSectionKey } from "./resume-schema";
 
 export type ResumeArchetype =
   | "consulting"
@@ -37,21 +38,29 @@ export type ResumeSpec = {
   omit: string;
   certificationPolicy: string;
   lengthNorm: string;
-  extraSection?: "leadership" | "projects";
+  /** Include a "Key Wins" band: 3-4 highest-impact quantified achievements pulled from across ALL experience. */
+  includeKeyWins: boolean;
+  /** Definitive top-to-bottom section render order for this archetype (header always first). */
+  sectionSequence: ResumeSectionKey[];
 };
 
 export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
+  // NOTE: the summary-led, Key-Wins-first consulting structure is a
+  // founder-directed override of the classic no-summary/education-first MBB
+  // convention from the original research — the operator reviewed both and
+  // chose this structure deliberately.
   consulting: {
     label: RESUME_ARCHETYPE_LABELS.consulting,
-    sectionOrder: "education-first",
-    summaryAllowed: false,
-    summaryStyle: "Omit entirely — consulting resumes do not use a summary/objective.",
+    sectionOrder: "experience-first",
+    summaryAllowed: true,
+    summaryStyle: "2-3 line role-specific elevator pitch that names the target role (and firm where natural) and leads with the single most relevant proof point. Never generic.",
     bulletPattern: "CAR (Context-Action-Result), max 2 lines, every bullet has a quantified business outcome ($ saved, % uplift, deal size, headcount).",
-    emphasize: "Quantified business impact, structured/MECE thinking, executive communication, leadership signals.",
-    omit: "Deep technical jargon. No summary/objective section.",
+    emphasize: "A Key Wins band of the 3-4 biggest quantified, cross-role achievements up top. Quantified business impact, structured/MECE thinking, executive communication, leadership signals.",
+    omit: "Deep technical jargon.",
     certificationPolicy: "Omit unless directly relevant to the target firm's practice area (e.g. a CFA for a corp-fin-adjacent case team). Cap at 2.",
     lengthNorm: "Strict one page, even for 15+ years of experience.",
-    extraSection: "leadership",
+    includeKeyWins: true,
+    sectionSequence: ["summary", "keyWins", "projects", "experience", "education", "skills", "certifications"],
   },
   vc_investing: {
     label: RESUME_ARCHETYPE_LABELS.vc_investing,
@@ -63,6 +72,8 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     omit: "Generic 'analytical skills' language not tied to a named deal or company.",
     certificationPolicy: "Include only CFA/CAIA-type credentials directly signaling investing rigor. Cap at 2.",
     lengthNorm: "Strict one page, even for ex-bankers/consultants moving into investing.",
+    includeKeyWins: false,
+    sectionSequence: ["education", "experience", "projects", "skills", "certifications"],
   },
   product: {
     label: RESUME_ARCHETYPE_LABELS.product,
@@ -74,6 +85,8 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     omit: "\"Managed the roadmap\" or similar scope statements with no attached metric.",
     certificationPolicy: "Include only if squarely product-relevant (e.g. a recognized PM certification). Cap at 2.",
     lengthNorm: "Strict one page.",
+    includeKeyWins: false,
+    sectionSequence: ["summary", "experience", "projects", "skills", "education", "certifications"],
   },
   ai_ml_engineering: {
     label: RESUME_ARCHETYPE_LABELS.ai_ml_engineering,
@@ -85,7 +98,8 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     omit: "Generic 'built an AI system' phrasing. Consulting-style 'leadership' sections are optional here, not load-bearing.",
     certificationPolicy: "Include cloud/ML platform certifications (AWS/GCP/Azure ML, etc.) only if directly relevant to the JD. Cap at 3.",
     lengthNorm: "Strict one page for IC roles.",
-    extraSection: "projects",
+    includeKeyWins: false,
+    sectionSequence: ["summary", "experience", "projects", "skills", "education", "certifications"],
   },
   finance_ib: {
     label: RESUME_ARCHETYPE_LABELS.finance_ib,
@@ -97,6 +111,8 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     omit: "Anything stylistically unconventional — no creative formatting, no summary.",
     certificationPolicy: "Include CFA/Series licenses only. Cap at 2.",
     lengthNorm: "Strict one page for analyst/associate. Two pages acceptable only at MD/Director level with an extensive deal sheet.",
+    includeKeyWins: false,
+    sectionSequence: ["education", "experience", "skills", "certifications"],
   },
   general: {
     label: RESUME_ARCHETYPE_LABELS.general,
@@ -108,8 +124,19 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     omit: "Generic filler adjectives and skills the profile doesn't actually support.",
     certificationPolicy: "Include only the 2-3 most JD-relevant certifications; omit the section if none qualify.",
     lengthNorm: "Strict one page.",
+    includeKeyWins: false,
+    sectionSequence: ["summary", "experience", "projects", "education", "skills", "certifications"],
   },
 };
+
+/**
+ * Stamp the archetype's section order onto generated content. Applied
+ * deterministically server-side after every generation/refine — never
+ * trusted to the model.
+ */
+export function withArchetypeSequence(content: ResumeContent, archetype: ResumeArchetype): ResumeContent {
+  return { ...content, sectionSequence: [...RESUME_SPECS[archetype].sectionSequence] };
+}
 
 const KEYWORD_RULES: { archetype: ResumeArchetype; pattern: RegExp }[] = [
   { archetype: "vc_investing", pattern: /\b(venture capital|vc associate|vc analyst|growth equity|investment associate|portfolio (?:company|management)|fund (?:manager|associate)|\bvc\b)\b/i },

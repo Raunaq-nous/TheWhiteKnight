@@ -5,7 +5,7 @@
  * normalizeResumeContent/resumeContentToMarkdown don't crash on null values.
  */
 import { describe, it, expect } from "vitest";
-import { ResumeContentSchema, normalizeResumeContent, resumeContentToMarkdown, ResumeContent } from "../resume-schema";
+import { ResumeContentSchema, normalizeResumeContent, resumeContentToMarkdown, resolveSectionSequence, ResumeContent } from "../resume-schema";
 
 function baseResumeContent(): unknown {
   return {
@@ -36,6 +36,10 @@ function baseResumeContent(): unknown {
     projects: null,
     certifications: null,
     leadership: null,
+    links: null,
+    keyWins: null,
+    targetPriorities: null,
+    sectionSequence: null,
   };
 }
 
@@ -97,8 +101,66 @@ describe("ResumeContentSchema nullable optional fields", () => {
     expect(() => resumeContentToMarkdown(parsed)).not.toThrow();
     const md = resumeContentToMarkdown(parsed);
     expect(md).toContain("Jordan Lee");
-    expect(md).not.toContain("## Projects");
+    expect(md).not.toContain("## Relevant Projects");
     expect(md).not.toContain("## Certifications");
     expect(md).not.toContain("## Leadership");
+    expect(md).not.toContain("## Key Wins");
+  });
+
+  it("accepts real values for links/keyWins/targetPriorities/sectionSequence", () => {
+    const input = baseResumeContent() as any;
+    input.links = [{ label: "LinkedIn", url: "linkedin.com/in/jordan" }];
+    input.keyWins = ["Closed a $10M deal"];
+    input.targetPriorities = ["capital projects", "cost optimization"];
+    input.sectionSequence = ["summary", "keyWins", "experience", "education", "skills"];
+    const result = ResumeContentSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown section key in sectionSequence", () => {
+    const input = baseResumeContent() as any;
+    input.sectionSequence = ["summary", "not-a-section"];
+    const result = ResumeContentSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("resolveSectionSequence", () => {
+  const base = (): ResumeContent => ResumeContentSchema.parse(baseResumeContent()) as ResumeContent;
+
+  it("uses the stamped sequence when present, appending forgotten content-bearing keys", () => {
+    const r = { ...base(), sectionSequence: ["summary", "experience"] as ResumeContent["sectionSequence"] };
+    const seq = resolveSectionSequence(r);
+    expect(seq.slice(0, 2)).toEqual(["summary", "experience"]);
+    expect(seq).toContain("education");
+    expect(seq).toContain("skills");
+    expect(seq).toContain("certifications");
+  });
+
+  it("falls back to legacy order from sectionOrder for pre-sequence content", () => {
+    const expFirst = resolveSectionSequence(base());
+    expect(expFirst.indexOf("experience")).toBeLessThan(expFirst.indexOf("education"));
+
+    const eduFirst = resolveSectionSequence({ ...base(), sectionOrder: "education-first" });
+    expect(eduFirst.indexOf("education")).toBeLessThan(eduFirst.indexOf("experience"));
+  });
+});
+
+describe("resumeContentToMarkdown with the new sections", () => {
+  it("renders key wins, header links, and sequence order", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      summary: "Consultant targeting capital excellence work.",
+      links: [{ label: "LinkedIn", url: "linkedin.com/in/jordan" }, { label: "Portfolio", url: "jordan.dev" }],
+      keyWins: ["Closed a $10M deal", "Cut close cycle from 12d to 4d"],
+      sectionSequence: ["summary", "keyWins", "experience", "education", "skills", "certifications"],
+    }) as ResumeContent;
+    const md = resumeContentToMarkdown(parsed);
+    expect(md).toContain("[LinkedIn](linkedin.com/in/jordan)");
+    expect(md).toContain("[Portfolio](jordan.dev)");
+    expect(md).toContain("## Key Wins");
+    expect(md).toContain("- Closed a $10M deal");
+    expect(md.indexOf("## Key Wins")).toBeLessThan(md.indexOf("## Experience"));
+    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Key Wins"));
   });
 });
