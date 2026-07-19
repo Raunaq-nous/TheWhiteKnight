@@ -199,7 +199,8 @@ function resumeOutputFormatInstructions(): string {
   "contactLine": string (pre-joined "email | phone | location" ONLY — links go in the links array, never in this string),
   "links": [ { "label": string, "url": string } ] (LinkedIn, Portfolio, GitHub from the profile — copy URLs exactly; omit key entirely if the profile has none),
   "summary": string,
-  "targetPriorities": string[] (the 3-5 things this JD most values, from your analysis above),
+  "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),
+  "subFocus": string (the specific sub-focus/practice-area of THIS role within its archetype, from your Step 1 analysis — 1 short phrase, e.g. "Capital Excellence: capital project delivery, cost/schedule optimization"),
   "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins band; omit key entirely otherwise),
   "sectionOrder": "education-first" | "experience-first",
   "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ],
@@ -237,32 +238,42 @@ ${techSkills ? `MUST-LIST TECH SKILLS (only if candidate actually has them per p
 
 ---
 
-STEP 1 — TARGET PRIORITIES (do this BEFORE writing anything):
-Analyze the JD above and identify the 3-5 things THIS specific role most values (e.g. for a capital-projects consulting role: capital program delivery, cost/schedule optimization, executive-level communication). Put them in the "targetPriorities" output field. Then:
-- SELECT AND FOREGROUND: the experiences, bullets, and projects that most directly evidence those priorities come first and get the lowest priority numbers.
-- FRAME to mirror: phrase each bullet in the JD's own vocabulary where truthful — mirror what the role calls the work, never what the profile happens to call it.
-- Everything must remain true to the profile. Reframing is allowed; inventing is not.
+STEP 1 — JD ANALYSIS (do this BEFORE writing anything). Go deeper than the archetype label — two roles in the same archetype (e.g. two consulting roles) can have completely different sub-focuses and must NOT produce interchangeable resumes:
+
+1a. SUB-FOCUS: read the role title, the JD's own section headers/practice-area language, and the key requirements. Identify the SPECIFIC sub-focus or practice area of THIS role beyond the generic archetype — e.g. a "Capital Excellence" consulting role is about capital project delivery, cost/schedule optimization, and capital allocation; a "Performance Improvement" consulting role at the same firm is about operational turnaround and cost reduction. Name this specifically in the "subFocus" output field. If the JD gives no such signal, describe the narrowest specific slice of the archetype the requirements point to.
+1b. TARGET PRIORITIES: from that sub-focus, identify the 3-5 things THIS specific role most values. Put them in "targetPriorities".
+1c. SELECT AND FOREGROUND: using the sub-focus (not the generic archetype) as the lens, choose the experiences, bullets, and projects that most directly evidence it — those come first and get the lowest priority numbers. A generic "led a project" bullet that doesn't touch the sub-focus should rank low even if it's a strong bullet for some other job.
+1d. FRAME to mirror: phrase each bullet in the JD's own vocabulary where truthful — mirror what the role and its sub-focus call the work, never generic language the profile happens to use.
+1e. Everything must remain true to the profile. Reframing and re-selecting what to foreground is expected and required; inventing a fact or metric is not.
 
 ${RESUME_BASE_RULES}
 
+WHAT SCREENERS IN THIS FIELD ACTUALLY WANT: ${spec.whatScreenersWant}
+
+WHAT "QUANTIFIED IMPACT" MEANS HERE — prefer these units of proof over generic phrasing: ${spec.quantifiedImpactMeaning}
+
+LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
+
 EXPERIENCE INCLUSION RULES:
 - There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
-- Rank bullets by relevance to the target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this JD (keep 2-4 per entry, the strongest first).
+- Rank bullets by relevance to the SUB-FOCUS and target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this specific role (keep 2-4 per entry, the strongest first).
 - MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
 - Preserve the exact company name and tenure for every entry.
 
 PROFILE SUMMARY:
 - ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
-- If a summary is written: 2-3 lines MAX, specifically tied to THIS role at THIS company, leading with the single most relevant proof point. No filler adjectives, never generic.
+- If a summary is written: 2-3 lines MAX, specifically tied to THIS role's sub-focus at THIS company, leading with the single most relevant proof point. No filler adjectives, never generic.
 
 ARCHETYPE — ${spec.label}:
+- MANDATORY SECTIONS (include if the profile has any data for them): ${spec.mandatorySections.join(", ")}.
+- NEVER INCLUDE: ${spec.omittedSections.length > 0 ? spec.omittedSections.join(", ") : "(no sections banned for this archetype)"}.
 - SECTION ORDER (enforced by the renderer, listed so you write for it): ${spec.sectionSequence.join(" -> ")}.
 - BULLET STYLE: ${spec.bulletPattern}
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
 - CERTIFICATIONS: ${spec.certificationPolicy}
-${spec.includeKeyWins ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match the target priorities.' : ""}
-${spec.sectionSequence.includes("projects") ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match the target priorities, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
+${spec.includeKeyWins ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
+${spec.sectionSequence.includes("projects") ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
 
 LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL). The contactLine carries only email | phone | location.
 
@@ -303,8 +314,9 @@ RULES:
 3. Education, company names, and tenures must remain exactly as in the profile unless the instruction specifically targets them.
 4. Keep every experience entry present (you may add/remove/reprioritize bullets, never drop an entire entry) unless the instruction says otherwise.
 5. Preserve the "priority" ranking convention: 1 = most relevant, higher = more cuttable. Re-rank if the instruction changes emphasis (e.g. "emphasize AI" should lower the priority number on AI-relevant bullets).
+6. Preserve the existing "subFocus" and "targetPriorities" fields unless the instruction specifically asks to change what this resume targets.
 
-ARCHETYPE reference (still applies unless the instruction overrides it): section order ${spec.sectionOrder}, summary ${spec.summaryAllowed ? "allowed" : "omitted"}, certifications: ${spec.certificationPolicy}
+ARCHETYPE reference (still applies unless the instruction overrides it): section order ${spec.sectionOrder}, summary ${spec.summaryAllowed ? "allowed" : "omitted"}, certifications: ${spec.certificationPolicy}, mandatory sections: ${spec.mandatorySections.join(", ")}, never include: ${spec.omittedSections.length > 0 ? spec.omittedSections.join(", ") : "(none)"}
 
 ${resumeOutputFormatInstructions()}`;
 }

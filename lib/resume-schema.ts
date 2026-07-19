@@ -73,6 +73,7 @@ export const ResumeContentSchema = z.object({
   links: z.array(ResumeLinkSchema).nullable().optional().describe("Header hyperlinks (LinkedIn, Portfolio, GitHub) rendered as real <a> tags"),
   summary: z.string(),
   targetPriorities: z.array(z.string()).nullable().optional().describe("The 3-5 things the target JD most values, extracted before writing — drives selection and framing"),
+  subFocus: z.string().nullable().optional().describe("The specific sub-focus/practice-area of THIS role within its archetype, e.g. 'Capital Excellence — capital project delivery, cost/schedule optimization' vs 'Performance Improvement — operational turnaround, cost reduction'. Drives which wins/projects get foregrounded."),
   keyWins: z.array(z.string()).nullable().optional().describe("3-4 highest-impact quantified achievements pulled from across all experience — archetypes that include a Key Wins band"),
   sectionOrder: z.enum(["education-first", "experience-first"]),
   sectionSequence: z.array(ResumeSectionKeySchema).nullable().optional().describe("Injected deterministically from the archetype spec server-side — never model output"),
@@ -125,6 +126,7 @@ export function normalizeResumeContent(content: ResumeContent): ResumeContent {
     links: content.links?.map(l => ({ ...l, label: clean(l.label), url: l.url.trim() })),
     keyWins: content.keyWins?.map(clean),
     targetPriorities: content.targetPriorities?.map(clean),
+    subFocus: content.subFocus ? clean(content.subFocus) : content.subFocus,
   };
 }
 
