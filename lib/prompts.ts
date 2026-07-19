@@ -274,6 +274,7 @@ ARCHETYPE — ${spec.label}:
 - CERTIFICATIONS: ${spec.certificationPolicy}
 ${spec.includeKeyWins ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
 ${spec.sectionSequence.includes("projects") ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
+${spec.sectionSequence.includes("leadership") ? '- LEADERSHIP & ACTIVITIES: include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people — drawn only from real profile content (roles, projects, or education achievements that genuinely show this, e.g. team leadership, mentoring, extracurricular leadership). Do not invent an activity that is not in the profile; omit the key if the profile has nothing that qualifies.' : ""}
 
 LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL). The contactLine carries only email | phone | location.
 

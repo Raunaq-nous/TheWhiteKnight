@@ -76,12 +76,22 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.vc_investing.summaryAllowed).toBe(false);
   });
 
-  it("consulting uses the founder-directed structure: summary, key wins, projects, experience, education, skills", () => {
+  it("consulting uses the founder-directed structure: summary, key wins, projects, experience, leadership, education, skills", () => {
     expect(RESUME_SPECS.consulting.summaryAllowed).toBe(true);
     expect(RESUME_SPECS.consulting.includeKeyWins).toBe(true);
     expect(RESUME_SPECS.consulting.sectionSequence).toEqual([
-      "summary", "keyWins", "projects", "experience", "education", "skills", "certifications",
+      "summary", "keyWins", "projects", "experience", "leadership", "education", "skills", "certifications",
     ]);
+  });
+
+  it("leadership is mandatory for consulting specifically, placed right after experience", () => {
+    expect(RESUME_SPECS.consulting.mandatorySections).toContain("leadership");
+    const seq = RESUME_SPECS.consulting.sectionSequence;
+    expect(seq.indexOf("leadership")).toBe(seq.indexOf("experience") + 1);
+    // Other archetypes are unchanged — leadership stays optional for them.
+    for (const key of (Object.keys(RESUME_SPECS) as ResumeArchetype[]).filter(k => k !== "consulting")) {
+      expect(RESUME_SPECS[key].mandatorySections, `${key} should not require leadership`).not.toContain("leadership");
+    }
   });
 
   it("only consulting includes a Key Wins band", () => {

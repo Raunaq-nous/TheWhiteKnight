@@ -183,7 +183,7 @@ export function resumeContentToMarkdown(r: ResumeContent): string {
     experience: () => {
       lines.push("## Experience");
       for (const e of r.experience) {
-        lines.push(`### ${e.role} | ${e.company} | ${e.tenure}${e.location ? ` | ${e.location}` : ""}`);
+        lines.push(`### ${e.company} | ${e.role} | ${e.tenure}${e.location ? ` | ${e.location}` : ""}`);
         for (const b of [...e.bullets].sort((a, b) => a.priority - b.priority)) {
           lines.push(`- ${b.text}`);
         }

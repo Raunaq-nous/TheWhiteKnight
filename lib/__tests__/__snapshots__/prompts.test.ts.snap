@@ -380,6 +380,7 @@ ARCHETYPE — Product Management:
 
 - RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role's sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.
 
+
 LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL). The contactLine carries only email | phone | location.
 
 SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
