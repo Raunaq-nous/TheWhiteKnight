@@ -196,16 +196,20 @@ function resumeOutputFormatInstructions(): string {
   return `OUTPUT — a single JSON object, nothing before or after, matching exactly this shape:
 {
   "name": string,
-  "contactLine": string (pre-joined "email | phone | location | LinkedIn | GitHub | Portfolio", omitting any field the profile doesn't have),
+  "contactLine": string (pre-joined "email | phone | location" ONLY — links go in the links array, never in this string),
+  "links": [ { "label": string, "url": string } ] (LinkedIn, Portfolio, GitHub from the profile — copy URLs exactly; omit key entirely if the profile has none),
   "summary": string,
+  "targetPriorities": string[] (the 3-5 things this JD most values, from your analysis above),
+  "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins band; omit key entirely otherwise),
   "sectionOrder": "education-first" | "experience-first",
   "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ],
   "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
   "skills": [ { "category": string, "items": string[] } ],
   "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used),
-  "certifications": [ { "name": string, "issuer": string (optional), "date": string (optional) } ] (optional, omit key entirely if none qualify),
-  "leadership": string[] (optional, omit key entirely unless the archetype calls for a Leadership & Activities section)
+  "certifications": [ { "name": string, "issuer": string (optional), "date": string (optional) } ] (optional, omit key entirely if none qualify)
 }
+
+Do NOT output a "sectionSequence" field — the system sets the final section order from the archetype spec.
 
 BULLET PRIORITY — every bullet needs a "priority" integer: 1 = most relevant to this JD, must survive any cut. Higher numbers = progressively safer to cut first if the page runs long. Rank every bullet honestly; do not mark everything priority 1.
 
@@ -233,11 +237,17 @@ ${techSkills ? `MUST-LIST TECH SKILLS (only if candidate actually has them per p
 
 ---
 
+STEP 1 — TARGET PRIORITIES (do this BEFORE writing anything):
+Analyze the JD above and identify the 3-5 things THIS specific role most values (e.g. for a capital-projects consulting role: capital program delivery, cost/schedule optimization, executive-level communication). Put them in the "targetPriorities" output field. Then:
+- SELECT AND FOREGROUND: the experiences, bullets, and projects that most directly evidence those priorities come first and get the lowest priority numbers.
+- FRAME to mirror: phrase each bullet in the JD's own vocabulary where truthful — mirror what the role calls the work, never what the profile happens to call it.
+- Everything must remain true to the profile. Reframing is allowed; inventing is not.
+
 ${RESUME_BASE_RULES}
 
 EXPERIENCE INCLUSION RULES:
 - There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
-- Rank bullets by relevance to THIS job using the priority field below — do not just reorder, actually cut bullets that are weak for this JD (keep 2-4 per entry, the strongest first).
+- Rank bullets by relevance to the target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this JD (keep 2-4 per entry, the strongest first).
 - MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
 - Preserve the exact company name and tenure for every entry.
 
@@ -246,13 +256,15 @@ PROFILE SUMMARY:
 - If a summary is written: 2-3 lines MAX, specifically tied to THIS role at THIS company, leading with the single most relevant proof point. No filler adjectives, never generic.
 
 ARCHETYPE — ${spec.label}:
-- SECTION ORDER: ${spec.sectionOrder}.
+- SECTION ORDER (enforced by the renderer, listed so you write for it): ${spec.sectionSequence.join(" -> ")}.
 - BULLET STYLE: ${spec.bulletPattern}
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
 - CERTIFICATIONS: ${spec.certificationPolicy}
-${spec.extraSection === "leadership" ? '- Include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people, drawn only from real profile content (roles, projects, or education achievements that show this).' : ""}
-${spec.extraSection === "projects" ? '- Include a "projects" array with the 2-3 highest-impact profile projects most relevant to this JD, one line each.' : ""}
+${spec.includeKeyWins ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match the target priorities.' : ""}
+${spec.sectionSequence.includes("projects") ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match the target priorities, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
+
+LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL). The contactLine carries only email | phone | location.
 
 SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
 

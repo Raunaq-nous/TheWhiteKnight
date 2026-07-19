@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { Profile } from "../profile";
 import type { Application } from "../store";
-import { detectResumeArchetype, RESUME_SPECS, RESUME_ARCHETYPE_LABELS, ResumeArchetype } from "../resume-archetype";
+import { detectResumeArchetype, withArchetypeSequence, RESUME_SPECS, RESUME_ARCHETYPE_LABELS, ResumeArchetype } from "../resume-archetype";
+import type { ResumeContent } from "../resume-schema";
 
 function baseProfile(overrides: Partial<Profile> = {}): Profile {
   return {
@@ -68,16 +69,63 @@ describe("RESUME_SPECS", () => {
     }
   });
 
-  it("consulting and finance_ib require education-first, no summary", () => {
-    expect(RESUME_SPECS.consulting.sectionOrder).toBe("education-first");
-    expect(RESUME_SPECS.consulting.summaryAllowed).toBe(false);
+  it("finance_ib and vc_investing stay education-first with no summary", () => {
     expect(RESUME_SPECS.finance_ib.sectionOrder).toBe("education-first");
     expect(RESUME_SPECS.finance_ib.summaryAllowed).toBe(false);
+    expect(RESUME_SPECS.vc_investing.sectionOrder).toBe("education-first");
+    expect(RESUME_SPECS.vc_investing.summaryAllowed).toBe(false);
+  });
+
+  it("consulting uses the founder-directed structure: summary, key wins, projects, experience, education, skills", () => {
+    expect(RESUME_SPECS.consulting.summaryAllowed).toBe(true);
+    expect(RESUME_SPECS.consulting.includeKeyWins).toBe(true);
+    expect(RESUME_SPECS.consulting.sectionSequence).toEqual([
+      "summary", "keyWins", "projects", "experience", "education", "skills", "certifications",
+    ]);
+  });
+
+  it("only consulting includes a Key Wins band", () => {
+    const withKeyWins = (Object.keys(RESUME_SPECS) as ResumeArchetype[]).filter(k => RESUME_SPECS[k].includeKeyWins);
+    expect(withKeyWins).toEqual(["consulting"]);
+  });
+
+  it("every spec has a non-empty sectionSequence covering the core sections", () => {
+    for (const key of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      const seq = RESUME_SPECS[key].sectionSequence;
+      expect(seq.length, `empty sequence for ${key}`).toBeGreaterThan(0);
+      for (const core of ["experience", "education", "skills"] as const) {
+        expect(seq, `${key} sequence missing ${core}`).toContain(core);
+      }
+    }
   });
 
   it("product and ai_ml_engineering are experience-first", () => {
     expect(RESUME_SPECS.product.sectionOrder).toBe("experience-first");
     expect(RESUME_SPECS.ai_ml_engineering.sectionOrder).toBe("experience-first");
+  });
+});
+
+describe("withArchetypeSequence", () => {
+  const content: ResumeContent = {
+    name: "Jordan Lee",
+    contactLine: "jordan@example.com | 555-0100 | Remote",
+    summary: "",
+    sectionOrder: "experience-first",
+    experience: [],
+    education: [],
+    skills: [],
+  };
+
+  it("stamps the archetype's sequence onto the content", () => {
+    const stamped = withArchetypeSequence(content, "consulting");
+    expect(stamped.sectionSequence).toEqual(RESUME_SPECS.consulting.sectionSequence);
+  });
+
+  it("overrides any model-supplied sequence and does not mutate the input", () => {
+    const withBogus = { ...content, sectionSequence: ["skills"] as ResumeContent["sectionSequence"] };
+    const stamped = withArchetypeSequence(withBogus, "finance_ib");
+    expect(stamped.sectionSequence).toEqual(RESUME_SPECS.finance_ib.sectionSequence);
+    expect(withBogus.sectionSequence).toEqual(["skills"]);
   });
 });
 

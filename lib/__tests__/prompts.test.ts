@@ -165,11 +165,27 @@ describe("prompt builder snapshots", () => {
 
   it("resumePrompt applies archetype-specific section order and rules", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("education-first");
-    expect(consulting).toContain("Do NOT include a summary for this archetype");
+    expect(consulting).toContain("summary -> keyWins -> projects -> experience -> education -> skills");
+    expect(consulting).toContain("KEY WINS");
+    expect(consulting).toContain("role-specific elevator pitch");
 
-    const product = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
-    expect(product).toContain("experience-first");
+    const ib = resumePrompt(MOCK_PROFILE, MOCK_APP, "finance_ib");
+    expect(ib).toContain("Do NOT include a summary for this archetype");
+    expect(ib).toContain("education -> experience -> skills");
+    expect(ib).not.toContain("KEY WINS");
+  });
+
+  it("resumePrompt requires JD priority extraction before writing", () => {
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(output).toContain("TARGET PRIORITIES");
+    expect(output).toContain("targetPriorities");
+    expect(output).toContain("SELECT AND FOREGROUND");
+  });
+
+  it("resumePrompt puts links in a links array, not the contact line", () => {
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(output).toContain('"links"');
+    expect(output).toContain("email | phone | location");
   });
 
   it("resumePrompt instructs JSON output with bullet priority ranking", () => {

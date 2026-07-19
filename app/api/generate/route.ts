@@ -3,7 +3,7 @@ import { checkRateLimit } from "../../../lib/rate-limit";
 import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { SkillGapResultSchema } from "../../../lib/schemas";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../../lib/resume-schema";
-import { detectResumeArchetype, ResumeArchetype } from "../../../lib/resume-archetype";
+import { detectResumeArchetype, withArchetypeSequence, ResumeArchetype } from "../../../lib/resume-archetype";
 import {
   GenerationAction,
   ContactProfile,
@@ -72,7 +72,9 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      return NextResponse.json({ data: normalizeResumeContent(data), archetype });
+      // Section order is stamped deterministically from the archetype spec —
+      // never trusted to the model.
+      return NextResponse.json({ data: withArchetypeSequence(normalizeResumeContent(data), archetype), archetype });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
@@ -91,7 +93,7 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      return NextResponse.json({ data: normalizeResumeContent(data), archetype });
+      return NextResponse.json({ data: withArchetypeSequence(normalizeResumeContent(data), archetype), archetype });
     }
 
     let prompt = "";

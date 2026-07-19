@@ -2,7 +2,7 @@ import "server-only";
 import { chat, chatJSON, ProviderSettings } from "../../ai-client";
 import { SkillGapResultSchema } from "../../schemas";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../resume-schema";
-import { detectResumeArchetype } from "../../resume-archetype";
+import { detectResumeArchetype, withArchetypeSequence } from "../../resume-archetype";
 import {
   GenerationAction,
   ContactProfile,
@@ -52,7 +52,7 @@ export async function generateDraft(input: DraftInput): Promise<unknown> {
       providerSettings,
       ResumeContentSchema,
     );
-    return { data: normalizeResumeContent(data), archetype };
+    return { data: withArchetypeSequence(normalizeResumeContent(data), archetype), archetype };
   }
 
   let prompt = "";
