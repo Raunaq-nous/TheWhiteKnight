@@ -70,11 +70,14 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     certificationPolicy: "Omit unless directly relevant to the target firm's practice area (e.g. a CFA for a corp-fin-adjacent case team). Cap at 2.",
     lengthNorm: "Strict one page, even for 15+ years of experience.",
     includeKeyWins: true,
-    sectionSequence: ["summary", "keyWins", "projects", "experience", "education", "skills", "certifications"],
+    // "leadership" sits right after experience, before education — a brief
+    // Leadership & Activities signal (proof of mobilizing people) matters
+    // specifically for consulting screening, per MBB conventions.
+    sectionSequence: ["summary", "keyWins", "projects", "experience", "leadership", "education", "skills", "certifications"],
     whatScreenersWant: "MECE problem-structuring, quantified business impact, executive communication, and peer-institution pedigree (target school + notable prior employer). Screeners scan for ~30-60 seconds, hunting for firm names and numbers before reading closely.",
     quantifiedImpactMeaning: "$ revenue captured or cost saved, % margin/efficiency uplift, deal or program size, timeline compression, headcount/team led, number of workstreams owned.",
     languageConventions: "Precise, structured, action-first, no first person. Consulting-toolkit vocabulary (hypothesis-driven, stakeholder alignment) used sparingly and only when true — never as filler.",
-    mandatorySections: ["experience", "education", "skills"],
+    mandatorySections: ["experience", "education", "skills", "leadership"],
     omittedSections: [],
   },
   vc_investing: {

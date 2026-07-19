@@ -163,4 +163,20 @@ describe("resumeContentToMarkdown with the new sections", () => {
     expect(md.indexOf("## Key Wins")).toBeLessThan(md.indexOf("## Experience"));
     expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Key Wins"));
   });
+
+  it("leads each experience heading with the employer name, not the role", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      experience: [{
+        company: "Bain & Company",
+        role: "Consultant",
+        tenure: "2020 - Present",
+        location: null,
+        bullets: [{ text: "Led capital project reviews", priority: 1 }],
+      }],
+    }) as ResumeContent;
+    const md = resumeContentToMarkdown(parsed);
+    const headingLine = md.split("\n").find(l => l.startsWith("### "))!;
+    expect(headingLine).toBe("### Bain & Company | Consultant | 2020 - Present");
+  });
 });

@@ -165,7 +165,7 @@ describe("prompt builder snapshots", () => {
 
   it("resumePrompt applies archetype-specific section order and rules", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("summary -> keyWins -> projects -> experience -> education -> skills");
+    expect(consulting).toContain("summary -> keyWins -> projects -> experience -> leadership -> education -> skills");
     expect(consulting).toContain("KEY WINS");
     expect(consulting).toContain("role-specific elevator pitch");
 

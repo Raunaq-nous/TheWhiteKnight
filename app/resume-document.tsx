@@ -100,8 +100,10 @@ function ResumePage({
           <div style={sectionTitleStyle}>Experience</div>
           {content.experience.map((e, i) => (
             <div key={i} style={{ marginBottom: i === content.experience.length - 1 ? 0 : sectionGap * 0.6 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "10.5pt" }}>
-                <span>{e.role}, {e.company}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5pt" }}>
+                {/* Employer name leads and is bold — screeners (consulting
+                    especially) scan firm names first, before the role. */}
+                <span><span style={{ fontWeight: 700 }}>{e.company}</span>{e.role ? `, ${e.role}` : ""}</span>
                 <span style={{ fontWeight: 400, fontStyle: "italic" }}>{e.tenure}</span>
               </div>
               {e.location && <div style={{ fontSize: "9pt", fontStyle: "italic", color: "#444", marginBottom: 2 }}>{e.location}</div>}
