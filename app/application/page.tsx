@@ -965,6 +965,21 @@ window.addEventListener('load', function() {
                   {resumeContent.skills.length} skill categor{resumeContent.skills.length === 1 ? "y" : "ies"}
                   {resumeContent.certifications?.length ? ` · ${resumeContent.certifications.length} certification${resumeContent.certifications.length === 1 ? "" : "s"}` : ""}
                 </p>
+                {(resumeContent.subFocus || (resumeContent.targetPriorities && resumeContent.targetPriorities.length > 0)) && (
+                  <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--bg-primary)", borderRadius: 4, border: "1px dashed var(--border)" }}>
+                    <div style={{ fontSize: "0.625rem", color: "var(--accent)", marginBottom: 4 }}>WHAT THE ENGINE TARGETED THIS RESUME AT</div>
+                    {resumeContent.subFocus && (
+                      <div style={{ marginBottom: resumeContent.targetPriorities?.length ? 4 : 0 }}>
+                        <span style={{ color: "var(--text-tertiary)" }}>Sub-focus: </span>{resumeContent.subFocus}
+                      </div>
+                    )}
+                    {resumeContent.targetPriorities && resumeContent.targetPriorities.length > 0 && (
+                      <div>
+                        <span style={{ color: "var(--text-tertiary)" }}>Priorities: </span>{resumeContent.targetPriorities.join(" · ")}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Iterate with AI */}

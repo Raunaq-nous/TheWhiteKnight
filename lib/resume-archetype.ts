@@ -42,6 +42,16 @@ export type ResumeSpec = {
   includeKeyWins: boolean;
   /** Definitive top-to-bottom section render order for this archetype (header always first). */
   sectionSequence: ResumeSectionKey[];
+  /** What recruiters/screeners in this field specifically scan for, and how. */
+  whatScreenersWant: string;
+  /** What "quantified impact" concretely means in this field — the units that matter. */
+  quantifiedImpactMeaning: string;
+  /** Vocabulary/tone conventions specific to this field. */
+  languageConventions: string;
+  /** Sections this archetype must always include if the data exists. Validated against sectionSequence in tests. */
+  mandatorySections: ResumeSectionKey[];
+  /** Sections this archetype should never include, regardless of profile data. Validated against sectionSequence in tests. */
+  omittedSections: ResumeSectionKey[];
 };
 
 export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
@@ -61,6 +71,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     lengthNorm: "Strict one page, even for 15+ years of experience.",
     includeKeyWins: true,
     sectionSequence: ["summary", "keyWins", "projects", "experience", "education", "skills", "certifications"],
+    whatScreenersWant: "MECE problem-structuring, quantified business impact, executive communication, and peer-institution pedigree (target school + notable prior employer). Screeners scan for ~30-60 seconds, hunting for firm names and numbers before reading closely.",
+    quantifiedImpactMeaning: "$ revenue captured or cost saved, % margin/efficiency uplift, deal or program size, timeline compression, headcount/team led, number of workstreams owned.",
+    languageConventions: "Precise, structured, action-first, no first person. Consulting-toolkit vocabulary (hypothesis-driven, stakeholder alignment) used sparingly and only when true — never as filler.",
+    mandatorySections: ["experience", "education", "skills"],
+    omittedSections: [],
   },
   vc_investing: {
     label: RESUME_ARCHETYPE_LABELS.vc_investing,
@@ -74,6 +89,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     lengthNorm: "Strict one page, even for ex-bankers/consultants moving into investing.",
     includeKeyWins: false,
     sectionSequence: ["education", "experience", "projects", "skills", "certifications"],
+    whatScreenersWant: "Deal judgment: sourcing volume, thesis-writing ability, and either operating experience or technical/financial modeling chops. VC screeners want a signal of a distinctive edge (network, domain expertise, or analytical rigor) — the job is fundamentally pattern-matching founders and deals.",
+    quantifiedImpactMeaning: "Capital deployed ($), number of deals sourced/screened/closed, fund size managed, board seats/ownership, portfolio-company outcomes (valuation growth, follow-on rounds raised).",
+    languageConventions: "Confident, thesis-driven language (identified, underwrote, led diligence on). Name real companies/deals instead of generic sector language wherever truthfully possible.",
+    mandatorySections: ["education", "experience", "skills"],
+    omittedSections: ["summary"],
   },
   product: {
     label: RESUME_ARCHETYPE_LABELS.product,
@@ -87,6 +107,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     lengthNorm: "Strict one page.",
     includeKeyWins: false,
     sectionSequence: ["summary", "experience", "projects", "skills", "education", "certifications"],
+    whatScreenersWant: "End-to-end ownership (0-to-1 or scaling), cross-functional leadership, and business-metric fluency. Screeners want to see the candidate speak in outcomes (retention, revenue, engagement), not a list of features shipped.",
+    quantifiedImpactMeaning: "User/MAU growth %, retention/churn change, revenue or ARR impact, conversion lift, NPS change, time-to-launch, adoption numbers.",
+    languageConventions: "Outcome-first phrasing: 'grew X by Y% by doing Z' rather than 'responsible for X.' Just enough technical fluency to signal credibility — never overclaim engineering depth.",
+    mandatorySections: ["experience", "skills"],
+    omittedSections: [],
   },
   ai_ml_engineering: {
     label: RESUME_ARCHETYPE_LABELS.ai_ml_engineering,
@@ -100,6 +125,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     lengthNorm: "Strict one page for IC roles.",
     includeKeyWins: false,
     sectionSequence: ["summary", "experience", "projects", "skills", "education", "certifications"],
+    whatScreenersWant: "Concrete system-scale evidence and named technologies — often screened by an engineer, not just a recruiter. A generic 'built AI features' bullet reads as an inability to communicate technical depth.",
+    quantifiedImpactMeaning: "Latency (ms/p95), uptime/reliability %, model accuracy/F1/AUC lift, inference cost reduction, throughput (req/s), users/requests served at scale, training-time reduction.",
+    languageConventions: "Name the stack explicitly (frameworks, languages, infra). Precise engineering verbs (shipped, architected, optimized, scaled) over soft-skill verbs.",
+    mandatorySections: ["experience", "projects", "skills"],
+    omittedSections: [],
   },
   finance_ib: {
     label: RESUME_ARCHETYPE_LABELS.finance_ib,
@@ -113,6 +143,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     lengthNorm: "Strict one page for analyst/associate. Two pages acceptable only at MD/Director level with an extensive deal sheet.",
     includeKeyWins: false,
     sectionSequence: ["education", "experience", "skills", "certifications"],
+    whatScreenersWant: "Extremely conservative screeners scanning pedigree signals (school, GPA) and deal reps within ~10 seconds. Any formatting deviation itself reads as a negative signal, since attention to detail is a core IB competency.",
+    quantifiedImpactMeaning: "Transaction/deal size ($M/$B), number of deals executed, valuation methodologies applied (DCF/LBO/comps), GPA (used as a literal screen), model complexity.",
+    languageConventions: "Formulaic, information-dense, specifics-then-result. No creative verbs, no color — uniformity is the convention, not a limitation to work around.",
+    mandatorySections: ["education", "experience", "skills"],
+    omittedSections: ["summary", "projects", "leadership"],
   },
   general: {
     label: RESUME_ARCHETYPE_LABELS.general,
@@ -126,6 +161,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     lengthNorm: "Strict one page.",
     includeKeyWins: false,
     sectionSequence: ["summary", "experience", "projects", "education", "skills", "certifications"],
+    whatScreenersWant: "Whatever this specific job's stated requirements say — there's no default field convention, so mirror the JD's own priorities directly.",
+    quantifiedImpactMeaning: "Whatever metric the JD itself emphasizes; default to $/%/scale wherever the profile has real numbers.",
+    languageConventions: "Plain, professional, JD-mirrored vocabulary.",
+    mandatorySections: ["experience", "education", "skills"],
+    omittedSections: [],
   },
 };
 

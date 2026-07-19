@@ -103,6 +103,46 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.product.sectionOrder).toBe("experience-first");
     expect(RESUME_SPECS.ai_ml_engineering.sectionOrder).toBe("experience-first");
   });
+
+  it("every archetype has research-grounded screener/impact/language guidance filled in", () => {
+    for (const key of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      const spec = RESUME_SPECS[key];
+      expect(spec.whatScreenersWant.length, `${key} missing whatScreenersWant`).toBeGreaterThan(20);
+      expect(spec.quantifiedImpactMeaning.length, `${key} missing quantifiedImpactMeaning`).toBeGreaterThan(20);
+      expect(spec.languageConventions.length, `${key} missing languageConventions`).toBeGreaterThan(20);
+    }
+  });
+
+  it("every mandatory section is actually in that archetype's sectionSequence", () => {
+    for (const key of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      const spec = RESUME_SPECS[key];
+      for (const mandatory of spec.mandatorySections) {
+        expect(spec.sectionSequence, `${key}: mandatory "${mandatory}" not in sectionSequence`).toContain(mandatory);
+      }
+    }
+  });
+
+  it("no omitted section ever appears in that archetype's sectionSequence", () => {
+    for (const key of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      const spec = RESUME_SPECS[key];
+      for (const omitted of spec.omittedSections) {
+        expect(spec.sectionSequence, `${key}: omitted "${omitted}" found in sectionSequence`).not.toContain(omitted);
+      }
+    }
+  });
+
+  it("no section is both mandatory and omitted for the same archetype", () => {
+    for (const key of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      const spec = RESUME_SPECS[key];
+      const overlap = spec.mandatorySections.filter(s => (spec.omittedSections as string[]).includes(s));
+      expect(overlap, `${key} has contradictory mandatory+omitted sections`).toEqual([]);
+    }
+  });
+
+  it("finance_ib and vc_investing both ban a summary; only finance_ib also bans projects/leadership", () => {
+    expect(RESUME_SPECS.finance_ib.omittedSections).toEqual(expect.arrayContaining(["summary", "projects", "leadership"]));
+    expect(RESUME_SPECS.vc_investing.omittedSections).toEqual(["summary"]);
+  });
 });
 
 describe("withArchetypeSequence", () => {
