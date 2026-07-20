@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence } from "../lib/resume-schema";
 import { RESUME_SPECS, ResumeArchetype } from "../lib/resume-archetype";
-import { trimLowestPriorityBullet, nextDensity, MIN_DENSITY, DENSITY_STEP } from "../lib/resume-fit";
+import { trimLowestPriorityItem, nextDensity, MIN_DENSITY, DENSITY_STEP } from "../lib/resume-fit";
 
 // Letter page at 96 CSS px/in with 0.5in margins — the content box we must
 // fit inside is 10in tall. The fit loop measures the INNER content div
@@ -23,6 +23,46 @@ function sortedBullets(bullets: ResumeContent["experience"][number]["bullets"]) 
 
 function hrefFor(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
+type LinkKind = "linkedin" | "github" | "portfolio";
+
+function linkKindFor(label: string): LinkKind {
+  const l = label.toLowerCase();
+  if (l.includes("linkedin")) return "linkedin";
+  if (l.includes("github")) return "github";
+  return "portfolio";
+}
+
+// Small inline SVG badges (built from plain shapes/text, not traced brand
+// logo paths) — inline SVG survives browser print-to-PDF, unlike icon
+// fonts or background images, which is why this isn't a font-icon library.
+function LinkIcon({ kind }: { kind: LinkKind }) {
+  const size = 12;
+  if (kind === "linkedin") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" style={{ verticalAlign: "-1.5px", marginRight: 3 }}>
+        <rect width="16" height="16" rx="3" fill="#0a58ca" />
+        <text x="8" y="11.5" textAnchor="middle" fontSize="8" fontFamily="Arial, Helvetica, sans-serif" fontWeight="700" fill="#fff">in</text>
+      </svg>
+    );
+  }
+  if (kind === "github") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 16 16" style={{ verticalAlign: "-1.5px", marginRight: 3 }}>
+        <rect width="16" height="16" rx="3" fill="#24292e" />
+        <text x="8" y="11.5" textAnchor="middle" fontSize="6.5" fontFamily="Arial, Helvetica, sans-serif" fontWeight="700" fill="#fff">GH</text>
+      </svg>
+    );
+  }
+  // portfolio / website — simple globe built from primitives only.
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" style={{ verticalAlign: "-1.5px", marginRight: 3 }}>
+      <circle cx="8" cy="8" r="6.5" fill="none" stroke="#0a58ca" strokeWidth="1.2" />
+      <ellipse cx="8" cy="8" rx="2.8" ry="6.5" fill="none" stroke="#0a58ca" strokeWidth="1" />
+      <line x1="1.5" y1="8" x2="14.5" y2="8" stroke="#0a58ca" strokeWidth="1" />
+    </svg>
+  );
 }
 
 // Pure layout — renders whatever content/density/order it's given.
@@ -92,6 +132,30 @@ function ResumePage({
               <span style={{ fontWeight: 700 }}>{p.name}</span>{": "}{p.description}
             </div>
           ))}
+        </>)
+      : null,
+
+    // Combined band — keyWins + projects rendered together under ONE
+    // heading. Used instead of placing "keyWins"/"projects" separately in
+    // a sequence, so consulting resumes never end up with two adjacent
+    // impact sections.
+    selectedImpact: ((content.keyWins && content.keyWins.length > 0) || (content.projects && content.projects.length > 0))
+      ? section("selectedImpact", <>
+          <div style={sectionTitleStyle}>Key Wins &amp; Projects</div>
+          {content.keyWins && content.keyWins.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {content.keyWins.map((w, i) => <li key={`kw-${i}`} style={{ marginBottom: bulletGap }}>{w}</li>)}
+            </ul>
+          )}
+          {content.projects && content.projects.length > 0 && (
+            <div style={{ marginTop: content.keyWins?.length ? bulletGap : 0 }}>
+              {content.projects.map((p, i) => (
+                <div key={`pr-${i}`} style={{ marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700 }}>{p.name}</span>{": "}{p.description}
+                </div>
+              ))}
+            </div>
+          )}
         </>)
       : null,
 
@@ -170,21 +234,20 @@ function ResumePage({
           <div style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "21pt", fontWeight: 700, letterSpacing: "0.02em" }}>
             {content.name}
           </div>
-          <div style={{ fontFamily: "Arial, Helvetica, sans-serif", fontSize: "9.5pt", color: "#333", marginTop: 2 }}>
-            {content.contactLine}
-            {content.links && content.links.length > 0 && (
-              <>
-                {content.contactLine ? " | " : ""}
-                {content.links.map((l, i) => (
-                  <span key={i}>
-                    {i > 0 && " | "}
-                    <a href={hrefFor(l.url)} style={{ color: "#0a58ca", textDecoration: "none" }}>
-                      {l.label}
-                    </a>
-                  </span>
-                ))}
-              </>
-            )}
+          {/* Single clean contact row: email/phone as plain text, each link
+              as an icon+label pair, laid out with flex+gap (not stacked,
+              not "|"-separated) — no location or "open to" line at all. */}
+          <div style={{
+            display: "flex", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 2,
+            fontFamily: "Arial, Helvetica, sans-serif", fontSize: "9.5pt", color: "#333", marginTop: 3,
+          }}>
+            {content.contactLine && <span>{content.contactLine}</span>}
+            {content.links?.map((l, i) => (
+              <a key={i} href={hrefFor(l.url)} style={{ display: "inline-flex", alignItems: "center", color: "#0a58ca", textDecoration: "none" }}>
+                <LinkIcon kind={linkKindFor(l.label)} />
+                {l.label}
+              </a>
+            ))}
           </div>
         </div>
 
@@ -203,8 +266,14 @@ export type FitStatus = "measuring" | "fit";
  * left in the normal tree gets repeated on every printed page.
  *
  * Fit loop: measures the auto-height inner content box against a 10in
- * target; trims lowest-priority bullets on overflow, steps up density on
- * underflow.
+ * (960px) target — letter page minus 0.5in top+bottom margins, matching
+ * the real printable area. On overflow it runs trimLowestPriorityItem,
+ * which cascades through EVERY trimmable section (experience bullets,
+ * then keyWins, projects, leadership, certifications) rather than only
+ * bullets — a resume that overflows because of a long Key Wins/Projects
+ * band, not bullet count, would otherwise exhaust all bullet trims, still
+ * overflow, and the loop would give up and report "fitted" while actually
+ * printing a 2nd page. It steps up density on underflow.
  */
 export function ResumeExportView({
   content: initialContent,
@@ -260,7 +329,7 @@ export function ResumeExportView({
 
     if (phase === "trim") {
       if (ratio > 1) {
-        const trimmed = trimLowestPriorityBullet(content);
+        const trimmed = trimLowestPriorityItem(content);
         if (trimmed) { setContent(trimmed); return; }
       }
       setPhase("expand");

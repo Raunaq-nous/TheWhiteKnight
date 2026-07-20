@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { trimLowestPriorityBullet, nextDensity, decideFitAction, estimateWordCount, MIN_DENSITY, MAX_DENSITY } from "../resume-fit";
+import { trimLowestPriorityBullet, trimLowestPriorityItem, nextDensity, decideFitAction, estimateWordCount, MIN_DENSITY, MAX_DENSITY } from "../resume-fit";
 import type { ResumeContent } from "../resume-schema";
 
 function makeContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
@@ -68,6 +68,86 @@ describe("trimLowestPriorityBullet", () => {
   });
 });
 
+describe("trimLowestPriorityItem — the fix for the false-positive '2-page but reported fitted' bug", () => {
+  it("trims experience bullets first, exactly like trimLowestPriorityBullet", () => {
+    const content = makeContent();
+    const trimmed = trimLowestPriorityItem(content);
+    expect(trimmed).not.toBeNull();
+    expect(trimmed!.experience[0].bullets.map(b => b.text)).not.toContain("Worst bullet");
+  });
+
+  it("once every experience entry is down to 1 bullet, trims keyWins next", () => {
+    const content = makeContent({
+      experience: [
+        { company: "SoloCo", role: "IC", tenure: "2023", location: "", bullets: [{ text: "Only one", priority: 1 }] },
+      ],
+      keyWins: ["Win A", "Win B", "Win C"],
+    });
+    const trimmed = trimLowestPriorityItem(content);
+    expect(trimmed).not.toBeNull();
+    expect(trimmed!.experience[0].bullets).toHaveLength(1); // untouched — bullets already at the floor
+    expect(trimmed!.keyWins).toEqual(["Win A", "Win B"]); // last item dropped
+  });
+
+  it("then trims projects, then leadership, then certifications, in that order", () => {
+    const noMoreBullets: ResumeContent["experience"] = [
+      { company: "SoloCo", role: "IC", tenure: "2023", location: "", bullets: [{ text: "Only one", priority: 1 }] },
+    ];
+    let content = makeContent({
+      experience: noMoreBullets,
+      keyWins: [],
+      projects: [{ name: "P1", description: "d1" }, { name: "P2", description: "d2" }],
+      leadership: ["Led club"],
+      certifications: [{ name: "Cert A" }],
+    });
+
+    const afterProjects = trimLowestPriorityItem(content)!;
+    expect(afterProjects.projects).toEqual([{ name: "P1", description: "d1" }]);
+    expect(afterProjects.leadership).toEqual(["Led club"]); // untouched this round
+
+    const afterMoreProjects = trimLowestPriorityItem(afterProjects)!;
+    expect(afterMoreProjects.projects).toEqual([]);
+
+    const afterLeadership = trimLowestPriorityItem(afterMoreProjects)!;
+    expect(afterLeadership.leadership).toEqual([]);
+    expect(afterLeadership.certifications).toEqual([{ name: "Cert A" }]); // untouched this round
+
+    const afterCertifications = trimLowestPriorityItem(afterLeadership)!;
+    expect(afterCertifications.certifications).toEqual([]);
+
+    // Truly nothing left — every experience entry at 1 bullet, every extra
+    // section empty. This is the state that previously caused the fit loop
+    // to silently accept overflow; now it's only reached once genuinely
+    // exhausted.
+    expect(trimLowestPriorityItem(afterCertifications)).toBeNull();
+  });
+
+  it("a resume that overflows purely because of Key Wins/Projects (not bullet count) can still be fully trimmed", () => {
+    // Regression case for the actual bug: a single-bullet-per-role resume
+    // with a large Key Wins & Projects band used to make the old
+    // trimLowestPriorityBullet-only loop give up immediately.
+    let content = makeContent({
+      experience: [
+        { company: "Acme", role: "PM", tenure: "2022", location: "", bullets: [{ text: "One bullet", priority: 1 }] },
+      ],
+      keyWins: ["Win 1", "Win 2", "Win 3", "Win 4"],
+      projects: [{ name: "P1", description: "d1" }, { name: "P2", description: "d2" }],
+    });
+    let iterations = 0;
+    while (true) {
+      const next = trimLowestPriorityItem(content);
+      if (!next) break;
+      content = next;
+      iterations++;
+      expect(iterations).toBeLessThan(50); // sanity bound
+    }
+    expect(iterations).toBeGreaterThan(0); // it actually trimmed something beyond bullets
+    expect(content.keyWins).toEqual([]);
+    expect(content.projects).toEqual([]);
+    expect(content.experience[0].bullets).toHaveLength(1); // the protected floor
+  });
+});
+
 describe("nextDensity", () => {
   it("steps up and caps at MAX_DENSITY", () => {
     let d = MIN_DENSITY;
@@ -104,12 +184,22 @@ describe("decideFitAction", () => {
     expect(action.kind).toBe("done");
   });
 
-  it("is done (not stuck) when overflowing but nothing left to trim", () => {
+  it("is done (not stuck) when overflowing but nothing left to trim at all", () => {
     const content = makeContent({
       experience: [{ company: "SoloCo", role: "IC", tenure: "2023", location: "", bullets: [{ text: "Only one", priority: 1 }] }],
     });
     const action = decideFitAction(content, 1.5, MIN_DENSITY);
     expect(action.kind).toBe("done");
+  });
+
+  it("trims keyWins (not just bullets) when overflowing and every role is already at its bullet floor", () => {
+    const content = makeContent({
+      experience: [{ company: "SoloCo", role: "IC", tenure: "2023", location: "", bullets: [{ text: "Only one", priority: 1 }] }],
+      keyWins: ["Win A", "Win B"],
+    });
+    const action = decideFitAction(content, 1.5, MIN_DENSITY);
+    expect(action.kind).toBe("trim");
+    if (action.kind === "trim") expect(action.content.keyWins).toEqual(["Win A"]);
   });
 });
 

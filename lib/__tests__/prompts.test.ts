@@ -165,14 +165,21 @@ describe("prompt builder snapshots", () => {
 
   it("resumePrompt applies archetype-specific section order and rules", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("summary -> keyWins -> projects -> experience -> leadership -> education -> skills");
-    expect(consulting).toContain("KEY WINS");
+    expect(consulting).toContain("summary -> selectedImpact -> experience -> leadership -> education -> skills");
+    expect(consulting).toContain("KEY WINS & PROJECTS");
     expect(consulting).toContain("role-specific elevator pitch");
+    expect(consulting).toContain("NEVER INCLUDE: certifications");
 
     const ib = resumePrompt(MOCK_PROFILE, MOCK_APP, "finance_ib");
     expect(ib).toContain("Do NOT include a summary for this archetype");
     expect(ib).toContain("education -> experience -> skills");
     expect(ib).not.toContain("KEY WINS");
+  });
+
+  it("consulting never emits separate KEY WINS or RELEVANT PROJECTS instructions (combined only)", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).not.toContain("KEY WINS:");
+    expect(consulting).not.toContain("RELEVANT PROJECTS:");
   });
 
   it("resumePrompt requires JD priority extraction before writing", () => {
@@ -182,10 +189,12 @@ describe("prompt builder snapshots", () => {
     expect(output).toContain("SELECT AND FOREGROUND");
   });
 
-  it("resumePrompt puts links in a links array, not the contact line", () => {
+  it("resumePrompt puts links in a links array, not the contact line, and bans location from the header", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(output).toContain('"links"');
-    expect(output).toContain("email | phone | location");
+    expect(output).toContain('"email | phone"');
+    expect(output).not.toContain("email | phone | location");
+    expect(output).toContain("NEVER put location");
   });
 
   it("resumePrompt instructs JSON output with bullet priority ranking", () => {

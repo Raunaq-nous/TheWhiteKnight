@@ -242,3 +242,34 @@ export type ProfileQuestion = z.infer<typeof ProfileQuestionSchema>;
 export const BulletRewriteResultSchema = z.object({
   rewrittenText: z.string(),
 });
+
+// ---------------------------------------------------------------------------
+// ResumeGapQuestion — returned by /api/resume/gap-questions.
+// Job-scoped Q&A: compares a specific JD's target priorities against the
+// profile and asks about genuine gaps, unlike ProfileQuestion above (which
+// scans the whole profile for generic weak bullets, JD-agnostic).
+// ---------------------------------------------------------------------------
+
+export const ResumeGapQuestionSchema = z.object({
+  id: z.string(),
+  priority: z.string().describe("Which target priority this question addresses"),
+  targetType: z.enum(["experience", "project"]),
+  targetId: z.string().describe("Exact company name (experience) or project name (project), copied from the profile"),
+  targetLabel: z.string(),
+  existingEvidence: z.string().nullable().optional().describe("What's already in the profile that's relevant, if anything"),
+  question: z.string(),
+});
+
+export const ResumeGapQuestionsResultSchema = z.object({
+  questions: z.array(ResumeGapQuestionSchema),
+});
+
+export type ResumeGapQuestion = z.infer<typeof ResumeGapQuestionSchema>;
+
+// ---------------------------------------------------------------------------
+// ResumeGapAnswerResult — returned by /api/resume/gap-answer
+// ---------------------------------------------------------------------------
+
+export const ResumeGapAnswerResultSchema = z.object({
+  newBulletText: z.string().describe("The new bullet, or an empty string if the answer had no usable fact"),
+});
