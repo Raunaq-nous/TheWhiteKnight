@@ -1,10 +1,12 @@
-// Client-side wrappers for the profile enrichment API surface (Features 1-3).
-// All AI calls go through server routes so API keys stay server-side.
+// Client-side wrappers for the profile enrichment API surface (Features 1-3,
+// plus the job-scoped gap-fill flow). All AI calls go through server routes
+// so API keys stay server-side.
 
 import { Profile } from "./profile";
+import type { Application } from "./store";
 import { getModelSettings } from "./model-settings";
-import { ExtractedProfileData, namesMatch } from "./profile-merge";
-import { ProfileQuestion } from "./schemas";
+import { ExtractedProfileData, namesMatch, isNewBullet, splitBullets } from "./profile-merge";
+import { ProfileQuestion, ResumeGapQuestion } from "./schemas";
 
 function providerSettings() {
   const s = getModelSettings();
@@ -93,4 +95,70 @@ export function replaceBulletInProfile(
     ...profile,
     projects: profile.projects.map(p => (namesMatch(p.name, targetId) ? { ...p, description: newText } : p)),
   };
+}
+
+// --- Job-scoped gap analysis + write-back (resume rebuild #5) ---
+
+export async function generateResumeGapQuestions(
+  profile: Profile,
+  app: Application,
+  targetPriorities: string[],
+  subFocus?: string | null,
+): Promise<ResumeGapQuestion[]> {
+  const { questions } = await postJson<{ questions: ResumeGapQuestion[] }>("/api/resume/gap-questions", {
+    profile, app, providerSettings: providerSettings(), targetPriorities, subFocus,
+  });
+  return questions;
+}
+
+export async function answerResumeGapQuestion(
+  profile: Profile,
+  targetLabel: string,
+  priority: string,
+  question: string,
+  answer: string,
+): Promise<string> {
+  const { newBulletText } = await postJson<{ newBulletText: string }>("/api/resume/gap-answer", {
+    profile, providerSettings: providerSettings(), targetLabel, priority, question, answer,
+  });
+  return newBulletText;
+}
+
+export type GapWriteBackResult = { profile: Profile; applied: boolean; summary: string };
+
+/**
+ * Append a job-time gap-answer bullet back to the CANONICAL profile — reuses
+ * the exact same dedupe rule (isNewBullet/textSimilarity) the extraction
+ * merge engine (Features 1 & 3) uses, so an answer can never create a
+ * duplicate bullet, and tags it to the exact experience/project it belongs
+ * to so it's reusable for other jobs later.
+ */
+export function appendGapAnswerToProfile(
+  profile: Profile,
+  targetType: "experience" | "project",
+  targetId: string,
+  newBulletText: string,
+): GapWriteBackResult {
+  if (targetType === "experience") {
+    const match = profile.experience.find(e => namesMatch(e.company, targetId));
+    if (!match) return { profile, applied: false, summary: `No matching role found for "${targetId}" — not saved to profile.` };
+    const existingBullets = splitBullets(match.bullets);
+    if (!isNewBullet(newBulletText, existingBullets)) {
+      return { profile, applied: false, summary: `Already on file for ${match.company} — skipped as a duplicate.` };
+    }
+    const experience = profile.experience.map(e =>
+      e.id === match.id ? { ...e, bullets: [...existingBullets, newBulletText].join("\n") } : e
+    );
+    return { profile: { ...profile, experience }, applied: true, summary: `Added to ${match.company}: "${newBulletText}"` };
+  }
+
+  const match = profile.projects.find(p => namesMatch(p.name, targetId));
+  if (!match) return { profile, applied: false, summary: `No matching project found for "${targetId}" — not saved to profile.` };
+  if (match.description.includes(newBulletText)) {
+    return { profile, applied: false, summary: `Already on file for ${match.name} — skipped as a duplicate.` };
+  }
+  const projects = profile.projects.map(p =>
+    p.id === match.id ? { ...p, description: `${p.description} ${newBulletText}`.trim() } : p
+  );
+  return { profile: { ...profile, projects }, applied: true, summary: `Added to ${match.name}: "${newBulletText}"` };
 }

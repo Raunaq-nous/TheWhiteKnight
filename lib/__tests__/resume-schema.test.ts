@@ -144,6 +144,21 @@ describe("resolveSectionSequence", () => {
     const eduFirst = resolveSectionSequence({ ...base(), sectionOrder: "education-first" });
     expect(eduFirst.indexOf("education")).toBeLessThan(eduFirst.indexOf("experience"));
   });
+
+  it("never auto-appends keyWins/projects standalone when selectedImpact is already in the sequence (regression: used to double-render)", () => {
+    const r = { ...base(), sectionSequence: ["summary", "selectedImpact", "experience", "education", "skills"] as ResumeContent["sectionSequence"] };
+    const seq = resolveSectionSequence(r);
+    expect(seq).toContain("selectedImpact");
+    expect(seq).not.toContain("keyWins");
+    expect(seq).not.toContain("projects");
+  });
+
+  it("still auto-appends keyWins/projects standalone for archetypes that don't use selectedImpact", () => {
+    const r = { ...base(), sectionSequence: ["summary", "experience", "education", "skills"] as ResumeContent["sectionSequence"] };
+    const seq = resolveSectionSequence(r);
+    expect(seq).toContain("keyWins");
+    expect(seq).toContain("projects");
+  });
 });
 
 describe("resumeContentToMarkdown with the new sections", () => {
@@ -178,5 +193,40 @@ describe("resumeContentToMarkdown with the new sections", () => {
     const md = resumeContentToMarkdown(parsed);
     const headingLine = md.split("\n").find(l => l.startsWith("### "))!;
     expect(headingLine).toBe("### Bain & Company | Consultant | 2020 - Present");
+  });
+
+  it("renders keyWins + projects together under ONE combined heading when sectionSequence uses selectedImpact", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      keyWins: ["Closed a $10M deal"],
+      projects: [{ name: "Cost Tracker", description: "Built a capital spend dashboard" }],
+      sectionSequence: ["summary", "selectedImpact", "experience", "education", "skills"],
+    }) as ResumeContent;
+    const md = resumeContentToMarkdown(parsed);
+
+    // Exactly one combined heading — never two separate ones.
+    expect(md).toContain("## Key Wins & Projects");
+    expect(md).not.toContain("## Key Wins\n");
+    expect(md).not.toContain("## Relevant Projects");
+    expect((md.match(/## Key Wins/g) ?? []).length).toBe(1);
+
+    expect(md).toContain("- Closed a $10M deal");
+    expect(md).toContain("- Cost Tracker: Built a capital spend dashboard");
+    // Both items live between the combined heading and the next section.
+    const impactIdx = md.indexOf("## Key Wins & Projects");
+    const expIdx = md.indexOf("## Experience");
+    expect(md.indexOf("Closed a $10M deal")).toBeGreaterThan(impactIdx);
+    expect(md.indexOf("Cost Tracker")).toBeLessThan(expIdx);
+  });
+
+  it("omits the combined section entirely when both keyWins and projects are empty", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      keyWins: [],
+      projects: [],
+      sectionSequence: ["summary", "selectedImpact", "experience", "education", "skills"],
+    }) as ResumeContent;
+    const md = resumeContentToMarkdown(parsed);
+    expect(md).not.toContain("Key Wins");
   });
 });

@@ -378,17 +378,20 @@ ARCHETYPE — Product Management:
 - OMIT: "Managed the roadmap" or similar scope statements with no attached metric.
 - CERTIFICATIONS: Include only if squarely product-relevant (e.g. a recognized PM certification). Cap at 2.
 
+
 - RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role's sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.
 
 
-LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL). The contactLine carries only email | phone | location.
+HEADER: the contactLine carries ONLY email | phone. NEVER put location or "open to" preferences anywhere in the header — the location field on the candidate profile is for internal use only, it does not belong on the resume.
+
+LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL).
 
 SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
 
 OUTPUT — a single JSON object, nothing before or after, matching exactly this shape:
 {
   "name": string,
-  "contactLine": string (pre-joined "email | phone | location" ONLY — links go in the links array, never in this string),
+  "contactLine": string (pre-joined "email | phone" ONLY — NEVER include location, "open to" preferences, or links in this string; links go in the links array),
   "links": [ { "label": string, "url": string } ] (LinkedIn, Portfolio, GitHub from the profile — copy URLs exactly; omit key entirely if the profile has none),
   "summary": string,
   "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),

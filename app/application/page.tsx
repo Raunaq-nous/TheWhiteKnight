@@ -20,6 +20,7 @@ import { ResumeExportView } from "../resume-document";
 import { extractProfileData } from "../../lib/profile-enrichment";
 import { diffExtractionAgainstProfile, MergeDiffItem } from "../../lib/profile-merge";
 import { ProfileMergeReview } from "../profile-merge-review";
+import { ResumeGapFillBox } from "../resume-gap-fill-box";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -1009,6 +1010,13 @@ window.addEventListener('load', function() {
                   <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.6875rem" }}>{resumeRefineError}</div>
                 )}
               </div>
+
+              {/* Job-time gap analysis + profile write-back */}
+              <ResumeGapFillBox
+                app={app}
+                resumeContent={resumeContent}
+                onResumeContentChange={next => persistResumeContent(next, resumeArchetypeUsed ?? "general")}
+              />
             </div>
           )}
 

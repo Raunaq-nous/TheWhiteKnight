@@ -69,8 +69,13 @@ function tokenize(s: string): Set<string> {
   );
 }
 
-/** Jaccard similarity on word sets — catches near-duplicate bullets with different phrasing. */
-function textSimilarity(a: string, b: string): number {
+/**
+ * Jaccard similarity on word sets — catches near-duplicate bullets with
+ * different phrasing. Exported so other write-back paths (e.g. the job-time
+ * gap-fill flow) reuse the exact same dedupe rule as the extraction merge
+ * engine, instead of re-implementing it.
+ */
+export function textSimilarity(a: string, b: string): number {
   const ta = tokenize(a);
   const tb = tokenize(b);
   if (ta.size === 0 || tb.size === 0) return 0;
@@ -82,11 +87,11 @@ function textSimilarity(a: string, b: string): number {
 
 const BULLET_DUPLICATE_THRESHOLD = 0.6;
 
-function splitBullets(s: string): string[] {
+export function splitBullets(s: string): string[] {
   return s.split("\n").map(b => b.trim()).filter(Boolean);
 }
 
-function isNewBullet(candidate: string, existingBullets: string[]): boolean {
+export function isNewBullet(candidate: string, existingBullets: string[]): boolean {
   return !existingBullets.some(b => textSimilarity(b, candidate) >= BULLET_DUPLICATE_THRESHOLD);
 }
 

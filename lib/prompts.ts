@@ -196,7 +196,7 @@ function resumeOutputFormatInstructions(): string {
   return `OUTPUT — a single JSON object, nothing before or after, matching exactly this shape:
 {
   "name": string,
-  "contactLine": string (pre-joined "email | phone | location" ONLY — links go in the links array, never in this string),
+  "contactLine": string (pre-joined "email | phone" ONLY — NEVER include location, "open to" preferences, or links in this string; links go in the links array),
   "links": [ { "label": string, "url": string } ] (LinkedIn, Portfolio, GitHub from the profile — copy URLs exactly; omit key entirely if the profile has none),
   "summary": string,
   "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),
@@ -272,11 +272,14 @@ ARCHETYPE — ${spec.label}:
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
 - CERTIFICATIONS: ${spec.certificationPolicy}
-${spec.includeKeyWins ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
-${spec.sectionSequence.includes("projects") ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
+${spec.sectionSequence.includes("selectedImpact") ? '- KEY WINS & PROJECTS — populate BOTH fields, they render together under ONE combined heading, never as two separate sections: a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role), AND a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus. Each item one line, most relevant first, each with a real number from the profile where the profile has one.' : ""}
+${(!spec.sectionSequence.includes("selectedImpact") && spec.includeKeyWins) ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
+${(!spec.sectionSequence.includes("selectedImpact") && spec.sectionSequence.includes("projects")) ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
 ${spec.sectionSequence.includes("leadership") ? '- LEADERSHIP & ACTIVITIES: include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people — drawn only from real profile content (roles, projects, or education achievements that genuinely show this, e.g. team leadership, mentoring, extracurricular leadership). Do not invent an activity that is not in the profile; omit the key if the profile has nothing that qualifies.' : ""}
 
-LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL). The contactLine carries only email | phone | location.
+HEADER: the contactLine carries ONLY email | phone. NEVER put location or "open to" preferences anywhere in the header — the location field on the candidate profile is for internal use only, it does not belong on the resume.
+
+LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array (label + exact URL).
 
 SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
 
@@ -1220,4 +1223,85 @@ RULES:
 4. Do not change parts of the bullet unrelated to the question/answer.
 
 Output ONLY raw JSON: { "rewrittenText": "the rewritten bullet" }. No preamble, no explanation.`;
+}
+
+// ---------------------------------------------------------------------------
+// Job-scoped gap analysis (resume rebuild #5): compares a SPECIFIC JD's
+// target priorities against the profile and asks about genuine gaps —
+// distinct from profileQuestionsPrompt above, which scans the whole profile
+// for generic weak bullets regardless of any particular job.
+// ---------------------------------------------------------------------------
+
+export function resumeGapQuestionsPrompt(
+  profile: Profile,
+  app: Application,
+  targetPriorities: string[],
+  subFocus?: string | null,
+): string {
+  const cap = targetPriorities.length > 0 ? Math.min(targetPriorities.length, 4) : 4;
+
+  return `You are helping ${profile.name} identify what is MISSING from their profile for a specific job, so they can supply it before finalizing their resume for ${app.company} — ${app.role}.
+
+${buildProfileContext(profile)}
+
+---
+
+${buildJDContext(app)}
+
+TARGET SUB-FOCUS FOR THIS ROLE: ${subFocus || "(not given — infer it yourself from the JD above)"}
+TARGET PRIORITIES FOR THIS ROLE: ${targetPriorities.length > 0 ? targetPriorities.join("; ") : "(not given — infer them yourself from the JD above)"}
+
+TASK: For each target priority, check whether the candidate's profile already evidences it well.
+- If it is ALREADY well evidenced (a bullet or project clearly proves it with a real number), skip it — do not ask about it.
+- If it is PARTIALLY evidenced (something relevant exists but lacks a number or specific), put what already exists in "existingEvidence" and ask a specific question for the missing detail.
+- If it is NOT evidenced at all, pick the single most plausible existing experience or project this could plausibly attach to (never invent a new entry to attach to), leave "existingEvidence" empty, and ask a specific question that would surface a genuinely new but truthful detail.
+
+Ask AT MOST ${cap} questions — one per priority that genuinely needs one; skip priorities that don't. Every question must be answerable with a concrete fact (a number, a name, a scale) — never vague ("tell me more about this").
+
+Good question examples: "This role emphasizes cost optimization — do you have a project with a quantified cost saving?" or "How many people did you lead on the multi-plant capital program?"
+
+Output ONLY raw JSON matching exactly this shape, nothing before or after:
+{
+  "questions": [
+    {
+      "id": "short slug, e.g. cost-optimization-1",
+      "priority": "the target priority this question addresses, copied from above",
+      "targetType": "experience" | "project",
+      "targetId": "the exact company name (experience) or project name (project), copied exactly from the profile above",
+      "targetLabel": "human-readable label, e.g. 'Bain & Company — Consultant'",
+      "existingEvidence": "what's already in the profile that's relevant, if anything — omit or null if nothing exists",
+      "question": "the specific question"
+    }
+  ]
+}
+
+If every priority is already well evidenced, return { "questions": [] }. Output the JSON now. No preamble, no explanation.`;
+}
+
+export function resumeGapAnswerPrompt(
+  profile: Profile,
+  targetLabel: string,
+  priority: string,
+  question: string,
+  answer: string,
+): string {
+  return `You are turning a candidate's plain-text answer into one polished, quantified resume bullet.
+
+CONTEXT: ${targetLabel}
+TARGET PRIORITY THIS ADDRESSES: ${priority || "(general strengthening)"}
+
+QUESTION ASKED:
+"${question}"
+
+CANDIDATE'S ANSWER:
+"${answer}"
+
+RULES:
+1. Write ONE new bullet that captures the fact(s) in the answer, phrased to speak to "${priority || "the target role"}". Action-verb-first, quantified using only numbers actually present in the answer.
+2. NEVER invent a number, scale, or outcome not stated in the answer.
+3. If the answer does not actually contain a usable fact (e.g. "I don't know" or "not sure"), return an empty string for "newBulletText".
+4. No em dashes, no smart quotes, no banned resume filler ("passionate about", "leveraged", "spearheaded", "synergies").
+5. One line, no preamble.
+
+Output ONLY raw JSON: { "newBulletText": "the new bullet, or empty string if the answer had no usable fact" }. No preamble, no explanation.`;
 }

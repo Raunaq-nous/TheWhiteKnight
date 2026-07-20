@@ -76,12 +76,22 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.vc_investing.summaryAllowed).toBe(false);
   });
 
-  it("consulting uses the founder-directed structure: summary, key wins, projects, experience, leadership, education, skills", () => {
+  it("consulting uses the founder-directed structure: summary, combined selectedImpact, experience, leadership, education, skills", () => {
     expect(RESUME_SPECS.consulting.summaryAllowed).toBe(true);
     expect(RESUME_SPECS.consulting.includeKeyWins).toBe(true);
     expect(RESUME_SPECS.consulting.sectionSequence).toEqual([
-      "summary", "keyWins", "projects", "experience", "leadership", "education", "skills", "certifications",
+      "summary", "selectedImpact", "experience", "leadership", "education", "skills",
     ]);
+  });
+
+  it("consulting never places keyWins/projects/certifications as standalone sections (combined or omitted)", () => {
+    const seq = RESUME_SPECS.consulting.sectionSequence;
+    expect(seq).not.toContain("keyWins");
+    expect(seq).not.toContain("projects");
+    expect(seq).toContain("selectedImpact"); // Key Wins + Projects render together under this one key
+    expect(seq).not.toContain("certifications");
+    expect(RESUME_SPECS.consulting.omittedSections).toContain("certifications");
+    expect(RESUME_SPECS.consulting.certificationPolicy.toLowerCase()).toContain("omit");
   });
 
   it("leadership is mandatory for consulting specifically, placed right after experience", () => {

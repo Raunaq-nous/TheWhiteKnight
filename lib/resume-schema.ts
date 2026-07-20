@@ -61,15 +61,21 @@ export const ResumeLinkSchema = z.object({
 
 // Renderable sections, in no particular order — the per-archetype
 // sectionSequence in lib/resume-archetype.ts decides the actual order.
+// "selectedImpact" renders keyWins + projects data COMBINED under one
+// heading — used instead of placing "keyWins"/"projects" separately in a
+// sequence, so an archetype never ends up with two adjacent impact
+// sections. Those two keys remain valid (data still lives in the keyWins/
+// projects fields, and archetypes like product/ai_ml_engineering still
+// place "projects" standalone without a combined band).
 export const RESUME_SECTION_KEYS = [
-  "summary", "keyWins", "projects", "experience", "education", "skills", "leadership", "certifications",
+  "summary", "keyWins", "projects", "selectedImpact", "experience", "education", "skills", "leadership", "certifications",
 ] as const;
 export const ResumeSectionKeySchema = z.enum(RESUME_SECTION_KEYS);
 export type ResumeSectionKey = z.infer<typeof ResumeSectionKeySchema>;
 
 export const ResumeContentSchema = z.object({
   name: z.string(),
-  contactLine: z.string().describe("Pre-formatted contact line: email | phone | location — links go in the links array, not here"),
+  contactLine: z.string().describe("Pre-formatted contact line: email | phone ONLY — never location or 'open to' preferences, and links go in the links array, not here"),
   links: z.array(ResumeLinkSchema).nullable().optional().describe("Header hyperlinks (LinkedIn, Portfolio, GitHub) rendered as real <a> tags"),
   summary: z.string(),
   targetPriorities: z.array(z.string()).nullable().optional().describe("The 3-5 things the target JD most values, extracted before writing — drives selection and framing"),
@@ -145,8 +151,15 @@ export function resolveSectionSequence(r: ResumeContent): ResumeSectionKey[] {
   const base = r.sectionSequence?.length
     ? [...r.sectionSequence]
     : [...(r.sectionOrder === "education-first" ? LEGACY_EDU_FIRST : LEGACY_EXP_FIRST)];
+
+  // "selectedImpact" already renders keyWins + projects data combined —
+  // never auto-append them standalone too, or the same data would render
+  // twice (once combined, once as separate "## Key Wins"/"## Relevant
+  // Projects" sections).
+  const skip = base.includes("selectedImpact") ? new Set<ResumeSectionKey>(["keyWins", "projects"]) : new Set<ResumeSectionKey>();
+
   for (const key of RESUME_SECTION_KEYS) {
-    if (!base.includes(key)) base.push(key);
+    if (!base.includes(key) && !skip.has(key)) base.push(key);
   }
   return base;
 }
@@ -178,6 +191,15 @@ export function resumeContentToMarkdown(r: ResumeContent): string {
       if (!r.projects?.length) return;
       lines.push("## Relevant Projects");
       for (const p of r.projects) lines.push(`- ${p.name}: ${p.description}${p.repoUrl ? ` (${p.repoUrl})` : ""}`);
+      lines.push("");
+    },
+    // Combined band — never render keyWins/projects as separate sections
+    // when this key is in the sequence.
+    selectedImpact: () => {
+      if (!r.keyWins?.length && !r.projects?.length) return;
+      lines.push("## Key Wins & Projects");
+      for (const w of r.keyWins ?? []) lines.push(`- ${w}`);
+      for (const p of r.projects ?? []) lines.push(`- ${p.name}: ${p.description}${p.repoUrl ? ` (${p.repoUrl})` : ""}`);
       lines.push("");
     },
     experience: () => {
