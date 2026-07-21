@@ -34,7 +34,7 @@ export function ResumeGapFillBox({
 }: {
   app: Application;
   resumeContent: ResumeContent;
-  onResumeContentChange: (next: ResumeContent) => void;
+  onResumeContentChange: (next: ResumeContent) => boolean | Promise<boolean>;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -90,11 +90,16 @@ export function ResumeGapFillBox({
         return;
       }
 
-      // (c) inject into THIS resume, immediately.
+      // (c) inject into THIS resume, immediately — and await the caller's
+      // persistence so we never report success before the write actually lands.
       const { content: nextResume, applied: appliedToResume } = injectGapAnswerIntoResume(
         resumeContent, item.q.targetType, item.q.targetId, newBulletText,
       );
-      if (appliedToResume) onResumeContentChange(nextResume);
+      let resumePersisted = false;
+      if (appliedToResume) {
+        resumePersisted = await onResumeContentChange(nextResume);
+        if (!resumePersisted) showToast("Added to this resume, but saving it failed. Reloading may lose this change.", "error");
+      }
 
       // (d) write the SAME fact back to the canonical profile, non-destructively.
       const { profile: nextProfile, applied: appliedToProfile, summary } = appendGapAnswerToProfile(
@@ -106,7 +111,9 @@ export function ResumeGapFillBox({
       }
 
       const confirmation = appliedToResume
-        ? (appliedToProfile ? `Added to this resume and saved to profile — ${summary}` : `Added to this resume. ${summary}`)
+        ? (resumePersisted
+            ? (appliedToProfile ? `Added to this resume and saved to profile — ${summary}` : `Added to this resume. ${summary}`)
+            : `Added here, but saving this resume failed — ${summary}`)
         : `Could not place this on the resume (no matching entry). ${summary}`;
 
       setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false, resolved: true, confirmation } : it)));
