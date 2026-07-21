@@ -3,7 +3,7 @@ import { Application } from "./store";
 import { ResumeArchetype, RESUME_SPECS } from "./resume-archetype";
 import { ResumeContent } from "./resume-schema";
 import { BulletCandidate } from "./profile-bullet-quality";
-import { computeBulletRelevanceHints, renderRelevanceHintsBlock } from "./resume-bullet-relevance";
+import { computeBulletRelevanceHints, renderRelevanceHintsBlock, rankProfileForResume } from "./resume-bullet-relevance";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -224,11 +224,17 @@ export function resumePrompt(profile: Profile, app: Application, archetype: Resu
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
   const expCount = profile.experience.length;
   const spec = RESUME_SPECS[archetype];
-  const relevanceHintsBlock = renderRelevanceHintsBlock(computeBulletRelevanceHints(profile, app));
+  // Deterministic pre-ranking pass (BUG 1 fix): reorders every entry's bullets
+  // and every project by relevance to this JD — never drops anything, the
+  // FULL profile still reaches the prompt below, just with the most relevant
+  // material first so the model selects/writes from ranked complete data
+  // instead of an unranked list it has to judge cold.
+  const rankedProfile = rankProfileForResume(profile, app, archetype);
+  const relevanceHintsBlock = renderRelevanceHintsBlock(computeBulletRelevanceHints(rankedProfile, app));
 
   return `You are a senior resume strategist specializing in ${spec.label} hiring. Write a tailored resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
 
-${buildProfileContext(profile)}
+${buildProfileContext(rankedProfile)}
 
 ---
 
@@ -260,9 +266,10 @@ LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
 
 EXPERIENCE INCLUSION RULES:
 - There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
+- The bullets under each entry above are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING below. Use this as your starting order, then apply the SUB-FOCUS lens to refine it; do not ignore it and re-sort from scratch.
 - Rank bullets by relevance to the SUB-FOCUS and target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this specific role.
 - Keep 2-4 bullets per entry, the strongest first — NEVER reduce an entry to a single bullet unless that entry has only 1-2 bullets in the profile to begin with. A rich profile with many bullets per role must produce a resume that reflects that breadth; collapsing every entry to one bullet is a failure mode, not a valid trim.
-- Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics. See the DETERMINISTIC RELEVANCE HINTS above for where this specifically applies.
+- Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics. See the DETERMINISTIC RELEVANCE RANKING above for where this specifically applies.
 - MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
 - Preserve the exact company name and tenure for every entry.
 

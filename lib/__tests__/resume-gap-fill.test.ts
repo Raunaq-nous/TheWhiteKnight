@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { injectGapAnswerIntoResume } from "../resume-gap-fill";
 import { appendGapAnswerToProfile } from "../profile-enrichment";
+import { resumePrompt } from "../prompts";
 import type { ResumeContent } from "../resume-schema";
 import type { Profile } from "../profile";
+import type { Application } from "../store";
 
 function baseResumeContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
   return {
@@ -132,5 +134,35 @@ describe("end-to-end gap-fill answer persistence (BUG 2 regression)", () => {
     // Original content survives in both places — this is additive, not destructive.
     expect(nextResume.experience[0].bullets.map(b => b.text)).toContain("Led capital project reviews");
     expect(nextProfile.experience[0].bullets).toContain("Led capital project reviews");
+  });
+
+  it("a persisted Q&A answer reaches subsequent resume generation (the profile write-back is what generation reads from)", () => {
+    const profile = profileWithBainBullet();
+    const newBulletText = "Delivered $12M in cost savings across 3 capital programs";
+
+    const { profile: nextProfile, applied } = appendGapAnswerToProfile(
+      profile, "experience", "Bain & Company", newBulletText,
+    );
+    expect(applied).toBe(true);
+
+    const app: Application = {
+      id: "app1", slug: "bain-capital-excellence", company: "McKinsey", role: "Capital Excellence Consultant",
+      location: "New York, NY", remote: false, status: "sourced", score: 0, bucket: "strategy",
+      bucketName: "Strategy / Consulting", sector: "consulting", seniority: "senior", sourceUrl: "",
+      capturedAt: "2025-01-01T00:00:00.000Z", jdRaw: "",
+      jdParsed: {
+        keyRequirements: ["capital project delivery", "cost and schedule optimization"],
+        technicalSkills: [], softSkills: [], yearsExperienceRequired: null, redFlags: [],
+        keywords: ["capital", "cost", "savings"],
+      },
+      nextAction: "", contacts: [], interviews: [], reminders: [], resumeVersions: [], notes: "",
+      emailEvents: [], createdAt: "2025-01-01T00:00:00.000Z", updatedAt: "2025-01-01T00:00:00.000Z",
+    } as Application;
+
+    // Generation reads the canonical profile — never the in-progress resume state —
+    // so the write-back from appendGapAnswerToProfile is what makes the answer
+    // available to every future resume generated for this or any other job.
+    const prompt = resumePrompt(nextProfile, app, "consulting");
+    expect(prompt).toContain(newBulletText);
   });
 });
