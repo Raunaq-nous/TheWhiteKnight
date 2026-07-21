@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { injectGapAnswerIntoResume } from "../resume-gap-fill";
+import { appendGapAnswerToProfile } from "../profile-enrichment";
 import type { ResumeContent } from "../resume-schema";
+import type { Profile } from "../profile";
 
 function baseResumeContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
   return {
@@ -87,5 +89,48 @@ describe("injectGapAnswerIntoResume — project", () => {
     expect(() => injectGapAnswerIntoResume(content, "project", "Anything", "New detail")).not.toThrow();
     const { applied } = injectGapAnswerIntoResume(content, "project", "Anything", "New detail");
     expect(applied).toBe(false);
+  });
+});
+
+describe("end-to-end gap-fill answer persistence (BUG 2 regression)", () => {
+  // Exercises the SAME two writes ResumeGapFillBox.submitAnswer performs for
+  // one answer: (c) inject into the in-progress resume, (d) write back to the
+  // canonical profile. The actual reported bug was that step (c)'s downstream
+  // server persistence (persistResumeContent -> updateApplication) was
+  // fire-and-forget in app/application/page.tsx — not unit-testable here since
+  // this repo's vitest config runs node-only (no jsdom/RTL for that component),
+  // but the data-layer contract both writes must agree on IS testable here.
+  function profileWithBainBullet(): Profile {
+    return {
+      name: "Jordan Lee", headline: "", email: "jordan@example.com", phone: "",
+      location: "", locationsOpenTo: "", yearsOfExperience: "7",
+      experience: [{
+        id: "e1", company: "Bain & Company", role: "Consultant", tenure: "2020 - Present",
+        location: "", current: true, bullets: "Led capital project reviews",
+      }],
+      education: [], skills: {}, projects: [], publications: [], certifications: [],
+      voiceNotes: "", createdAt: "2025-01-01T00:00:00.000Z", updatedAt: "2025-01-01T00:00:00.000Z",
+    } as Profile;
+  }
+
+  it("the same new bullet text lands in BOTH the in-progress resume and the canonical profile", () => {
+    const resumeContent = baseResumeContent();
+    const profile = profileWithBainBullet();
+    const newBulletText = "Delivered $12M in cost savings across 3 capital programs";
+
+    const { content: nextResume, applied: appliedToResume } = injectGapAnswerIntoResume(
+      resumeContent, "experience", "Bain & Company", newBulletText,
+    );
+    const { profile: nextProfile, applied: appliedToProfile } = appendGapAnswerToProfile(
+      profile, "experience", "Bain & Company", newBulletText,
+    );
+
+    expect(appliedToResume).toBe(true);
+    expect(appliedToProfile).toBe(true);
+    expect(nextResume.experience[0].bullets.map(b => b.text)).toContain(newBulletText);
+    expect(nextProfile.experience[0].bullets).toContain(newBulletText);
+    // Original content survives in both places — this is additive, not destructive.
+    expect(nextResume.experience[0].bullets.map(b => b.text)).toContain("Led capital project reviews");
+    expect(nextProfile.experience[0].bullets).toContain("Led capital project reviews");
   });
 });

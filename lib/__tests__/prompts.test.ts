@@ -158,6 +158,23 @@ describe("prompt builder snapshots", () => {
     expect(output).toContain("DataCo");
   });
 
+  it("resumePrompt includes EVERY bullet from EVERY experience entry, not truncated to one per role (BUG 1 regression)", () => {
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
+    // Both bullets of Acme AI
+    expect(output).toContain("Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%");
+    expect(output).toContain("Managed 3 cross-functional teams across eng, design, and data");
+    // Both bullets of DataCo
+    expect(output).toContain("Shipped data pipeline product serving 200+ enterprise customers");
+    expect(output).toContain("Reduced churn by 18% through targeted onboarding improvements");
+  });
+
+  it("resumePrompt includes deterministic relevance hints distinguishing tool-building from direct delivery (BUG 1 fix)", () => {
+    const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
+    expect(output).toContain("DETERMINISTIC RELEVANCE HINTS");
+    expect(output).toContain("TOOL-BUILDING");
+    expect(output).toContain("NEVER reduce an entry to a single bullet");
+  });
+
   it("resumePrompt includes anti-hallucination rules", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
     expect(output).toContain("ANTI-HALLUCINATION RULES");

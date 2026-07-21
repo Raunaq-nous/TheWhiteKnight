@@ -21,6 +21,7 @@ import { extractProfileData } from "../../lib/profile-enrichment";
 import { diffExtractionAgainstProfile, MergeDiffItem } from "../../lib/profile-merge";
 import { ProfileMergeReview } from "../profile-merge-review";
 import { ResumeGapFillBox } from "../resume-gap-fill-box";
+import { showToast } from "../../lib/toast";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -143,14 +144,19 @@ function ApplicationDetail() {
   // Resume generation produces structured content (ResumeContent), not a
   // markdown string, so it's kept out of the generic handleGenerate/aiOutput
   // flow below and given its own handler + render surface (ResumeExportView).
-  const persistResumeContent = (data: ResumeContent, archetype: ResumeArchetype) => {
-    if (!app) return;
+  const persistResumeContent = async (data: ResumeContent, archetype: ResumeArchetype): Promise<boolean> => {
+    if (!app) return false;
     const md = resumeContentToMarkdown(data);
     setResumeContent(data);
     setResumeArchetypeUsed(archetype);
     setSavedResume(md);
-    updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md });
-    setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md } : prev);
+    const ok = await updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md });
+    if (ok) {
+      setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md } : prev);
+    } else {
+      showToast("Resume updated here, but saving it to the application failed. Reloading may lose this change.", "error");
+    }
+    return ok;
   };
 
   const handleGenerateResume = async () => {
@@ -162,7 +168,7 @@ function ApplicationDetail() {
     try {
       const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
       const { data, archetype } = await generateTailoredResume(profile, app, override);
-      persistResumeContent(data, archetype);
+      await persistResumeContent(data, archetype);
       setShowResumeExport(true);
     } catch (e: any) {
       setResumeGenError(e.message || "Resume generation failed.");
@@ -180,7 +186,7 @@ function ApplicationDetail() {
     try {
       const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
       const { data, archetype } = await refineResume(profile, app, resumeContent, resumeRefineText.trim(), override);
-      persistResumeContent(data, archetype);
+      await persistResumeContent(data, archetype);
       setResumeRefineText("");
     } catch (e: any) {
       setResumeRefineError(e.message || "Refine failed.");

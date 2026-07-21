@@ -3,6 +3,7 @@ import { Application } from "./store";
 import { ResumeArchetype, RESUME_SPECS } from "./resume-archetype";
 import { ResumeContent } from "./resume-schema";
 import { BulletCandidate } from "./profile-bullet-quality";
+import { computeBulletRelevanceHints, renderRelevanceHintsBlock } from "./resume-bullet-relevance";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -223,6 +224,7 @@ export function resumePrompt(profile: Profile, app: Application, archetype: Resu
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
   const expCount = profile.experience.length;
   const spec = RESUME_SPECS[archetype];
+  const relevanceHintsBlock = renderRelevanceHintsBlock(computeBulletRelevanceHints(profile, app));
 
   return `You are a senior resume strategist specializing in ${spec.label} hiring. Write a tailored resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
 
@@ -231,6 +233,8 @@ ${buildProfileContext(profile)}
 ---
 
 ${buildJDContext(app)}
+
+${relevanceHintsBlock ? `---\n\n${relevanceHintsBlock}` : ""}
 
 ${atsKeywords ? `ATS KEYWORDS — weave these exact phrases in naturally: ${atsKeywords}` : ""}
 ${keyReqs ? `MUST-COVER REQUIREMENTS: ${keyReqs}` : ""}
@@ -256,7 +260,9 @@ LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
 
 EXPERIENCE INCLUSION RULES:
 - There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
-- Rank bullets by relevance to the SUB-FOCUS and target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this specific role (keep 2-4 per entry, the strongest first).
+- Rank bullets by relevance to the SUB-FOCUS and target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this specific role.
+- Keep 2-4 bullets per entry, the strongest first — NEVER reduce an entry to a single bullet unless that entry has only 1-2 bullets in the profile to begin with. A rich profile with many bullets per role must produce a resume that reflects that breadth; collapsing every entry to one bullet is a failure mode, not a valid trim.
+- Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics. See the DETERMINISTIC RELEVANCE HINTS above for where this specifically applies.
 - MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
 - Preserve the exact company name and tenure for every entry.
 
@@ -272,7 +278,7 @@ ARCHETYPE — ${spec.label}:
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
 - CERTIFICATIONS: ${spec.certificationPolicy}
-${spec.sectionSequence.includes("selectedImpact") ? '- KEY WINS & PROJECTS — populate BOTH fields, they render together under ONE combined heading, never as two separate sections: a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role), AND a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus. Each item one line, most relevant first, each with a real number from the profile where the profile has one.' : ""}
+${spec.sectionSequence.includes("selectedImpact") ? '- KEY WINS & PROJECTS — MANDATORY, this is not optional for this archetype. Populate BOTH fields, they render together under ONE combined heading, never as two separate sections: a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role), AND a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus. Each item one line, most relevant first, each with a real number from the profile where the profile has one. Do not leave "keyWins" empty when the profile has quantified achievements available — search across every experience entry for them.' : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.includeKeyWins) ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.sectionSequence.includes("projects")) ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
 ${spec.sectionSequence.includes("leadership") ? '- LEADERSHIP & ACTIVITIES: include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people — drawn only from real profile content (roles, projects, or education achievements that genuinely show this, e.g. team leadership, mentoring, extracurricular leadership). Do not invent an activity that is not in the profile; omit the key if the profile has nothing that qualifies.' : ""}
