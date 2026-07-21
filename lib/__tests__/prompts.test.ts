@@ -168,11 +168,44 @@ describe("prompt builder snapshots", () => {
     expect(output).toContain("Reduced churn by 18% through targeted onboarding improvements");
   });
 
-  it("resumePrompt includes deterministic relevance hints distinguishing tool-building from direct delivery (BUG 1 fix)", () => {
+  it("resumePrompt includes deterministic relevance ranking distinguishing tool-building from direct delivery (BUG 1 fix)", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
-    expect(output).toContain("DETERMINISTIC RELEVANCE HINTS");
+    expect(output).toContain("DETERMINISTIC RELEVANCE RANKING");
     expect(output).toContain("TOOL-BUILDING");
     expect(output).toContain("NEVER reduce an entry to a single bullet");
+  });
+
+  it("resumePrompt's experience section is pre-ranked by relevance to the JD, not in raw profile order (BUG 1 fix)", () => {
+    const capitalApp: Application = {
+      ...MOCK_APP,
+      jdParsed: {
+        ...MOCK_APP.jdParsed!,
+        keyRequirements: ["capital project delivery", "cost and schedule optimization"],
+        keywords: ["capital", "allocation", "cost optimization", "schedule optimization"],
+      },
+    };
+    const capitalProfile: Profile = {
+      ...MOCK_PROFILE,
+      experience: [
+        {
+          id: "e1",
+          company: "Bain & Company",
+          role: "Consultant",
+          tenure: "2020 - Present",
+          location: "",
+          current: true,
+          bullets: [
+            "Built and shipped integrated agentic AI platform: cost modeling engine, schedule optimization platform, capital allocation opportunity trigger system.",
+            "Delivered multi-plant capital program strategy for North American nuclear utility, delivered board-level recommendation for a multi-billion-dollar program",
+          ].join("\n"),
+        },
+      ],
+    };
+    const output = resumePrompt(capitalProfile, capitalApp, "consulting");
+    const experienceSection = output.split("EDUCATION (copy exactly")[0];
+    expect(experienceSection.indexOf("Delivered multi-plant capital program strategy")).toBeLessThan(
+      experienceSection.indexOf("Built and shipped integrated agentic AI platform"),
+    );
   });
 
   it("resumePrompt includes anti-hallucination rules", () => {
