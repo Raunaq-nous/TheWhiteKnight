@@ -4,35 +4,80 @@ import { applicationRepo, profileRepo, settingsRepo, notificationRepo } from "..
 import { queueApproval } from "../approval-gate";
 import { scanJobs, JobResult } from "./scan-service";
 import { fetchJdText } from "./jd-fetch-service";
-import { scoreJob } from "./scoring-service";
+import { scoreJob, ScoreJobOutput } from "./scoring-service";
 import { generateDraft } from "./draft-service";
 import { DEFAULT_BUCKETS } from "../../buckets";
 import { htmlToText } from "../../jd-fetch";
 import type { Region } from "../../company-targets";
 import type { Application } from "../../store";
 import type { Profile } from "../../profile";
-import {
-  AUTOMATION_SCHEDULE_HOURS,
+import type {
   AutomationSettings,
   AutomationRunLog,
   AutomationRunStatus,
 } from "../../automation-settings";
 
+// AUTOMATION_SCHEDULE_HOURS/DEFAULT_MAX_JOBS_PER_RUN/MAX_JOBS_PER_RUN_CEILING
+// are duplicated here (not imported as values) rather than pulled from
+// lib/automation-settings.ts, which imports the client write-through cache
+// module — this server-only service must not depend on it. The client copy
+// exists for Settings UI validation; both must stay in sync (enforced by a
+// test asserting these constants match).
+const AUTOMATION_SCHEDULE_HOURS: Record<AutomationSettings["schedule"], number> = {
+  "6h": 6, "12h": 12, "24h": 24, "72h": 72, "168h": 168,
+};
+const DEFAULT_MAX_JOBS_PER_RUN = 8;
+const MAX_JOBS_PER_RUN_CEILING = 25;
+
+// ============================================================================
 // Scheduled automation layer: scan -> score -> (for good-fit jobs) draft ->
 // stage into the SAME human-approval queue everything else uses, then STOP.
-// This module NEVER imports approval-executor or send-service — it can only
-// ever call queueApproval (stage-only), the same function followup-service
-// uses. That import boundary is what makes it structurally incapable of
-// sending or submitting anything; see automation-service.test.ts for a
-// regression test enforcing it.
+//
+// SAFETY INVARIANT (the property that matters most): this module NEVER
+// imports approval-executor or send-service, and the ONLY function anywhere
+// in this file that touches the approval system is queueApproval — the same
+// stage-only function followup-service.ts already uses. autopilotStage()
+// below is the single chokepoint where that call happens; nothing else in
+// this module calls it or anything execute/send/submit-shaped. See
+// automation-service.test.ts's "send-execution import boundary" test, which
+// statically greps this file's import statements for a regression.
+//
+// RATE-LIMIT / RUNTIME SAFETY: a single invocation never scores or drafts
+// more than settings.maxJobsPerRun jobs (hard-ceiling-clamped regardless of
+// what's configured), processes them SEQUENTIALLY (never in parallel), and
+// sleeps INTER_JOB_DELAY_MS between each one — so one run can never burst
+// past Exa/Together's per-minute limits or run indefinitely.
+//
+// RESUMABILITY: the applications table IS the persistent scan ledger.
+// Whatever this run doesn't get to (beyond the cap) is simply never saved,
+// so it is NOT excluded by isDuplicateJob() next time — the next run's scan
+// naturally re-surfaces it and picks up where this run left off. Nothing
+// extra needs to be persisted to "remember" where a run stopped.
+// ============================================================================
 
-const MAX_JOBS_PER_RUN = 15;
+// Sequential delay between processing each job (score + optional draft),
+// so a run with several new jobs never bursts requests past Exa/Together
+// per-minute rate limits. Overridable only by tests (see opts below) — real
+// cron/manual runs always use this real delay.
+const INTER_JOB_DELAY_MS = 1500;
 
-export function isDue(settings: AutomationSettings, now: Date): boolean {
+function sleep(ms: number): Promise<void> {
+  return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+}
+
+export function isDue(settings: Pick<AutomationSettings, "enabled" | "schedule" | "lastRunAt">, now: Date): boolean {
   if (!settings.enabled) return false;
   if (!settings.lastRunAt) return true;
   const hours = AUTOMATION_SCHEDULE_HOURS[settings.schedule];
   return now.getTime() - new Date(settings.lastRunAt).getTime() >= hours * 60 * 60 * 1000;
+}
+
+// Clamps a user-configured cap into a safe range regardless of what's
+// stored — a misconfigured huge number (or 0/negative) can never blow past
+// MAX_JOBS_PER_RUN_CEILING or fall to zero.
+export function resolveJobCap(maxJobsPerRun: number | undefined): number {
+  const requested = maxJobsPerRun ?? DEFAULT_MAX_JOBS_PER_RUN;
+  return Math.max(1, Math.min(MAX_JOBS_PER_RUN_CEILING, Math.floor(requested) || DEFAULT_MAX_JOBS_PER_RUN));
 }
 
 function normalizeUrl(u: string): string {
@@ -55,6 +100,9 @@ function slugify(company: string, role: string): string {
   return `${company.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${role.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 }
 
+// The dedupe check against the persistent scan ledger (the applications
+// table itself — see module docstring). Anything already saved here, staged
+// or not, is never re-scored or re-staged.
 export function isDuplicateJob(
   existing: Application[],
   job: { url: string; company?: string; title: string },
@@ -117,14 +165,60 @@ function skippedRun(id: string, startedAt: string, reason: string): AutomationRu
   };
 }
 
+// The ONLY place in this module that touches the approval system. Drafts
+// materials for a good-fit job and stages it via queueApproval — stage-only,
+// exactly like followup-service.ts's use of the same function. Never calls
+// anything execute/send/submit-shaped. Returns whether it staged anything
+// plus any non-fatal draft error, so the caller can accumulate run stats.
+async function autopilotStage(
+  userEmail: string,
+  app: Application,
+  scoreResult: ScoreJobOutput,
+  profile: Profile,
+  providerSettings: Parameters<typeof generateDraft>[0]["providerSettings"],
+): Promise<{ staged: boolean; error?: string }> {
+  if (!isGoodFit(scoreResult.recommendation)) return { staged: false };
+
+  let draft: unknown = null;
+  let error: string | undefined;
+  try {
+    draft = await generateDraft({ action: "cover-letter", profile, app, providerSettings });
+  } catch (e: any) {
+    error = `Draft failed for ${app.company} - ${app.role}: ${e.message}`;
+  }
+
+  queueApproval(userEmail, {
+    kind: "auto_staged_job",
+    applicationId: app.id,
+    payload: {
+      company: app.company,
+      role: app.role,
+      score: scoreResult.global,
+      recommendation: scoreResult.recommendation,
+      draftAction: "cover-letter",
+      draft,
+    },
+  });
+
+  return { staged: true, error };
+}
+
+export type RunAutomationOpts = {
+  force?: boolean;
+  // Test-only override for the inter-job delay so the suite doesn't have to
+  // spend real wall-clock time — real cron/manual-run callers never pass this.
+  interJobDelayMs?: number;
+};
+
 export async function runAutomation(
   userEmail: string,
   now: Date,
-  opts: { force?: boolean } = {},
+  opts: RunAutomationOpts = {},
 ): Promise<AutomationRunLog> {
   const id = randomUUID();
   const startedAt = now.toISOString();
   const settings = settingsRepo.getAutomationSettings(userEmail);
+  const interJobDelayMs = opts.interJobDelayMs ?? INTER_JOB_DELAY_MS;
 
   if (!settings.enabled) {
     return skippedRun(id, startedAt, "Automation is disabled");
@@ -177,16 +271,28 @@ export async function runAutomation(
   errors.push(...(scanResult.errors ?? []));
   const jobsFound = scanResult.jobs.length;
 
+  // Dedupe against the persistent ledger (applications table) — anything
+  // already saved, from this or any prior run, is excluded here.
   const existingApps = applicationRepo.list(userEmail);
   const newJobs = scanResult.jobs.filter(j => !isDuplicateJob(existingApps, { url: j.url, company: j.company, title: j.title }));
   const jobsSkippedDuplicate = jobsFound - newJobs.length;
-  const toProcess = newJobs.slice(0, MAX_JOBS_PER_RUN);
+
+  // Hard per-run cap, clamped to a safe ceiling regardless of configuration.
+  // Anything beyond the cap is simply left unprocessed and unsaved this run —
+  // since it's not in the ledger, the next run's dedupe pass won't exclude
+  // it, so it's naturally picked up then. This is what makes runs resumable
+  // without any extra "where did we stop" bookkeeping.
+  const jobCap = resolveJobCap(settings.maxJobsPerRun);
+  const toProcess = newJobs.slice(0, jobCap);
 
   let jobsScored = 0;
   let jobsStaged = 0;
   let jobsSourced = 0;
 
-  for (const job of toProcess) {
+  for (let i = 0; i < toProcess.length; i++) {
+    const job = toProcess[i];
+    if (i > 0) await sleep(interJobDelayMs);
+
     try {
       const jdText = await resolveJdText(job, integration.exaApiKey);
       const scoreResult = await scoreJob({
@@ -239,35 +345,15 @@ export async function runAutomation(
         updatedAt: nowIso,
       };
 
+      // Save to the ledger FIRST — even if drafting/staging fails below, this
+      // job is now permanently recorded and will never be re-scored.
       applicationRepo.save(userEmail, newApp);
       jobsSourced++;
-      // Keep this run's own dedup ledger current so two jobs resolving to the
-      // same slug/URL within a single run can't both be saved.
-      existingApps.push(newApp);
+      existingApps.push(newApp); // keeps this run's own in-memory ledger view current
 
-      if (isGoodFit(scoreResult.recommendation)) {
-        let draft: unknown = null;
-        try {
-          draft = await generateDraft({ action: "cover-letter", profile, app: newApp, providerSettings });
-        } catch (e: any) {
-          errors.push(`Draft failed for ${newApp.company} - ${newApp.role}: ${e.message}`);
-        }
-
-        // Stage-only — never executed. See module docstring.
-        queueApproval(userEmail, {
-          kind: "auto_staged_job",
-          applicationId: newApp.id,
-          payload: {
-            company: newApp.company,
-            role: newApp.role,
-            score: scoreResult.global,
-            recommendation: scoreResult.recommendation,
-            draftAction: "cover-letter",
-            draft,
-          },
-        });
-        jobsStaged++;
-      }
+      const staged = await autopilotStage(userEmail, newApp, scoreResult, profile, providerSettings);
+      if (staged.staged) jobsStaged++;
+      if (staged.error) errors.push(staged.error);
     } catch (e: any) {
       errors.push(`Scoring failed for ${job.company ?? "unknown"} - ${job.title}: ${e.message}`);
     }

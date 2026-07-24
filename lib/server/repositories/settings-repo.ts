@@ -9,7 +9,10 @@ import type { AutomationSettings, AutomationRunLog } from "../../automation-sett
 import type { SettingsRepository } from "./types";
 
 const DEFAULT_MODEL: ModelSettings = { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" };
-const DEFAULT_AUTOMATION: AutomationSettings = { enabled: false, schedule: "24h", lastRunAt: null };
+// Duplicated (not imported as a value) rather than pulled from
+// lib/automation-settings.ts, which pulls in the client write-through cache
+// module — same convention as DEFAULT_MODEL above.
+const DEFAULT_AUTOMATION: AutomationSettings = { enabled: false, schedule: "24h", lastRunAt: null, maxJobsPerRun: 8 };
 const MAX_AUTOMATION_RUNS = 20;
 
 export const settingsRepo: SettingsRepository = {

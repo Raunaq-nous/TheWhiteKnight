@@ -28,7 +28,7 @@ import { applicationRepo } from "../server/repositories/application-repo";
 import { profileRepo } from "../server/repositories/profile-repo";
 import { settingsRepo } from "../server/repositories/settings-repo";
 import { notificationRepo } from "../server/repositories/notification-repo";
-import { runAutomation, isDue, isDuplicateJob, isGoodFit } from "../server/services/automation-service";
+import { runAutomation, isDue, isDuplicateJob, isGoodFit, resolveJobCap } from "../server/services/automation-service";
 import type { Application } from "../store";
 import type { Profile } from "../profile";
 import type { AutomationSettings } from "../automation-settings";
@@ -64,7 +64,13 @@ function makeProfile(): Profile {
 }
 
 function enableAutomation(overrides: Partial<AutomationSettings> = {}) {
-  settingsRepo.saveAutomationSettings(USER, { enabled: true, schedule: "24h", lastRunAt: null, ...overrides });
+  settingsRepo.saveAutomationSettings(USER, { enabled: true, schedule: "24h", lastRunAt: null, maxJobsPerRun: 8, ...overrides });
+}
+
+// All test runs pass interJobDelayMs: 0 so the suite doesn't spend real
+// wall-clock time on the deliberate rate-limit delay between jobs.
+function runOnce(userEmail: string, now: Date, opts: { force?: boolean } = {}) {
+  return runAutomation(userEmail, now, { ...opts, interJobDelayMs: 0 });
 }
 
 function job(overrides: Partial<JobResult> = {}): JobResult {
@@ -152,15 +158,40 @@ describe("isGoodFit", () => {
   });
 });
 
+describe("resolveJobCap — rate-limit safety", () => {
+  it("uses the configured value when it's sane", () => {
+    expect(resolveJobCap(5)).toBe(5);
+  });
+
+  it("falls back to the default when undefined", () => {
+    expect(resolveJobCap(undefined)).toBe(8);
+  });
+
+  it("clamps a misconfigured huge value down to the hard ceiling", () => {
+    expect(resolveJobCap(10_000)).toBe(25);
+  });
+
+  it("clamps zero or negative values up to at least 1", () => {
+    expect(resolveJobCap(0)).toBeGreaterThanOrEqual(1);
+    expect(resolveJobCap(-5)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("never returns something a caller could use to exceed the ceiling", () => {
+    for (const v of [26, 100, 1_000_000]) {
+      expect(resolveJobCap(v)).toBeLessThanOrEqual(25);
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // runAutomation — gating
 // ---------------------------------------------------------------------------
 describe("runAutomation gating", () => {
   it("is skipped and never scans when automation is disabled", async () => {
-    settingsRepo.saveAutomationSettings(USER, { enabled: false, schedule: "24h", lastRunAt: null });
+    settingsRepo.saveAutomationSettings(USER, { enabled: false, schedule: "24h", lastRunAt: null, maxJobsPerRun: 8 });
     profileRepo.save(USER, makeProfile());
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
     expect(run.status).toBe("skipped");
     expect(scanJobsMock).not.toHaveBeenCalled();
   });
@@ -169,16 +200,16 @@ describe("runAutomation gating", () => {
     enableAutomation({ lastRunAt: new Date(NOW.getTime() - 1000).toISOString() });
     profileRepo.save(USER, makeProfile());
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
     expect(run.status).toBe("skipped");
     expect(scanJobsMock).not.toHaveBeenCalled();
   });
 
   it("force:true bypasses the due-check but still respects enabled:false", async () => {
-    settingsRepo.saveAutomationSettings(USER, { enabled: false, schedule: "24h", lastRunAt: null });
+    settingsRepo.saveAutomationSettings(USER, { enabled: false, schedule: "24h", lastRunAt: null, maxJobsPerRun: 8 });
     profileRepo.save(USER, makeProfile());
 
-    const run = await runAutomation(USER, NOW, { force: true });
+    const run = await runOnce(USER, NOW, { force: true });
     expect(run.status).toBe("skipped");
     expect(scanJobsMock).not.toHaveBeenCalled();
   });
@@ -187,7 +218,7 @@ describe("runAutomation gating", () => {
     enableAutomation();
     scanJobsMock.mockResolvedValue({ jobs: [], counts: { total: 0, beforeFiltering: 0, ats: 0, adzuna: 0, exa: 0 } });
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
     expect(run.status).toBe("error");
     expect(scanJobsMock).not.toHaveBeenCalled();
   });
@@ -210,7 +241,7 @@ describe("runAutomation happy path", () => {
       .mockResolvedValueOnce(scoreResult("skip", 2.0));
     generateDraftMock.mockResolvedValue({ text: "Mock cover letter" });
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
 
     expect(run.status).toBe("ok");
     expect(run.jobsFound).toBe(2);
@@ -244,7 +275,7 @@ describe("runAutomation happy path", () => {
     scoreJobMock.mockResolvedValue(scoreResult("apply"));
     generateDraftMock.mockResolvedValue({ text: "Draft" });
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
 
     expect(run.jobsFound).toBe(2);
     expect(run.jobsSkippedDuplicate).toBe(1);
@@ -261,10 +292,10 @@ describe("runAutomation happy path", () => {
     profileRepo.save(USER, makeProfile());
     scanJobsMock.mockResolvedValue({ jobs: [], counts: { total: 0, beforeFiltering: 0, ats: 0, adzuna: 0, exa: 0 } });
 
-    const first = await runAutomation(USER, NOW);
+    const first = await runOnce(USER, NOW);
     expect(first.status).toBe("ok");
 
-    const second = await runAutomation(USER, new Date(NOW.getTime() + 60_000));
+    const second = await runOnce(USER, new Date(NOW.getTime() + 60_000));
     expect(second.status).toBe("skipped");
     expect(scanJobsMock).toHaveBeenCalledOnce();
   });
@@ -278,7 +309,7 @@ describe("runAutomation happy path", () => {
     fetchJdTextMock.mockResolvedValue({ ok: false, status: 422, error: "nope" });
     scoreJobMock.mockResolvedValue(scoreResult("review_manually", 3.6));
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
 
     expect(run.jobsScored).toBe(1);
     expect(fetchJdTextMock).toHaveBeenCalledOnce();
@@ -298,7 +329,7 @@ describe("runAutomation happy path", () => {
       .mockRejectedValueOnce(new Error("LLM exploded"));
     generateDraftMock.mockResolvedValue({ text: "Draft" });
 
-    const run = await runAutomation(USER, NOW);
+    const run = await runOnce(USER, NOW);
 
     expect(run.status).toBe("ok");
     expect(run.jobsScored).toBe(1);
@@ -308,20 +339,101 @@ describe("runAutomation happy path", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Per-run cap + resumability — a run must never exceed the configured cap,
+// and whatever it leaves unprocessed must get picked up by the next run.
+// ---------------------------------------------------------------------------
+describe("per-run cap and resumability", () => {
+  it("never scores/drafts more than maxJobsPerRun new jobs in a single invocation", async () => {
+    enableAutomation({ maxJobsPerRun: 2 });
+    profileRepo.save(USER, makeProfile());
+
+    const jobs = [1, 2, 3, 4, 5].map(n => job({ url: `https://boards.greenhouse.io/acme/jobs/${n}`, title: `Role ${n}` }));
+    scanJobsMock.mockResolvedValue({ jobs, counts: { total: 5, beforeFiltering: 5, ats: 5, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("review_manually", 3.6));
+
+    const run = await runOnce(USER, NOW);
+
+    expect(run.jobsFound).toBe(5);
+    expect(run.jobsScored).toBe(2); // capped, not 5
+    expect(run.jobsSourced).toBe(2);
+    expect(scoreJobMock).toHaveBeenCalledTimes(2);
+    expect(applicationRepo.list(USER)).toHaveLength(2);
+  });
+
+  it("a misconfigured huge cap is still clamped to the safety ceiling inside a real run", async () => {
+    enableAutomation({ maxJobsPerRun: 999 });
+    profileRepo.save(USER, makeProfile());
+
+    const jobs = Array.from({ length: 30 }, (_, i) => job({ url: `https://boards.greenhouse.io/acme/jobs/${i}`, title: `Role ${i}` }));
+    scanJobsMock.mockResolvedValue({ jobs, counts: { total: 30, beforeFiltering: 30, ats: 30, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("review_manually", 3.6));
+
+    const run = await runOnce(USER, NOW);
+    expect(run.jobsScored).toBeLessThanOrEqual(25); // MAX_JOBS_PER_RUN_CEILING
+  });
+
+  it("picks up the jobs left over from a capped run on the NEXT run, via the same ledger — no extra bookkeeping needed", async () => {
+    enableAutomation({ maxJobsPerRun: 2, schedule: "6h" });
+    profileRepo.save(USER, makeProfile());
+
+    const jobs = [1, 2, 3].map(n => job({ url: `https://boards.greenhouse.io/acme/jobs/${n}`, title: `Role ${n}` }));
+    scanJobsMock.mockResolvedValue({ jobs, counts: { total: 3, beforeFiltering: 3, ats: 3, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("review_manually", 3.6));
+
+    const firstRun = await runOnce(USER, NOW);
+    expect(firstRun.jobsScored).toBe(2);
+    expect(firstRun.jobsSkippedDuplicate).toBe(0); // nothing was in the pipeline yet
+
+    // Same scan result returned again (the 3rd posting is still live) — next
+    // scheduled run, 6h later.
+    const later = new Date(NOW.getTime() + 7 * 60 * 60 * 1000);
+    const secondRun = await runOnce(USER, later);
+
+    // The first run's 2 jobs are now in the ledger, so this run only sees
+    // job 3 as new. Resumed, not lost, and not rescored.
+    expect(secondRun.jobsFound).toBe(3);
+    expect(secondRun.jobsSkippedDuplicate).toBe(2);
+    expect(secondRun.jobsScored).toBe(1);
+    expect(applicationRepo.list(USER)).toHaveLength(3); // all 3 eventually landed in the pipeline
+  });
+
+  it("processes jobs sequentially, never concurrently (never more than one in-flight score call)", async () => {
+    enableAutomation({ maxJobsPerRun: 3 });
+    profileRepo.save(USER, makeProfile());
+
+    const jobs = [1, 2, 3].map(n => job({ url: `https://boards.greenhouse.io/acme/jobs/${n}`, title: `Role ${n}` }));
+    scanJobsMock.mockResolvedValue({ jobs, counts: { total: 3, beforeFiltering: 3, ats: 3, adzuna: 0, exa: 0 } });
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    scoreJobMock.mockImplementation(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(r => setTimeout(r, 5));
+      inFlight--;
+      return scoreResult("review_manually", 3.6);
+    });
+
+    await runOnce(USER, NOW);
+    expect(maxInFlight).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Run log persistence — "so I can see it worked"
 // ---------------------------------------------------------------------------
 describe("run log persistence", () => {
   it("appends every run (including skipped ones) to the automation_runs log", async () => {
-    settingsRepo.saveAutomationSettings(USER, { enabled: false, schedule: "24h", lastRunAt: null });
+    settingsRepo.saveAutomationSettings(USER, { enabled: false, schedule: "24h", lastRunAt: null, maxJobsPerRun: 8 });
     profileRepo.save(USER, makeProfile());
 
-    await runAutomation(USER, NOW);
+    await runOnce(USER, NOW);
     const runs = settingsRepo.getAutomationRuns(USER);
     expect(runs).toHaveLength(0); // disabled skip is not persisted — nothing happened
 
     enableAutomation();
     scanJobsMock.mockResolvedValue({ jobs: [], counts: { total: 0, beforeFiltering: 0, ats: 0, adzuna: 0, exa: 0 } });
-    await runAutomation(USER, NOW);
+    await runOnce(USER, NOW);
 
     const afterReal = settingsRepo.getAutomationRuns(USER);
     expect(afterReal).toHaveLength(1);
@@ -334,7 +446,7 @@ describe("run log persistence", () => {
     scanJobsMock.mockResolvedValue({ jobs: [job()], counts: { total: 1, beforeFiltering: 1, ats: 1, adzuna: 0, exa: 0 } });
     scoreJobMock.mockResolvedValue(scoreResult("review_manually", 3.6));
 
-    await runAutomation(USER, NOW);
+    await runOnce(USER, NOW);
     expect(notificationRepo.list(USER).filter(n => n.type === "automation_run")).toHaveLength(0);
   });
 });
@@ -342,19 +454,51 @@ describe("run log persistence", () => {
 // ---------------------------------------------------------------------------
 // Security invariant: this module can never send or execute anything.
 // ---------------------------------------------------------------------------
-describe("send-execution import boundary", () => {
-  it("automation-service.ts never imports approval-executor or send-service", () => {
+describe("send-execution import boundary — the property that matters most", () => {
+  // Static, source-level regression guard: the autopilot module must import
+  // NO send/submit/approve-executing function, ever. This is deliberately a
+  // whitelist-by-exclusion check on the actual import statements (not just
+  // two hardcoded names) so a future edit that imports a new send/submit/
+  // execute-shaped helper fails this test even if nobody remembers to update
+  // it by name.
+  const FORBIDDEN_IMPORT_PATTERNS = [
+    /approval-executor/i,
+    /send-service/i,
+    /email-channel/i,
+    /executeApproval/,
+    /executeSend/,
+    /resolveApproval/,
+    /\bsendEmail\b/,
+    /\bsubmitApplication\b/,
+  ];
+
+  function importStatementsOf(relativePath: string): string {
+    const source = fs.readFileSync(path.join(__dirname, relativePath), "utf-8");
+    // Only actual import statements — the module's own docstring discusses
+    // these same module/function names in prose, which must not trip this.
+    return source.split("\n").filter(line => /^\s*import\b/.test(line)).join("\n");
+  }
+
+  it("automation-service.ts imports no send/submit/approve-executing function", () => {
+    const importedFrom = importStatementsOf("../server/services/automation-service.ts");
+    for (const pattern of FORBIDDEN_IMPORT_PATTERNS) {
+      expect(importedFrom).not.toMatch(pattern);
+    }
+    // Sanity check the check itself isn't vacuous — approval-gate (stage-only,
+    // allowed) must still be imported.
+    expect(importedFrom).toMatch(/approval-gate/);
+  });
+
+  it("queueApproval is the ONLY approval-system call anywhere in the file, and it lives in autopilotStage", () => {
     const source = fs.readFileSync(
       path.join(__dirname, "../server/services/automation-service.ts"),
       "utf-8",
     );
-    // Check actual import statements only — the module's own docstring
-    // mentions these module names in prose, which must not trip this check.
-    const importLines = source.split("\n").filter(line => /^\s*import\b/.test(line));
-    const importedFrom = importLines.join("\n");
-    expect(importedFrom).not.toContain("approval-executor");
-    expect(importedFrom).not.toContain("send-service");
-    expect(importedFrom).not.toContain("executeApproval");
-    expect(importedFrom).not.toContain("executeSend");
+    const queueApprovalCalls = source.match(/queueApproval\(/g) ?? [];
+    expect(queueApprovalCalls.length).toBe(1);
+
+    const stageFnMatch = source.match(/async function autopilotStage\([\s\S]*?\n}/);
+    expect(stageFnMatch).not.toBeNull();
+    expect(stageFnMatch![0]).toContain("queueApproval(");
   });
 });
