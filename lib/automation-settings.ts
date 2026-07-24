@@ -24,16 +24,26 @@ export const AUTOMATION_SCHEDULE_LABELS: Record<AutomationSchedule, string> = {
   "168h": "Weekly",
 };
 
+// Per-run rate-limit safety: default cap on how many NEW jobs a single
+// invocation will score/draft, and a hard ceiling no configured value can
+// exceed (protects against a misconfigured huge number exhausting API
+// quota or making the cron endpoint run too long). Anything beyond the cap
+// is simply left for the next run — see automation-service.ts's ledger.
+export const DEFAULT_MAX_JOBS_PER_RUN = 8;
+export const MAX_JOBS_PER_RUN_CEILING = 25;
+
 export type AutomationSettings = {
   enabled: boolean;
   schedule: AutomationSchedule;
   lastRunAt: string | null;
+  maxJobsPerRun: number;
 };
 
 export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = {
   enabled: false,
   schedule: "24h",
   lastRunAt: null,
+  maxJobsPerRun: DEFAULT_MAX_JOBS_PER_RUN,
 };
 
 export type AutomationRunStatus = "ok" | "error" | "skipped";

@@ -389,6 +389,21 @@ export default function SettingsPage() {
             </p>
           </div>
 
+          <div style={{ marginBottom: 16 }}>
+            <div className="label" style={{ marginBottom: 8 }}>MAX NEW JOBS SCORED PER RUN</div>
+            <input
+              type="number"
+              min={1}
+              max={25}
+              value={automation.maxJobsPerRun}
+              onChange={e => setAutomation(prev => ({ ...prev, maxJobsPerRun: Math.max(1, Math.min(25, parseInt(e.target.value, 10) || 1)) }))}
+              style={{ width: 80, padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+            />
+            <p style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.4 }}>
+              Caps how many new postings get scored (and, for good-fit ones, drafted) in a single run, to respect API rate limits and keep each run fast. Anything beyond the cap isn't lost — it's picked up automatically on the next run. Hard ceiling of 25 regardless of what's entered here.
+            </p>
+          </div>
+
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
             <button className="btn btn-primary" onClick={handleAutomationSave} style={{ padding: "10px 20px" }}>SAVE AUTOMATION SETTINGS</button>
             {automationSaved && <span style={{ color: "var(--success)", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>SAVED</span>}

@@ -38,7 +38,7 @@ const EMPTY: CacheData = {
   integrationSettings: {},
   companyTargets: [],
   batchState: null,
-  automationSettings: { enabled: false, schedule: "24h", lastRunAt: null },
+  automationSettings: { enabled: false, schedule: "24h", lastRunAt: null, maxJobsPerRun: 8 },
 };
 
 let cache: CacheData = { ...EMPTY };
