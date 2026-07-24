@@ -1,43 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { htmlToText, extractJobPostingFromLdJson } from "../../../lib/jd-fetch";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-// Strips HTML tags and collapses whitespace, preserving meaningful line breaks.
-function htmlToText(html: string): string {
-  // Remove <script>, <style>, <nav>, <footer>, <header> blocks entirely
-  let text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-    .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-    .replace(/<header[\s\S]*?<\/header>/gi, "");
-
-  // Convert block-level tags to newlines
-  text = text.replace(/<\/(p|div|li|h[1-6]|br|tr|td)>/gi, "\n");
-  text = text.replace(/<br\s*\/?>/gi, "\n");
-
-  // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, " ");
-
-  // Decode common HTML entities
-  text = text
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ");
-
-  // Collapse whitespace while preserving paragraph breaks
-  text = text
-    .split("\n")
-    .map(line => line.replace(/\s+/g, " ").trim())
-    .filter(line => line.length > 0)
-    .join("\n");
-
-  return text.trim();
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -104,19 +69,14 @@ export async function POST(req: NextRequest) {
 
     const html = await fetchRes.text();
 
-    // LinkedIn-specific: look for job description in JSON-LD structured data
+    // LinkedIn-specific: pull the JobPosting's title/company/location
+    // alongside its description from JSON-LD structured data — description
+    // alone (the previous behavior) silently starved the downstream
+    // field-parser of the very metadata it needed to auto-populate the form.
     if (isLinkedIn) {
-      const ldMatch = html.match(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/i);
-      if (ldMatch) {
-        try {
-          const ld = JSON.parse(ldMatch[1]);
-          const description: string = ld?.description ?? ld?.jobPosting?.description ?? "";
-          if (description.trim()) {
-            return NextResponse.json({ text: htmlToText(description), source: "direct" });
-          }
-        } catch {
-          // fall through
-        }
+      const extracted = extractJobPostingFromLdJson(html);
+      if (extracted) {
+        return NextResponse.json({ text: extracted.text, source: "direct" });
       }
     }
 
