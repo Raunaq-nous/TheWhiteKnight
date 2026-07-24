@@ -8,6 +8,7 @@ import type { ModelSettings } from "../../model-settings";
 import type { IntegrationSettings } from "../../integration-settings";
 import type { CompanyTarget } from "../../company-targets";
 import type { BatchState } from "../../batch-runner";
+import type { AutomationSettings, AutomationRunLog } from "../../automation-settings";
 
 export interface ApplicationRepository {
   list(userEmail: string): Application[];
@@ -59,6 +60,10 @@ export interface SettingsRepository {
   saveCompanyTargets(userEmail: string, targets: CompanyTarget[]): void;
   getBatchState(userEmail: string): BatchState | null;
   saveBatchState(userEmail: string, state: BatchState | null): void;
+  getAutomationSettings(userEmail: string): AutomationSettings;
+  saveAutomationSettings(userEmail: string, s: AutomationSettings): void;
+  getAutomationRuns(userEmail: string): AutomationRunLog[];
+  appendAutomationRun(userEmail: string, run: AutomationRunLog): void;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "consumed";

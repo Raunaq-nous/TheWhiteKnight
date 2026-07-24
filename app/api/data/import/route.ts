@@ -86,6 +86,10 @@ export async function POST(req: NextRequest) {
   if (data.integrationSettings) settingsRepo.saveIntegrationSettings(email, data.integrationSettings);
   if (data.companyTargets)      settingsRepo.saveCompanyTargets(email, data.companyTargets);
   if (data.batchState)          settingsRepo.saveBatchState(email, data.batchState);
+  if (data.automationSettings)  settingsRepo.saveAutomationSettings(email, data.automationSettings);
+  // appendAutomationRun prepends each call, so replay oldest-first to preserve
+  // the original (newest-first) order after import.
+  if (data.automationRuns)      for (const run of [...data.automationRuns].reverse()) settingsRepo.appendAutomationRun(email, run);
 
   return NextResponse.json({ ok: true, imported: { applications: apps.length, contacts: contacts.length } });
 }

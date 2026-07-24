@@ -17,6 +17,20 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
+// Known kinds get a human-readable summary line instead of the raw kind
+// string; anything else falls back to showing the kind as-is.
+function summaryFor(item: ApprovalItem): string | null {
+  const p = item.action.payload;
+  if (item.action.kind === "auto_staged_job" && p) {
+    const score = typeof p.score === "number" ? p.score.toFixed(1) : p.score;
+    return `Auto-staged: ${p.company ?? "Unknown"} — ${p.role ?? "Unknown role"} (score ${score}, ${p.recommendation})`;
+  }
+  if (item.action.kind === "follow_up_draft" && p) {
+    return `Follow-up draft ready${p.note ? `: ${p.note}` : ""}`;
+  }
+  return null;
+}
+
 function ApprovalCard({
   item,
   onDecide,
@@ -48,7 +62,7 @@ function ApprovalCard({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <div>
           <div className="card-company" style={{ marginBottom: 2 }}>
-            {item.action.kind}
+            {summaryFor(item) ?? item.action.kind}
           </div>
           {item.action.applicationId && (
             <div className="card-role" style={{ fontSize: "0.75rem" }}>

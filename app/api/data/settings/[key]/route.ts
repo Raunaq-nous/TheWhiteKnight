@@ -10,7 +10,8 @@ type SettingsKey =
   | "company_targets"
   | "batch_state"
   | "skill_plan"
-  | "skill_status";
+  | "skill_status"
+  | "automation_settings";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
   const session = await getSession();
@@ -37,6 +38,7 @@ function readKey(email: string, key: SettingsKey) {
     case "batch_state":          return settingsRepo.getBatchState(email);
     case "skill_plan":           return skillRepo.getPlan(email);
     case "skill_status":         return skillRepo.getStatuses(email);
+    case "automation_settings":  return settingsRepo.getAutomationSettings(email);
     default: return null;
   }
 }
@@ -55,5 +57,6 @@ function writeKey(email: string, key: SettingsKey, value: unknown) {
       }
       break;
     }
+    case "automation_settings": settingsRepo.saveAutomationSettings(email, value as any); break;
   }
 }

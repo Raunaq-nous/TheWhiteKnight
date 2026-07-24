@@ -263,6 +263,19 @@ fi
 log "Step 7 done"
 
 # ────────────────────────────────────────────────────────────
+# 7b. Application cron — follow-up reminders + scheduled automation
+#     (scan -> score -> draft -> stage; never sends). Both endpoints are
+#     gated by CRON_SECRET and are safe to ping often — each one decides
+#     internally whether there's actually anything due to run.
+# ────────────────────────────────────────────────────────────
+banner "Step 7b: Application cron"
+CRON_CMD="curl -sf -X POST -H 'x-cron-secret: ${CRON_SECRET}' http://localhost:3000/api/cron/followups >/dev/null 2>&1; curl -sf -X POST -H 'x-cron-secret: ${CRON_SECRET}' http://localhost:3000/api/cron/automation >/dev/null 2>&1"
+(crontab -l 2>/dev/null | grep -v '/api/cron/followups' | grep -v '/api/cron/automation'; \
+  echo "*/15 * * * * ${CRON_CMD}") | crontab -
+log "Follow-up + automation cron set (every 15 min; each endpoint decides if anything is actually due)"
+log "Step 7b done"
+
+# ────────────────────────────────────────────────────────────
 # 8. Caddy — reverse proxy + auto TLS (Let's Encrypt)
 # ────────────────────────────────────────────────────────────
 banner "Step 8: Caddy"

@@ -15,6 +15,7 @@ export type NotifType =
   | "interview_reminder"
   | "offer_deadline"
   | "approval_pending"
+  | "automation_run"
   | "info";
 
 export type Notification = {

@@ -5,9 +5,12 @@ import type { ModelSettings } from "../../model-settings";
 import type { IntegrationSettings } from "../../integration-settings";
 import type { CompanyTarget } from "../../company-targets";
 import type { BatchState } from "../../batch-runner";
+import type { AutomationSettings, AutomationRunLog } from "../../automation-settings";
 import type { SettingsRepository } from "./types";
 
 const DEFAULT_MODEL: ModelSettings = { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" };
+const DEFAULT_AUTOMATION: AutomationSettings = { enabled: false, schedule: "24h", lastRunAt: null };
+const MAX_AUTOMATION_RUNS = 20;
 
 export const settingsRepo: SettingsRepository = {
   getModelSettings(userEmail) {
@@ -40,6 +43,22 @@ export const settingsRepo: SettingsRepository = {
     } else {
       setSingleton(userEmail, "batch_state", state);
     }
+  },
+
+  getAutomationSettings(userEmail) {
+    return getSingleton<AutomationSettings>(userEmail, "automation_settings") ?? DEFAULT_AUTOMATION;
+  },
+  saveAutomationSettings(userEmail, s) {
+    setSingleton(userEmail, "automation_settings", s);
+  },
+
+  getAutomationRuns(userEmail) {
+    return getSingleton<AutomationRunLog[]>(userEmail, "automation_runs") ?? [];
+  },
+  appendAutomationRun(userEmail, run) {
+    const existing = getSingleton<AutomationRunLog[]>(userEmail, "automation_runs") ?? [];
+    const next = [run, ...existing].slice(0, MAX_AUTOMATION_RUNS);
+    setSingleton(userEmail, "automation_runs", next);
   },
 };
 
