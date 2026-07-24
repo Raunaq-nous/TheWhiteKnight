@@ -4,6 +4,7 @@ import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { SkillGapResultSchema } from "../../../lib/schemas";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../../lib/resume-schema";
 import { detectResumeArchetype, withArchetypeSequence, ResumeArchetype } from "../../../lib/resume-archetype";
+import { clampToOnePageBudget } from "../../../lib/resume-budget";
 import {
   GenerationAction,
   ContactProfile,
@@ -72,9 +73,10 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      // Section order is stamped deterministically from the archetype spec —
+      // Section order is stamped deterministically from the archetype spec,
+      // and the one-page content budget is clamped deterministically — both
       // never trusted to the model.
-      return NextResponse.json({ data: withArchetypeSequence(normalizeResumeContent(data), archetype), archetype });
+      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(data), archetype), archetype), archetype });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
@@ -93,7 +95,7 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      return NextResponse.json({ data: withArchetypeSequence(normalizeResumeContent(data), archetype), archetype });
+      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(data), archetype), archetype), archetype });
     }
 
     let prompt = "";

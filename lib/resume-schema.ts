@@ -154,8 +154,8 @@ export function resolveSectionSequence(r: ResumeContent): ResumeSectionKey[] {
 
   // "selectedImpact" already renders keyWins + projects data combined —
   // never auto-append them standalone too, or the same data would render
-  // twice (once combined, once as separate "## Key Wins"/"## Relevant
-  // Projects" sections).
+  // twice (once combined as "## Key Projects & Impact", once as separate
+  // "## Key Wins"/"## Relevant Projects" sections).
   const skip = base.includes("selectedImpact") ? new Set<ResumeSectionKey>(["keyWins", "projects"]) : new Set<ResumeSectionKey>();
 
   for (const key of RESUME_SECTION_KEYS) {
@@ -197,7 +197,7 @@ export function resumeContentToMarkdown(r: ResumeContent): string {
     // when this key is in the sequence.
     selectedImpact: () => {
       if (!r.keyWins?.length && !r.projects?.length) return;
-      lines.push("## Key Wins & Projects");
+      lines.push("## Key Projects & Impact");
       for (const w of r.keyWins ?? []) lines.push(`- ${w}`);
       for (const p of r.projects ?? []) lines.push(`- ${p.name}: ${p.description}${p.repoUrl ? ` (${p.repoUrl})` : ""}`);
       lines.push("");

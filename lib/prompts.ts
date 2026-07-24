@@ -202,9 +202,9 @@ function resumeOutputFormatInstructions(): string {
   "summary": string,
   "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),
   "subFocus": string (the specific sub-focus/practice-area of THIS role within its archetype, from your Step 1 analysis — 1 short phrase, e.g. "Capital Excellence: capital project delivery, cost/schedule optimization"),
-  "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins band; omit key entirely otherwise),
+  "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; one line each, part of the same 3-4 total item budget as "projects" below),
   "sectionOrder": "education-first" | "experience-first",
-  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ],
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ] (1-2 bullets per entry, each ONE line — see ONE-PAGE CONTENT BUDGET),
   "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
   "skills": [ { "category": string, "items": string[] } ],
   "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used),
@@ -264,18 +264,25 @@ WHAT "QUANTIFIED IMPACT" MEANS HERE — prefer these units of proof over generic
 
 LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
 
+ONE-PAGE CONTENT BUDGET — this resume is generated to fit ONE page from the start, not trimmed after the fact. Write within these limits directly; a server-side clamp enforces them afterward as a backstop, but writing over budget just means your best material gets cut arbitrarily instead of by your own judgment:
+- Summary: 2-3 lines, ~300 characters max.
+- Key Projects & Impact (if this archetype uses it): 3-4 items total, ONE line each.
+- Experience: EVERY entry must appear, but each entry gets only 1-2 bullets, and EVERY bullet is ONE line (~120-140 characters) — a crisp, compressed clause, never a paragraph. If a project needs more than one line of detail, that detail belongs in Key Projects & Impact, not stretched into a giant experience bullet.
+- Skills: max 3 categories, max 6 items each.
+- Education: one line per entry (institution/degree/years), no achievements bullets.
+
 EXPERIENCE INCLUSION RULES:
-- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
-- The bullets under each entry above are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING below. Use this as your starting order, then apply the SUB-FOCUS lens to refine it; do not ignore it and re-sort from scratch.
-- Rank bullets by relevance to the SUB-FOCUS and target priorities using the priority field below — do not just reorder, actually cut bullets that are weak for this specific role.
-- Keep 2-4 bullets per entry, the strongest first — NEVER reduce an entry to a single bullet unless that entry has only 1-2 bullets in the profile to begin with. A rich profile with many bullets per role must produce a resume that reflects that breadth; collapsing every entry to one bullet is a failure mode, not a valid trim.
+- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them, each trimmed to its 1-2 strongest bullets per the budget above.
+- The bullets under each entry above are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING below. Pick from the top of that ranking for each entry, then apply the SUB-FOCUS lens to refine the choice; do not ignore the ranking and pick arbitrarily.
 - Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics. See the DETERMINISTIC RELEVANCE RANKING above for where this specifically applies.
 - MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
 - Preserve the exact company name and tenure for every entry.
 
+NO REPETITION — if a fact, project, or number appears in Key Projects & Impact, do NOT also restate it (even paraphrased) in the summary or in an experience bullet. Each fact lives in exactly one place. Pick the single best home for it: the Key Projects & Impact band if it's a headline win, otherwise the relevant experience bullet.
+
 PROFILE SUMMARY:
 - ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
-- If a summary is written: 2-3 lines MAX, specifically tied to THIS role's sub-focus at THIS company, leading with the single most relevant proof point. No filler adjectives, never generic.
+- If a summary is written: 2-3 lines MAX (~300 characters), a crisp positioning statement — what the candidate does, plus the single strongest proof point for THIS role. NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
 
 ARCHETYPE — ${spec.label}:
 - MANDATORY SECTIONS (include if the profile has any data for them): ${spec.mandatorySections.join(", ")}.
@@ -285,7 +292,7 @@ ARCHETYPE — ${spec.label}:
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
 - CERTIFICATIONS: ${spec.certificationPolicy}
-${spec.sectionSequence.includes("selectedImpact") ? '- KEY WINS & PROJECTS — MANDATORY, this is not optional for this archetype. Populate BOTH fields, they render together under ONE combined heading, never as two separate sections: a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role), AND a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus. Each item one line, most relevant first, each with a real number from the profile where the profile has one. Do not leave "keyWins" empty when the profile has quantified achievements available — search across every experience entry for them.' : ""}
+${spec.sectionSequence.includes("selectedImpact") ? '- KEY PROJECTS & IMPACT — MANDATORY, this is not optional for this archetype, and it renders as a HIGHLIGHTED block immediately after the summary, before experience. Populate BOTH fields, they render together under ONE combined heading, never as two separate sections: a "keyWins" array of the highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role), AND a "projects" array with ONLY the profile projects that most directly match THIS role\'s sub-focus. 3-4 items TOTAL across both arrays combined, ONE line each, most relevant first, each with a real number from the profile where the profile has one. This is the most relevant material for THIS specific JD, ranked and pulled from the full profile — not an afterthought. Do not leave "keyWins" empty when the profile has quantified achievements available — search across every experience entry for them.' : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.includeKeyWins) ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.sectionSequence.includes("projects")) ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
 ${spec.sectionSequence.includes("leadership") ? '- LEADERSHIP & ACTIVITIES: include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people — drawn only from real profile content (roles, projects, or education achievements that genuinely show this, e.g. team leadership, mentoring, extracurricular leadership). Do not invent an activity that is not in the profile; omit the key if the profile has nothing that qualifies.' : ""}

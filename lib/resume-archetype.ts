@@ -63,24 +63,25 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     label: RESUME_ARCHETYPE_LABELS.consulting,
     sectionOrder: "experience-first",
     summaryAllowed: true,
-    summaryStyle: "2-3 line role-specific elevator pitch that names the target role (and firm where natural) and leads with the single most relevant proof point. Never generic.",
-    bulletPattern: "CAR (Context-Action-Result), max 2 lines, every bullet has a quantified business outcome ($ saved, % uplift, deal size, headcount).",
-    emphasize: "A single combined Key Wins & Projects band — the 3-4 biggest quantified, cross-role achievements plus the most relevant projects, together, up top. Quantified business impact, structured/MECE thinking, executive communication, leadership signals.",
-    omit: "Deep technical jargon. Certifications (screened almost entirely on pedigree/deal experience here, not credentials).",
+    summaryStyle: "A crisp 2-3 line positioning statement: what the candidate does, plus the single strongest proof point for THIS role. No meta-commentary about how well past firms match the role, no first-principles cliches, no filler adjectives. Professional, specific, tight.",
+    bulletPattern: "ONE line each (~110-140 characters), CAR (Context-Action-Result) compressed to a single crisp clause, every bullet has a quantified business outcome ($ saved, % uplift, deal size, headcount). Never a paragraph — if a project needs more than one line of detail, that detail belongs in Key Projects & Impact, not the bullet.",
+    emphasize: "A single combined Key Projects & Impact band, positioned right after the summary — the 3-4 biggest quantified, cross-role achievements plus the most relevant projects, together, up top. Quantified business impact, structured/MECE thinking, executive communication.",
+    omit: "Deep technical jargon. Certifications (screened almost entirely on pedigree/deal experience here, not credentials). Leadership/activities sections (not part of this layout's fixed one-page budget).",
     certificationPolicy: "Omit entirely — certifications are not part of the consulting screen.",
-    lengthNorm: "Strict one page, even for 15+ years of experience.",
+    lengthNorm: "Strict one page, even for 15+ years of experience — by design (fixed content budget), not by post-hoc trimming.",
     includeKeyWins: true,
-    // "leadership" sits right after experience, before education — a brief
-    // Leadership & Activities signal (proof of mobilizing people) matters
-    // specifically for consulting screening, per MBB conventions.
-    // "selectedImpact" renders keyWins + projects data COMBINED under one
-    // heading — never as two separate sections.
-    sectionSequence: ["summary", "selectedImpact", "experience", "leadership", "education", "skills"],
+    // Fixed one-page layout, in this exact order: summary, the combined
+    // "selectedImpact" band (Key Projects & Impact — keyWins + projects
+    // data rendered together under one heading, never as two separate
+    // sections), experience, skills, then education LAST. No leadership
+    // section — not affordable within the one-page content budget and not
+    // part of this layout.
+    sectionSequence: ["summary", "selectedImpact", "experience", "skills", "education"],
     whatScreenersWant: "MECE problem-structuring, quantified business impact, executive communication, and peer-institution pedigree (target school + notable prior employer). Screeners scan for ~30-60 seconds, hunting for firm names and numbers before reading closely.",
     quantifiedImpactMeaning: "$ revenue captured or cost saved, % margin/efficiency uplift, deal or program size, timeline compression, headcount/team led, number of workstreams owned.",
     languageConventions: "Precise, structured, action-first, no first person. Consulting-toolkit vocabulary (hypothesis-driven, stakeholder alignment) used sparingly and only when true — never as filler.",
-    mandatorySections: ["experience", "education", "skills", "leadership"],
-    omittedSections: ["certifications"],
+    mandatorySections: ["experience", "education", "skills"],
+    omittedSections: ["certifications", "leadership"],
   },
   vc_investing: {
     label: RESUME_ARCHETYPE_LABELS.vc_investing,

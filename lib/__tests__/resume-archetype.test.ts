@@ -76,12 +76,24 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.vc_investing.summaryAllowed).toBe(false);
   });
 
-  it("consulting uses the founder-directed structure: summary, combined selectedImpact, experience, leadership, education, skills", () => {
+  it("consulting uses the fixed one-page structure: summary, combined selectedImpact (Key Projects & Impact), experience, skills, education LAST", () => {
     expect(RESUME_SPECS.consulting.summaryAllowed).toBe(true);
     expect(RESUME_SPECS.consulting.includeKeyWins).toBe(true);
     expect(RESUME_SPECS.consulting.sectionSequence).toEqual([
-      "summary", "selectedImpact", "experience", "leadership", "education", "skills",
+      "summary", "selectedImpact", "experience", "skills", "education",
     ]);
+  });
+
+  it("consulting places education LAST and skills before education", () => {
+    const seq = RESUME_SPECS.consulting.sectionSequence;
+    expect(seq.indexOf("skills")).toBeLessThan(seq.indexOf("education"));
+    expect(seq.indexOf("education")).toBe(seq.length - 1);
+  });
+
+  it("consulting's selectedImpact band sits immediately after summary, before experience", () => {
+    const seq = RESUME_SPECS.consulting.sectionSequence;
+    expect(seq.indexOf("selectedImpact")).toBe(seq.indexOf("summary") + 1);
+    expect(seq.indexOf("selectedImpact")).toBeLessThan(seq.indexOf("experience"));
   });
 
   it("consulting never places keyWins/projects/certifications as standalone sections (combined or omitted)", () => {
@@ -94,14 +106,10 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.consulting.certificationPolicy.toLowerCase()).toContain("omit");
   });
 
-  it("leadership is mandatory for consulting specifically, placed right after experience", () => {
-    expect(RESUME_SPECS.consulting.mandatorySections).toContain("leadership");
-    const seq = RESUME_SPECS.consulting.sectionSequence;
-    expect(seq.indexOf("leadership")).toBe(seq.indexOf("experience") + 1);
-    // Other archetypes are unchanged — leadership stays optional for them.
-    for (const key of (Object.keys(RESUME_SPECS) as ResumeArchetype[]).filter(k => k !== "consulting")) {
-      expect(RESUME_SPECS[key].mandatorySections, `${key} should not require leadership`).not.toContain("leadership");
-    }
+  it("consulting omits leadership entirely — not affordable within the fixed one-page budget", () => {
+    expect(RESUME_SPECS.consulting.sectionSequence).not.toContain("leadership");
+    expect(RESUME_SPECS.consulting.omittedSections).toContain("leadership");
+    expect(RESUME_SPECS.consulting.mandatorySections).not.toContain("leadership");
   });
 
   it("only consulting includes a Key Wins band", () => {

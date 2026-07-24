@@ -4,18 +4,24 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence } from "../lib/resume-schema";
 import { RESUME_SPECS, ResumeArchetype } from "../lib/resume-archetype";
-import { trimLowestPriorityItem, nextDensity, MIN_DENSITY, DENSITY_STEP } from "../lib/resume-fit";
 
 // Letter page at 96 CSS px/in with 0.5in margins — the content box we must
-// fit inside is 10in tall. The fit loop measures the INNER content div
-// (height: auto), never the padded/min-height page frame, so the ratio is a
-// true content-vs-page comparison.
+// fit inside is 10in tall.
 const PAGE_HEIGHT_IN = 11;
 const MARGIN_IN = 0.5;
 const PX_PER_IN = 96;
 const TARGET_CONTENT_HEIGHT_PX = (PAGE_HEIGHT_IN - MARGIN_IN * 2) * PX_PER_IN;
-const UNDERFLOW_THRESHOLD = 0.94;
-const MAX_ITERATIONS = 80;
+
+// One page is guaranteed structurally: generation is budgeted (lib/prompts.ts)
+// and then deterministically clamped server-side (lib/resume-budget.ts) BEFORE
+// this component ever sees the content — no client-side content trimming.
+// The only thing left to a browser measurement is this tiny, bounded
+// typographic safety net: if real font metrics still overflow the page
+// (rare — budget-compliant content is sized to fit at SAFETY_SCALES[0]),
+// step down through a fixed handful of font-size scales. It never removes,
+// reorders, or rewrites content, and it never iterates more than the length
+// of this array.
+const SAFETY_SCALES = [1, 0.96, 0.92, 0.88] as const;
 
 function sortedBullets(bullets: ResumeContent["experience"][number]["bullets"]) {
   return [...bullets].sort((a, b) => a.priority - b.priority);
@@ -65,23 +71,26 @@ function LinkIcon({ kind }: { kind: LinkKind }) {
   );
 }
 
-// Pure layout — renders whatever content/density/order it's given.
-// No fitting logic here; contentRef exposes the auto-height inner box.
+// Fixed one-page layout — renders whatever content/order it's given at a
+// fixed base size, scaled only by the bounded typographic safety net in
+// ResumeExportView (see SAFETY_SCALES above). No content-fitting logic
+// here; contentRef exposes the auto-height inner box for that safety net's
+// one-shot measurement.
 function ResumePage({
   content,
-  density,
+  scale,
   sequence,
   contentRef,
 }: {
   content: ResumeContent;
-  density: number;
+  scale: number;
   sequence: ResumeSectionKey[];
   contentRef?: React.Ref<HTMLDivElement>;
 }) {
-  const bodyPt = 10 + density * 1.2; // ~10pt -> ~11.2pt across the density range
-  const lineHeight = 1.32 + (density - MIN_DENSITY) * 0.6;
-  const sectionGap = 14 + (density - MIN_DENSITY) * 48;
-  const bulletGap = 3 + (density - MIN_DENSITY) * 6;
+  const bodyPt = 10.8 * scale;
+  const lineHeight = 1.34;
+  const sectionGap = 15 * scale;
+  const bulletGap = 3.5 * scale;
 
   const pageStyle: React.CSSProperties = {
     fontFamily: "Georgia, 'Times New Roman', serif",
@@ -141,7 +150,7 @@ function ResumePage({
     // impact sections.
     selectedImpact: ((content.keyWins && content.keyWins.length > 0) || (content.projects && content.projects.length > 0))
       ? section("selectedImpact", <>
-          <div style={sectionTitleStyle}>Key Wins &amp; Projects</div>
+          <div style={sectionTitleStyle}>Key Projects &amp; Impact</div>
           {content.keyWins && content.keyWins.length > 0 && (
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {content.keyWins.map((w, i) => <li key={`kw-${i}`} style={{ marginBottom: bulletGap }}>{w}</li>)}
@@ -265,18 +274,16 @@ export type FitStatus = "measuring" | "fit";
  * removes its layout space) and print ONLY the resume — a fixed overlay
  * left in the normal tree gets repeated on every printed page.
  *
- * Fit loop: measures the auto-height inner content box against a 10in
- * (960px) target — letter page minus 0.5in top+bottom margins, matching
- * the real printable area. On overflow it runs trimLowestPriorityItem,
- * which cascades through EVERY trimmable section (experience bullets,
- * then keyWins, projects, leadership, certifications) rather than only
- * bullets — a resume that overflows because of a long Key Wins/Projects
- * band, not bullet count, would otherwise exhaust all bullet trims, still
- * overflow, and the loop would give up and report "fitted" while actually
- * printing a 2nd page. It steps up density on underflow.
+ * One page is guaranteed structurally BEFORE this component ever renders:
+ * generation is budgeted (lib/prompts.ts) and then deterministically
+ * clamped (lib/resume-budget.ts) server-side. This component does NOT trim,
+ * reorder, or rewrite content — it renders the given content once at a
+ * fixed size. The only measurement here is a tiny, bounded safety net: if
+ * real browser font metrics still overflow the page (rare), it steps down
+ * through SAFETY_SCALES a few times, never more.
  */
 export function ResumeExportView({
-  content: initialContent,
+  content,
   archetype,
   onClose,
   onContentSettled,
@@ -286,12 +293,11 @@ export function ResumeExportView({
   onClose: () => void;
   onContentSettled?: (content: ResumeContent) => void;
 }) {
-  const [content, setContent] = useState(initialContent);
-  const [density, setDensity] = useState(MIN_DENSITY);
-  const [phase, setPhase] = useState<"trim" | "expand" | "done">("trim");
+  const [safetyStep, setSafetyStep] = useState(0);
+  const [settled, setSettled] = useState(false);
+  const [overflowed, setOverflowed] = useState(false);
   const [mounted, setMounted] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const iterations = useRef(0);
 
   const sequence: ResumeSectionKey[] = content.sectionSequence?.length
     ? resolveSectionSequence(content)
@@ -309,14 +315,13 @@ export function ResumeExportView({
   }, []);
 
   useEffect(() => {
-    setContent(initialContent);
-    setDensity(MIN_DENSITY);
-    setPhase("trim");
-    iterations.current = 0;
-  }, [initialContent]);
+    setSafetyStep(0);
+    setSettled(false);
+    setOverflowed(false);
+  }, [content, archetype]);
 
   useEffect(() => {
-    if (phase === "done") {
+    if (settled) {
       onContentSettled?.(content);
       return;
     }
@@ -324,32 +329,15 @@ export function ResumeExportView({
     if (!el) return;
 
     const ratio = el.scrollHeight / TARGET_CONTENT_HEIGHT_PX;
-    iterations.current += 1;
-    if (iterations.current > MAX_ITERATIONS) { setPhase("done"); return; }
-
-    if (phase === "trim") {
-      if (ratio > 1) {
-        const trimmed = trimLowestPriorityItem(content);
-        if (trimmed) { setContent(trimmed); return; }
-      }
-      setPhase("expand");
-      return;
-    }
-
-    // phase === "expand"
-    if (ratio > 1) {
-      // Last density step overflowed — back off one step and stop.
-      setDensity(d => Math.max(MIN_DENSITY, Math.round((d - DENSITY_STEP) * 100) / 100));
-      setPhase("done");
-      return;
-    }
-    if (ratio < UNDERFLOW_THRESHOLD) {
-      const next = nextDensity(density);
-      if (next !== null) { setDensity(next); return; }
-    }
-    setPhase("done");
+    if (ratio <= 1) { setSettled(true); return; }
+    if (safetyStep < SAFETY_SCALES.length - 1) { setSafetyStep(s => s + 1); return; }
+    // Exhausted every safety step and it still overflows — an edge case the
+    // upstream budget/clamp should prevent. Surface it rather than silently
+    // deleting content to force a fit.
+    setOverflowed(true);
+    setSettled(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, density, phase, mounted]);
+  }, [content, safetyStep, settled, mounted]);
 
   const handlePrint = () => window.print();
 
@@ -364,14 +352,14 @@ export function ResumeExportView({
         <button onClick={handlePrint} className="btn btn-primary" style={{ fontSize: "0.75rem" }}>
           SAVE AS PDF
         </button>
-        <span style={{ color: phase === "done" ? "#8fd19e" : "#ccc", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center" }}>
-          {phase === "done" ? "FITTED TO ONE PAGE" : "FITTING..."}
+        <span style={{ color: overflowed ? "#e08a8a" : settled ? "#8fd19e" : "#ccc", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center" }}>
+          {overflowed ? "MAY EXCEED ONE PAGE" : settled ? "ONE-PAGE LAYOUT" : "RENDERING..."}
         </span>
         <button onClick={onClose} className="btn" style={{ fontSize: "0.75rem" }}>CLOSE</button>
       </div>
       <div className="resume-export-scroll" style={{ display: "flex", justifyContent: "center", padding: "24px 0 48px" }}>
         <div className="resume-page-frame" style={{ boxShadow: "0 0 12px rgba(0,0,0,0.4)" }}>
-          <ResumePage content={content} density={density} sequence={sequence} contentRef={contentRef} />
+          <ResumePage content={content} scale={SAFETY_SCALES[safetyStep]} sequence={sequence} contentRef={contentRef} />
         </div>
       </div>
       <style>{`

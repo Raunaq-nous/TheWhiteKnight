@@ -205,15 +205,15 @@ describe("resumeContentToMarkdown with the new sections", () => {
     const md = resumeContentToMarkdown(parsed);
 
     // Exactly one combined heading — never two separate ones.
-    expect(md).toContain("## Key Wins & Projects");
+    expect(md).toContain("## Key Projects & Impact");
     expect(md).not.toContain("## Key Wins\n");
     expect(md).not.toContain("## Relevant Projects");
-    expect((md.match(/## Key Wins/g) ?? []).length).toBe(1);
+    expect((md.match(/## Key Projects & Impact/g) ?? []).length).toBe(1);
 
     expect(md).toContain("- Closed a $10M deal");
     expect(md).toContain("- Cost Tracker: Built a capital spend dashboard");
     // Both items live between the combined heading and the next section.
-    const impactIdx = md.indexOf("## Key Wins & Projects");
+    const impactIdx = md.indexOf("## Key Projects & Impact");
     const expIdx = md.indexOf("## Experience");
     expect(md.indexOf("Closed a $10M deal")).toBeGreaterThan(impactIdx);
     expect(md.indexOf("Cost Tracker")).toBeLessThan(expIdx);
@@ -227,6 +227,6 @@ describe("resumeContentToMarkdown with the new sections", () => {
       sectionSequence: ["summary", "selectedImpact", "experience", "education", "skills"],
     }) as ResumeContent;
     const md = resumeContentToMarkdown(parsed);
-    expect(md).not.toContain("Key Wins");
+    expect(md).not.toContain("Key Projects & Impact");
   });
 });

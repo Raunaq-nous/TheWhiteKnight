@@ -172,7 +172,7 @@ describe("prompt builder snapshots", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
     expect(output).toContain("DETERMINISTIC RELEVANCE RANKING");
     expect(output).toContain("TOOL-BUILDING");
-    expect(output).toContain("NEVER reduce an entry to a single bullet");
+    expect(output).toContain("ONE-PAGE CONTENT BUDGET");
   });
 
   it("resumePrompt's experience section is pre-ranked by relevance to the JD, not in raw profile order (BUG 1 fix)", () => {
@@ -215,10 +215,10 @@ describe("prompt builder snapshots", () => {
 
   it("resumePrompt applies archetype-specific section order and rules", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("summary -> selectedImpact -> experience -> leadership -> education -> skills");
-    expect(consulting).toContain("KEY WINS & PROJECTS");
-    expect(consulting).toContain("role-specific elevator pitch");
-    expect(consulting).toContain("NEVER INCLUDE: certifications");
+    expect(consulting).toContain("summary -> selectedImpact -> experience -> skills -> education");
+    expect(consulting).toContain("KEY PROJECTS & IMPACT");
+    expect(consulting).toContain("crisp 2-3 line positioning statement");
+    expect(consulting).toContain("NEVER INCLUDE: certifications, leadership");
 
     const ib = resumePrompt(MOCK_PROFILE, MOCK_APP, "finance_ib");
     expect(ib).toContain("Do NOT include a summary for this archetype");
@@ -230,6 +230,30 @@ describe("prompt builder snapshots", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).not.toContain("KEY WINS:");
     expect(consulting).not.toContain("RELEVANT PROJECTS:");
+  });
+
+  it("resumePrompt enforces the one-page content budget structurally, not via post-hoc trimming (BUG: 2-page exports)", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("ONE-PAGE CONTENT BUDGET");
+    expect(consulting).toMatch(/1-2 bullets per entry/);
+    expect(consulting).toMatch(/3-4 items total/);
+  });
+
+  it("resumePrompt's Key Projects & Impact instruction says it renders immediately after the summary, before experience", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("renders as a HIGHLIGHTED block immediately after the summary, before experience");
+  });
+
+  it("resumePrompt's summary instructions ban meta-commentary about firm fit and generic consulting filler (BUG: fluffy summary)", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("NEVER meta-commentary about how well past firms");
+    expect(consulting).toContain("first principles");
+  });
+
+  it("resumePrompt bans repeating the same fact across Key Projects & Impact, summary, and experience bullets (BUG: repeated content)", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("NO REPETITION");
+    expect(consulting).toContain("Each fact lives in exactly one place");
   });
 
   it("resumePrompt requires JD priority extraction before writing", () => {
