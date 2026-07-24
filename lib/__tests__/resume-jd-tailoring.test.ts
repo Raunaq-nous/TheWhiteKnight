@@ -129,6 +129,6 @@ describe("Level 2: same archetype, different JD sub-focus", () => {
   it("both prompts instruct selecting/foregrounding by sub-focus rather than a generic priority list", () => {
     const promptA = resumePrompt(profile, CAPITAL_EXCELLENCE_APP, "consulting");
     expect(promptA).toContain("using the sub-focus (not the generic archetype) as the lens");
-    expect(promptA).toContain("Rank bullets by relevance to the SUB-FOCUS");
+    expect(promptA).toContain("apply the SUB-FOCUS lens to refine the choice");
   });
 });
