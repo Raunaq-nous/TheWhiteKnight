@@ -33,5 +33,6 @@ export async function GET() {
     integrationSettings: settingsRepo.getIntegrationSettings(email),
     companyTargets:      settingsRepo.getCompanyTargets(email),
     batchState:          settingsRepo.getBatchState(email),
+    automationSettings:  settingsRepo.getAutomationSettings(email),
   });
 }

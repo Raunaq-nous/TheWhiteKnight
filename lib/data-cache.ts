@@ -11,6 +11,7 @@ import type { ModelSettings } from "./model-settings";
 import type { IntegrationSettings } from "./integration-settings";
 import type { CompanyTarget } from "./company-targets";
 import type { BatchState } from "./batch-runner";
+import type { AutomationSettings } from "./automation-settings";
 
 export type CacheData = {
   applications: Application[];
@@ -23,6 +24,7 @@ export type CacheData = {
   integrationSettings: IntegrationSettings;
   companyTargets: CompanyTarget[];
   batchState: BatchState | null;
+  automationSettings: AutomationSettings;
 };
 
 const EMPTY: CacheData = {
@@ -36,6 +38,7 @@ const EMPTY: CacheData = {
   integrationSettings: {},
   companyTargets: [],
   batchState: null,
+  automationSettings: { enabled: false, schedule: "24h", lastRunAt: null },
 };
 
 let cache: CacheData = { ...EMPTY };
@@ -116,6 +119,9 @@ export function updateCacheCompanyTargets(targets: CompanyTarget[]) {
 }
 export function updateCacheBatchState(state: BatchState | null) {
   cache = { ...cache, batchState: state };
+}
+export function updateCacheAutomationSettings(s: AutomationSettings) {
+  cache = { ...cache, automationSettings: s };
 }
 
 // --- Write-through helpers ---

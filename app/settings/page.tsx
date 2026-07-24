@@ -5,6 +5,15 @@ import Link from "next/link";
 import { Header, Footer } from "../components";
 import { MODEL_OPTIONS, getModelSettings, saveModelSettings, ModelProvider } from "../../lib/model-settings";
 import { INTEGRATION_OPTIONS, getIntegrationSettings, saveIntegrationSettings, IntegrationSettings } from "../../lib/integration-settings";
+import {
+  AutomationSettings,
+  AutomationRunLog,
+  AUTOMATION_SCHEDULE_LABELS,
+  AUTOMATION_SCHEDULE_HOURS,
+  DEFAULT_AUTOMATION_SETTINGS,
+  getAutomationSettings,
+  saveAutomationSettings,
+} from "../../lib/automation-settings";
 
 type InviteCode = { code: string; used: boolean; usedBy: string | null; createdAt: string };
 const LAST_BACKUP_KEY = "careeros_last_backup_at";
@@ -25,6 +34,11 @@ export default function SettingsPage() {
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
+  const [automation, setAutomation] = useState<AutomationSettings>(DEFAULT_AUTOMATION_SETTINGS);
+  const [automationSaved, setAutomationSaved] = useState(false);
+  const [automationRuns, setAutomationRuns] = useState<AutomationRunLog[]>([]);
+  const [runningNow, setRunningNow] = useState(false);
+  const [runNowResult, setRunNowResult] = useState<string | null>(null);
 
   useEffect(() => {
     const s = getModelSettings();
@@ -33,7 +47,9 @@ export default function SettingsPage() {
       setApiKeys(prev => ({ ...prev, [s.provider]: s.apiKey! }));
     }
     setIntegrations(getIntegrationSettings());
+    setAutomation(getAutomationSettings());
     setLastBackup(localStorage.getItem(LAST_BACKUP_KEY));
+    loadAutomationRuns();
     fetch("/api/auth/me").then(r => r.json()).then(d => {
       if (d.user?.isAdmin) {
         setIsAdmin(true);
@@ -113,6 +129,48 @@ export default function SettingsPage() {
     saveIntegrationSettings(integrations);
     setIntSaved(true);
     setTimeout(() => setIntSaved(false), 2000);
+  };
+
+  async function loadAutomationRuns() {
+    try {
+      const res = await fetch("/api/automation/runs", { credentials: "include" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.runs) setAutomationRuns(data.runs);
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  const handleAutomationSave = async () => {
+    await saveAutomationSettings(automation);
+    setAutomationSaved(true);
+    setTimeout(() => setAutomationSaved(false), 2000);
+  };
+
+  const handleRunNow = async () => {
+    setRunningNow(true);
+    setRunNowResult(null);
+    try {
+      const res = await fetch("/api/automation/run", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) {
+        setRunNowResult(data.error ?? "Run failed");
+      } else {
+        const r = data.run;
+        setRunNowResult(
+          r.status === "skipped" ? `Skipped: ${r.reason}` :
+          r.status === "error" ? `Error: ${r.reason ?? r.errors?.[0] ?? "unknown"}` :
+          `Found ${r.jobsFound}, scored ${r.jobsScored}, staged ${r.jobsStaged} for approval, ${r.jobsSkippedDuplicate} already in pipeline.`
+        );
+        setAutomation(prev => ({ ...prev, lastRunAt: r.status === "ok" ? new Date().toISOString() : prev.lastRunAt }));
+        await loadAutomationRuns();
+      }
+    } catch (e: any) {
+      setRunNowResult(e.message ?? "Run failed");
+    } finally {
+      setRunningNow(false);
+    }
   };
 
   const selectedOption = MODEL_OPTIONS.find(o => o.provider === selectedProvider)!;
@@ -296,6 +354,80 @@ export default function SettingsPage() {
             <button className="btn btn-primary" onClick={handleIntSave} style={{ padding: "10px 20px" }}>SAVE INTEGRATIONS</button>
             {intSaved && <span style={{ color: "var(--success)", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>SAVED</span>}
           </div>
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>
+          <div className="label" style={{ marginBottom: 16 }}>AUTOMATION</div>
+          <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
+            On a schedule, scans your enabled target companies (see the Companies page) for new postings, scores each against your profile, drafts a cover letter for good-fit jobs, and stages them in your approval queue. It never sends or submits anything — every staged job waits for your review at /approvals, exactly like manual scoring does.
+          </p>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8125rem", fontFamily: "var(--font-mono)" }}>
+              <input
+                type="checkbox"
+                checked={automation.enabled}
+                onChange={e => setAutomation(prev => ({ ...prev, enabled: e.target.checked }))}
+              />
+              Enable scheduled automation
+            </label>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div className="label" style={{ marginBottom: 8 }}>SCHEDULE</div>
+            <select
+              value={automation.schedule}
+              onChange={e => setAutomation(prev => ({ ...prev, schedule: e.target.value as AutomationSettings["schedule"] }))}
+              style={{ padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+            >
+              {(Object.keys(AUTOMATION_SCHEDULE_HOURS) as AutomationSettings["schedule"][]).map(s => (
+                <option key={s} value={s}>{AUTOMATION_SCHEDULE_LABELS[s]}</option>
+              ))}
+            </select>
+            <p style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.4 }}>
+              A server cron pings this app frequently; this schedule controls how often it actually runs. Target companies come from the Companies page — enable/disable them there.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16 }}>
+            <button className="btn btn-primary" onClick={handleAutomationSave} style={{ padding: "10px 20px" }}>SAVE AUTOMATION SETTINGS</button>
+            {automationSaved && <span style={{ color: "var(--success)", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>SAVED</span>}
+          </div>
+
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, borderTop: "1px solid var(--border-light)", paddingTop: 16 }}>
+            <button className="btn" onClick={handleRunNow} disabled={runningNow} style={{ padding: "8px 16px", fontSize: "0.75rem" }}>
+              {runningNow ? "RUNNING..." : "RUN NOW"}
+            </button>
+            {automation.lastRunAt && (
+              <span style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
+                Last run: {new Date(automation.lastRunAt).toLocaleString()}
+              </span>
+            )}
+          </div>
+          {runNowResult && (
+            <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginBottom: 12, fontFamily: "var(--font-mono)" }}>{runNowResult}</p>
+          )}
+
+          {automationRuns.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div className="label" style={{ marginBottom: 8 }}>RECENT RUNS</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {automationRuns.slice(0, 10).map(run => (
+                  <div key={run.id} style={{ fontSize: "0.6875rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", display: "flex", justifyContent: "space-between", gap: 8, borderBottom: "1px solid var(--border-light)", paddingBottom: 4 }}>
+                    <span style={{ color: run.status === "ok" ? "var(--success)" : run.status === "error" ? "var(--error, #e55)" : "var(--text-tertiary)" }}>
+                      {run.status.toUpperCase()}
+                    </span>
+                    <span>{new Date(run.startedAt).toLocaleString()}</span>
+                    <span>
+                      {run.status === "ok"
+                        ? `found ${run.jobsFound}, scored ${run.jobsScored}, staged ${run.jobsStaged}, dup ${run.jobsSkippedDuplicate}`
+                        : run.reason ?? ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: isAdmin ? 24 : 0 }}>

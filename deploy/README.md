@@ -69,6 +69,14 @@ Open the file you want to use and replace every `REPLACE_ME` value in the
   provided your DuckDNS record is pointing at the server.
 - **Auth store**: Upstash Redis (temporary; a later phase moves auth into local
   SQLite). Redis is never used for user data.
+- **Cron**: a single crontab entry pings `/api/cron/followups` and
+  `/api/cron/automation` every 15 minutes, gated by `CRON_SECRET` (`x-cron-secret`
+  header). Both endpoints decide internally whether anything is actually due —
+  the automation endpoint additionally checks the enabled/schedule toggle set
+  in Settings → Automation, so pinging often is safe and cheap. Automation
+  scans your enabled target companies, scores new postings, drafts materials
+  for good-fit jobs, and stages them for approval at `/approvals` — it never
+  sends or submits anything.
 
 ---
 
