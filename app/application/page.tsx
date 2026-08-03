@@ -146,7 +146,7 @@ function ApplicationDetail() {
   // flow below and given its own handler + render surface (ResumeExportView).
   const persistResumeContent = async (data: ResumeContent, archetype: ResumeArchetype): Promise<boolean> => {
     if (!app) return false;
-    const md = resumeContentToMarkdown(data);
+    const md = resumeContentToMarkdown(data, archetype);
     setResumeContent(data);
     setResumeArchetypeUsed(archetype);
     setSavedResume(md);
@@ -947,9 +947,9 @@ window.addEventListener('load', function() {
                   SAVED RESUME{resumeArchetypeUsed ? ` — ${RESUME_ARCHETYPE_LABELS[resumeArchetypeUsed]}` : ""}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => { navigator.clipboard.writeText(resumeContentToMarkdown(resumeContent)); }}>COPY</button>
+                  <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => { navigator.clipboard.writeText(resumeContentToMarkdown(resumeContent, resumeArchetypeUsed ?? undefined)); }}>COPY</button>
                   <button className="btn" style={{ fontSize: "0.5625rem", padding: "3px 10px" }} onClick={() => {
-                    const md = resumeContentToMarkdown(resumeContent);
+                    const md = resumeContentToMarkdown(resumeContent, resumeArchetypeUsed ?? undefined);
                     const filename = `${app.company.toLowerCase().replace(/\s+/g, "-")}-${app.role.toLowerCase().replace(/\s+/g, "-")}-resume.md`;
                     const blob = new Blob([md], { type: "text/markdown" });
                     const url = URL.createObjectURL(blob);

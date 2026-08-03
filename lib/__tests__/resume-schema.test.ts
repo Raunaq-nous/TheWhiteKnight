@@ -159,6 +159,52 @@ describe("resolveSectionSequence", () => {
     expect(seq).toContain("keyWins");
     expect(seq).toContain("projects");
   });
+
+  // BUG 3 regression: a resume with no sectionSequence and no archetype hint
+  // used to fall back to a generic legacy order that (a) never included
+  // "selectedImpact" and (b) DID include the standalone "projects"/
+  // "certifications" keys — so the forgotten-content-bearing-key loop would
+  // then append "selectedImpact" too (since IT was "forgotten"), rendering
+  // the same keyWins/projects data twice under two different headings.
+  it("never auto-appends selectedImpact via the forgotten-keys loop, even when the base sequence already has standalone keyWins/projects (regression: duplicate Key Projects & Impact / Relevant Projects)", () => {
+    const r = { ...base(), sectionSequence: ["summary", "experience", "projects", "skills", "education"] as ResumeContent["sectionSequence"] };
+    const seq = resolveSectionSequence(r);
+    expect(seq).toContain("projects");
+    expect(seq).not.toContain("selectedImpact");
+  });
+
+  it("never auto-appends selectedImpact for truly legacy content (no sectionSequence, no archetype)", () => {
+    const r = base(); // no sectionSequence set
+    const seq = resolveSectionSequence(r);
+    expect(seq).not.toContain("selectedImpact");
+  });
+
+  it("uses the CURRENT archetype spec (not the generic legacy order) when sectionSequence is missing but the archetype is known", () => {
+    const r = { ...base(), sectionSequence: null as ResumeContent["sectionSequence"] };
+    const seq = resolveSectionSequence(r, "consulting");
+    expect(seq).toEqual(["summary", "selectedImpact", "experience", "skills", "education"]);
+    // Consulting's real spec omits certifications/leadership entirely — the
+    // generic legacy fallback used to include them regardless of archetype.
+    expect(seq).not.toContain("certifications");
+    expect(seq).not.toContain("leadership");
+  });
+
+  it("Education is the last section that actually RENDERS for experience-first legacy content with no known archetype (BUG 3: was previously 2nd)", () => {
+    // resolveSectionSequence's array may still list other (dataless) keys
+    // after "education" — the forgotten-key append doesn't know which
+    // sections have real content. What matters is what actually renders,
+    // which resumeContentToMarkdown already skips when a section is empty.
+    const r = base(); // sectionOrder: "experience-first" by default, no sectionSequence, no archetype
+    const md = resumeContentToMarkdown(r);
+    const headings = md.split("\n").filter(l => l.startsWith("## "));
+    expect(headings[headings.length - 1]).toBe("## Education");
+  });
+
+  it("education-first legacy content still puts education before experience — a deliberate, different, correct convention (finance/VC), not a bug", () => {
+    const r = { ...base(), sectionOrder: "education-first" as const };
+    const seq = resolveSectionSequence(r);
+    expect(seq.indexOf("education")).toBeLessThan(seq.indexOf("experience"));
+  });
 });
 
 describe("resumeContentToMarkdown with the new sections", () => {
@@ -228,5 +274,47 @@ describe("resumeContentToMarkdown with the new sections", () => {
     }) as ResumeContent;
     const md = resumeContentToMarkdown(parsed);
     expect(md).not.toContain("Key Projects & Impact");
+  });
+
+  // BUG 3 end-to-end regression: a resume saved BEFORE sectionSequence
+  // existed (or before this generation stamped one) — has keyWins, projects,
+  // AND certifications data, no sectionSequence at all — must NOT render
+  // both "Key Projects & Impact" and "Relevant Projects", must NOT render
+  // Certifications for consulting, and must render Education last, once the
+  // archetype is passed through.
+  it("a legacy resume (no sectionSequence) with keyWins+projects+certifications renders correctly for consulting: one combined section, no certifications, education last", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      sectionSequence: null,
+      keyWins: ["Delivered a $10.45B portfolio intelligence cockpit."],
+      projects: [{ name: "Cost Tracker", description: "Built a capital spend dashboard." }],
+      certifications: [{ name: "PMP" }],
+    }) as ResumeContent;
+
+    const md = resumeContentToMarkdown(parsed, "consulting");
+
+    expect(md).toContain("## Key Projects & Impact");
+    expect(md).not.toContain("## Relevant Projects");
+    expect(md).not.toContain("## Certifications");
+    expect((md.match(/## Key Projects & Impact/g) ?? []).length).toBe(1);
+
+    const headings = md.split("\n").filter(l => l.startsWith("## "));
+    expect(headings[headings.length - 1]).toBe("## Education");
+    // No heading can ever appear twice.
+    expect(new Set(headings).size).toBe(headings.length);
+  });
+
+  it("no section heading can ever render twice, for any resolved sequence", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      sectionSequence: ["summary", "selectedImpact", "experience", "skills", "education"],
+      keyWins: ["Win A"],
+      projects: [{ name: "P1", description: "Did a thing." }],
+      leadership: ["Led a club"],
+      certifications: [{ name: "Cert A" }],
+    }) as ResumeContent;
+    const md = resumeContentToMarkdown(parsed, "consulting");
+    const headings = md.split("\n").filter(l => l.startsWith("## "));
+    expect(new Set(headings).size).toBe(headings.length);
   });
 });

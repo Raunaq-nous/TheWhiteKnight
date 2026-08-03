@@ -4,6 +4,7 @@
 
 import { z } from "zod";
 import { normalizeTextForATS } from "./ats";
+import { RESUME_SPECS, ResumeArchetype } from "./resume-archetype";
 
 export const ResumeBulletSchema = z.object({
   text: z.string(),
@@ -136,27 +137,60 @@ export function normalizeResumeContent(content: ResumeContent): ResumeContent {
   };
 }
 
-// Legacy fallbacks for content saved before sectionSequence existed —
-// mirrors the pre-sequence renderer's hardcoded order.
+// Legacy fallbacks for content saved before sectionSequence existed, and no
+// archetype is available to look up the real spec either — mirrors the
+// pre-sequence renderer's hardcoded order. Education-first is a deliberate,
+// legitimate convention for finance/VC-style archetypes (education-first is
+// what LEGACY_EDU_FIRST content always meant), so it stays first there.
+// Experience-first content follows every OTHER current archetype's
+// convention of education LAST.
 const LEGACY_EDU_FIRST: ResumeSectionKey[] = ["summary", "education", "experience", "projects", "skills", "leadership", "certifications"];
-const LEGACY_EXP_FIRST: ResumeSectionKey[] = ["summary", "experience", "education", "projects", "skills", "leadership", "certifications"];
+const LEGACY_EXP_FIRST: ResumeSectionKey[] = ["summary", "experience", "projects", "skills", "leadership", "certifications", "education"];
 
 /**
- * The definitive render order for a resume: the archetype-injected
- * sectionSequence when present, else a legacy order from sectionOrder.
- * Any content-bearing section a sequence omits is appended at the end so
- * saved data is never silently dropped from the render.
+ * The definitive render order for a resume:
+ * 1. The content's own stamped sectionSequence, when present (always wins —
+ *    it reflects the exact archetype spec active at generation time).
+ * 2. Otherwise, the CURRENT spec for the given archetype, when known —
+ *    this is what lets old saved content (or a fresh generation before
+ *    withArchetypeSequence stamps it) render with today's correct
+ *    consulting/finance/etc. layout instead of a generic fallback.
+ * 3. Otherwise, a generic legacy order keyed only off sectionOrder.
+ *
+ * Any content-bearing section the resolved base omits is appended at the
+ * end so saved data is never silently dropped from the render — EXCEPT
+ * "selectedImpact", which is deliberately never auto-appended: it renders
+ * the exact same keyWins/projects data "keyWins"/"projects" already cover,
+ * so blindly appending it on top of a base that already includes either of
+ * those (a real, reported bug) would duplicate the same content under two
+ * headings. "selectedImpact" only ever appears when a sectionSequence
+ * (stamped or archetype-derived) explicitly asked for it.
  */
-export function resolveSectionSequence(r: ResumeContent): ResumeSectionKey[] {
+export function resolveSectionSequence(r: ResumeContent, archetype?: ResumeArchetype): ResumeSectionKey[] {
   const base = r.sectionSequence?.length
     ? [...r.sectionSequence]
-    : [...(r.sectionOrder === "education-first" ? LEGACY_EDU_FIRST : LEGACY_EXP_FIRST)];
+    : archetype
+      ? [...RESUME_SPECS[archetype].sectionSequence]
+      : [...(r.sectionOrder === "education-first" ? LEGACY_EDU_FIRST : LEGACY_EXP_FIRST)];
 
   // "selectedImpact" already renders keyWins + projects data combined —
   // never auto-append them standalone too, or the same data would render
   // twice (once combined as "## Key Projects & Impact", once as separate
   // "## Key Wins"/"## Relevant Projects" sections).
-  const skip = base.includes("selectedImpact") ? new Set<ResumeSectionKey>(["keyWins", "projects"]) : new Set<ResumeSectionKey>();
+  const skip = new Set<ResumeSectionKey>(["selectedImpact"]);
+  if (base.includes("selectedImpact")) {
+    skip.add("keyWins");
+    skip.add("projects");
+  }
+  // When the archetype is known, its omittedSections (e.g. consulting bans
+  // certifications/leadership) must win even over the "never silently drop
+  // saved data" append — otherwise stray certification data left over from
+  // an older edit/generation would still surface a "## Certifications"
+  // section on an archetype that explicitly excludes it (a real, reported
+  // regression).
+  if (archetype) {
+    for (const omitted of RESUME_SPECS[archetype].omittedSections) skip.add(omitted);
+  }
 
   for (const key of RESUME_SECTION_KEYS) {
     if (!base.includes(key) && !skip.has(key)) base.push(key);
@@ -167,7 +201,7 @@ export function resolveSectionSequence(r: ResumeContent): ResumeSectionKey[] {
 // Flatten a ResumeContent back to plain text — used for the .md/.txt download
 // and as a fallback for resumes generated before this schema existed.
 // Sections render in the same resolved order the visual document uses.
-export function resumeContentToMarkdown(r: ResumeContent): string {
+export function resumeContentToMarkdown(r: ResumeContent, archetype?: ResumeArchetype): string {
   const lines: string[] = [];
   lines.push(`# ${r.name}`);
   lines.push(r.contactLine);
@@ -243,7 +277,7 @@ export function resumeContentToMarkdown(r: ResumeContent): string {
     },
   };
 
-  for (const key of resolveSectionSequence(r)) blocks[key]();
+  for (const key of resolveSectionSequence(r, archetype)) blocks[key]();
 
   return lines.join("\n").trim();
 }
