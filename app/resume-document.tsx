@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence } from "../lib/resume-schema";
-import { RESUME_SPECS, ResumeArchetype } from "../lib/resume-archetype";
+import { ResumeArchetype } from "../lib/resume-archetype";
 
 // Letter page at 96 CSS px/in with 0.5in margins — the content box we must
 // fit inside is 10in tall.
@@ -137,7 +137,7 @@ function ResumePage({
       ? section("projects", <>
           <div style={sectionTitleStyle}>Relevant Projects</div>
           {content.projects.map((p, i) => (
-            <div key={i} style={{ marginBottom: 4 }}>
+            <div key={i} className="resume-entry" style={{ marginBottom: 4 }}>
               <span style={{ fontWeight: 700 }}>{p.name}</span>{": "}{p.description}
             </div>
           ))}
@@ -159,7 +159,7 @@ function ResumePage({
           {content.projects && content.projects.length > 0 && (
             <div style={{ marginTop: content.keyWins?.length ? bulletGap : 0 }}>
               {content.projects.map((p, i) => (
-                <div key={`pr-${i}`} style={{ marginBottom: 4 }}>
+                <div key={`pr-${i}`} className="resume-entry" style={{ marginBottom: 4 }}>
                   <span style={{ fontWeight: 700 }}>{p.name}</span>{": "}{p.description}
                 </div>
               ))}
@@ -172,7 +172,11 @@ function ResumePage({
       ? section("experience", <>
           <div style={sectionTitleStyle}>Experience</div>
           {content.experience.map((e, i) => (
-            <div key={i} style={{ marginBottom: i === content.experience.length - 1 ? 0 : sectionGap * 0.6 }}>
+            <div
+              key={i}
+              className="resume-entry"
+              style={{ marginBottom: i === content.experience.length - 1 ? 0 : sectionGap * 0.6 }}
+            >
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10.5pt" }}>
                 {/* Employer name leads and is bold — screeners (consulting
                     especially) scan firm names first, before the role. */}
@@ -194,7 +198,7 @@ function ResumePage({
       ? section("education", <>
           <div style={sectionTitleStyle}>Education</div>
           {content.education.map((ed, i) => (
-            <div key={i} style={{ marginBottom: i === content.education.length - 1 ? 0 : 6 }}>
+            <div key={i} className="resume-entry" style={{ marginBottom: i === content.education.length - 1 ? 0 : 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
                 <span>{ed.institution}</span>
                 <span style={{ fontWeight: 400, fontStyle: "italic" }}>{ed.years}</span>
@@ -299,11 +303,7 @@ export function ResumeExportView({
   const [mounted, setMounted] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const sequence: ResumeSectionKey[] = content.sectionSequence?.length
-    ? resolveSectionSequence(content)
-    : archetype
-      ? resolveSectionSequence({ ...content, sectionSequence: RESUME_SPECS[archetype].sectionSequence })
-      : resolveSectionSequence(content);
+  const sequence: ResumeSectionKey[] = resolveSectionSequence(content, archetype ?? undefined);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -391,7 +391,16 @@ export function ResumeExportView({
             padding: 0 !important;
             box-shadow: none !important;
           }
-          .resume-section { break-inside: avoid; page-break-inside: avoid; }
+          /* Sections themselves must flow freely across the page boundary —
+             break-inside:avoid at the SECTION level was the actual two-page
+             cause: if Experience (all roles combined) didn't fit in whatever
+             space remained on page 1, the browser refused to split it and
+             pushed the ENTIRE section to page 2, leaving page 1 mostly
+             blank even though the content overall fits one page. Only
+             individual entries (one role + its bullets, one project line,
+             one education entry) get the no-split guarantee, via
+             .resume-entry below. */
+          .resume-entry { break-inside: avoid; page-break-inside: avoid; }
           .resume-page a { color: #0a58ca !important; text-decoration: underline; }
         }
       `}</style>

@@ -31,7 +31,10 @@ export const ONE_PAGE_BUDGET = {
 /**
  * Cuts text to at most maxChars: prefers breaking at the end of the last
  * full sentence that fits, falls back to the last word boundary. Never cuts
- * mid-word and never appends an ellipsis or other filler.
+ * mid-word and never appends an ellipsis or other filler. Used only for the
+ * summary, which can never be dropped entirely — see clampBulletText below
+ * for droppable list items (bullets, key wins, project descriptions), which
+ * additionally guarantee the result is grammatically complete.
  */
 export function clampText(text: string, maxChars: number): string {
   const trimmed = text.trim();
@@ -44,11 +47,95 @@ export function clampText(text: string, maxChars: number): string {
   return window.trim();
 }
 
+// Words that read as an obviously incomplete/dangling clause when they're
+// the LAST word of a bullet — a naive character-slice regularly ends on one
+// of these (e.g. "...designing governance and", "...used for"). Trimming
+// back past them (rather than just capping length) is what the previous
+// blind slice failed to do.
+const DANGLING_TRAILING_WORDS = new Set([
+  "and", "or", "but", "nor", "with", "for", "to", "of", "in", "on", "at", "by",
+  "as", "the", "a", "an", "from", "into", "onto", "via", "using", "across", "within",
+]);
+
+function stripTrailingPunctuation(s: string): string {
+  return s.replace(/[.,;:!?\-–—]+$/, "").trim();
+}
+
+function endsGrammatically(s: string): boolean {
+  const words = s.trim().split(/\s+/);
+  const lastWord = words[words.length - 1];
+  if (!lastWord) return false;
+  const lettersOnly = lastWord.toLowerCase().replace(/[^a-z]/g, "");
+  // A last word with no letters at all — "32%", "$10.45B", "200+", "16" —
+  // is a quantified ending, exactly what a good bullet should end on. It
+  // can't be a dangling conjunction/preposition, so it's always grammatical.
+  if (lettersOnly.length === 0) return true;
+  return !DANGLING_TRAILING_WORDS.has(lettersOnly);
+}
+
+function withTerminalPeriod(s: string): string {
+  const stripped = stripTrailingPunctuation(s);
+  return stripped ? `${stripped}.` : stripped;
+}
+
+/**
+ * Clamps a droppable list item (an experience bullet, a key win, a project
+ * description) to at most maxChars while guaranteeing the result is a
+ * complete, grammatical clause ending in a period — never a dangling
+ * conjunction/preposition ("...and", "...for"), never a trailing comma,
+ * never a mid-word cut. Walks backward through whole words from the
+ * character limit until it finds a cut point that reads as a complete
+ * clause. Returns null (meaning: drop this item entirely) if no such cut
+ * point exists at or above minChars — emitting a fragment is worse than
+ * omitting the item.
+ */
+export function clampBulletText(text: string, maxChars: number, minChars = 30): string | null {
+  // Reserve 1 character for the terminal period this function always adds,
+  // so the returned string (period included) never exceeds maxChars.
+  const budget = maxChars - 1;
+  const original = stripTrailingPunctuation(text.trim());
+  if (original.length === 0) return null;
+
+  let window = original;
+  if (window.length > budget) {
+    window = window.slice(0, budget);
+    const lastSpace = window.lastIndexOf(" ");
+    if (lastSpace > 0) window = window.slice(0, lastSpace);
+    window = stripTrailingPunctuation(window);
+  }
+
+  // The first candidate (only cut for LENGTH, not yet for grammar) is exempt
+  // from the minChars floor — a short-but-already-complete bullet like
+  // "Second bullet." must not be rejected just for being short. minChars
+  // only guards against over-shrinking once we start stripping words
+  // specifically because the tail is grammatically dangling.
+  let firstCandidate = true;
+  while (window.length > 0) {
+    if ((firstCandidate || window.length >= minChars) && endsGrammatically(window)) {
+      return withTerminalPeriod(window);
+    }
+    firstCandidate = false;
+    const lastSpace = window.lastIndexOf(" ");
+    if (lastSpace <= 0) break;
+    window = stripTrailingPunctuation(window.slice(0, lastSpace));
+  }
+  return null;
+}
+
 function topBulletsByPriority(bullets: ResumeBullet[], max: number): ResumeBullet[] {
-  return [...bullets]
-    .sort((a, b) => a.priority - b.priority)
-    .slice(0, max)
-    .map(b => ({ ...b, text: clampText(b.text, ONE_PAGE_BUDGET.bulletMaxChars) }));
+  const candidates = [...bullets].sort((a, b) => a.priority - b.priority).slice(0, max);
+  const clamped = candidates
+    .map(b => ({ ...b, text: clampBulletText(b.text, ONE_PAGE_BUDGET.bulletMaxChars) }))
+    .filter((b): b is ResumeBullet => b.text !== null);
+
+  // Never leave an entry with zero bullets just because every candidate
+  // failed the grammar check — fall back to the single best (lowest
+  // priority number) candidate, plain-clamped, rather than show nothing.
+  if (clamped.length === 0 && candidates.length > 0) {
+    const best = candidates[0];
+    return [{ ...best, text: clampText(best.text, ONE_PAGE_BUDGET.bulletMaxChars) }];
+  }
+  return clamped;
 }
 
 /**
@@ -125,20 +212,31 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   if (!seq.includes("leadership")) clamped.leadership = null;
   if (!seq.includes("certifications")) clamped.certifications = null;
 
+  // Grammar-aware, droppable clamp for a keyWins string — an item that can't
+  // be trimmed to a complete clause is dropped entirely rather than shown as
+  // a fragment.
+  const clampWin = (w: string) => clampBulletText(w, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+  // Same, for a project's description — the whole project entry is dropped
+  // if its description can't be trimmed grammatically.
+  const clampProject = (p: NonNullable<ResumeContent["projects"]>[number]) => {
+    const description = clampBulletText(p.description, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+    return description ? { ...p, description } : null;
+  };
+
   if (usesSelectedImpact) {
     // Combined Key Projects & Impact band — the total item count across both
     // arrays is what's capped, since they render together as one list.
     const keptWins = (content.keyWins ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems);
     const remaining = ONE_PAGE_BUDGET.keyImpactMaxItems - keptWins.length;
     const keptProjects = remaining > 0 ? (content.projects ?? []).slice(0, remaining) : [];
-    clamped.keyWins = keptWins.map(w => clampText(w, ONE_PAGE_BUDGET.keyImpactItemMaxChars));
-    clamped.projects = keptProjects.map(p => ({ ...p, description: clampText(p.description, ONE_PAGE_BUDGET.keyImpactItemMaxChars) }));
+    clamped.keyWins = keptWins.map(clampWin).filter((w): w is string => w !== null);
+    clamped.projects = keptProjects.map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null);
   } else {
     clamped.keyWins = seq.includes("keyWins")
-      ? (content.keyWins ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(w => clampText(w, ONE_PAGE_BUDGET.keyImpactItemMaxChars))
+      ? (content.keyWins ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(clampWin).filter((w): w is string => w !== null)
       : null;
     clamped.projects = seq.includes("projects")
-      ? (content.projects ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(p => ({ ...p, description: clampText(p.description, ONE_PAGE_BUDGET.keyImpactItemMaxChars) }))
+      ? (content.projects ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null)
       : null;
   }
 

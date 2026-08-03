@@ -1,16 +1,42 @@
 import { describe, it, expect } from "vitest";
-import { clampToOnePageBudget, clampText, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET } from "../resume-budget";
+import { clampToOnePageBudget, clampText, clampBulletText, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET } from "../resume-budget";
 import type { ResumeContent } from "../resume-schema";
+
+// A rendered bullet must never end in a comma, a dangling conjunction/
+// preposition (and/or/with/for/...), or lack terminal punctuation entirely.
+function endsCleanly(text: string): boolean {
+  if (/[,]$/.test(text.trim())) return false;
+  if (!/[.!?]$/.test(text.trim())) return false;
+  const withoutPeriod = text.trim().replace(/[.!?]+$/, "");
+  const lastWord = withoutPeriod.trim().split(/\s+/).pop()?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
+  const banned = new Set(["and", "or", "with", "for"]);
+  return !banned.has(lastWord);
+}
 
 function makeBullet(text: string, priority: number) {
   return { text, priority };
+}
+
+// Realistic space-separated filler of approximately targetLen characters —
+// unlike a single giant "AAAA..." blob (which has no word boundaries and so
+// doesn't exercise the clamp's real word-boundary logic realistically), this
+// mirrors actual bullet text: many ordinary-length words in a row.
+function longFiller(targetLen: number): string {
+  const words = "Delivered measurable outcomes across multiple engagements for global clients spanning finance technology and infrastructure sectors with substantial impact".split(" ");
+  let out = "";
+  let i = 0;
+  while (out.length < targetLen) {
+    out += (out ? " " : "") + words[i % words.length];
+    i++;
+  }
+  return out.slice(0, targetLen);
 }
 
 function richConsultingContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
   return {
     name: "Jordan Lee",
     contactLine: "jordan@example.com | 555-0100",
-    summary: "A".repeat(500), // deliberately over budget
+    summary: longFiller(500), // deliberately over budget
     sectionOrder: "experience-first",
     experience: Array.from({ length: 6 }, (_, i) => ({
       company: `Company ${i}`,
@@ -18,10 +44,10 @@ function richConsultingContent(overrides: Partial<ResumeContent> = {}): ResumeCo
       tenure: "2020 - Present",
       location: "",
       bullets: [
-        makeBullet("A".repeat(300), 1), // over budget, must clamp
-        makeBullet("Second bullet", 2),
-        makeBullet("Third bullet", 3),
-        makeBullet("Fourth bullet", 4),
+        makeBullet(longFiller(300), 1), // over budget, must clamp
+        makeBullet("Second bullet.", 2),
+        makeBullet("Third bullet.", 3),
+        makeBullet("Fourth bullet.", 4),
       ],
     })),
     education: Array.from({ length: 4 }, (_, i) => ({
@@ -32,8 +58,8 @@ function richConsultingContent(overrides: Partial<ResumeContent> = {}): ResumeCo
       achievements: ["Dean's list", "Honors"],
     })),
     skills: Array.from({ length: 6 }, (_, i) => ({ category: `Cat ${i}`, items: Array.from({ length: 10 }, (_, j) => `Skill ${i}-${j}`) })),
-    projects: Array.from({ length: 6 }, (_, i) => ({ name: `Project ${i}`, description: "A".repeat(250) })),
-    keyWins: Array.from({ length: 6 }, (_, i) => `Win ${i}: ${"A".repeat(250)}`),
+    projects: Array.from({ length: 6 }, (_, i) => ({ name: `Project ${i}`, description: longFiller(250) })),
+    keyWins: Array.from({ length: 6 }, (_, i) => `Win ${i}: ${longFiller(240)}`),
     leadership: ["Led club A", "Led club B"],
     certifications: [{ name: "Cert A" }],
     ...overrides,
@@ -63,6 +89,115 @@ describe("clampText", () => {
     expect(clamped).not.toContain("…");
     expect(clamped).not.toContain("...");
     expect("Delivered a multi-billion-dollar capital program successfully across three sites").toContain(clamped);
+  });
+});
+
+// BUG 2 regression: real reported truncation fragments. Each of these was
+// the observed END of a bullet under the old blind-character-slice
+// behavior. Feeding a long source bullet that WOULD naturally truncate to
+// one of these fragments must now produce a complete, grammatical clause
+// instead — never a dangling conjunction/preposition, never a trailing
+// comma, always terminal punctuation.
+describe("clampBulletText — never truncates mid-sentence (BUG 2)", () => {
+  const REPORTED_FRAGMENTS = [
+    "designing governance and",
+    "capital reallocation,",
+    "and AI assurance",
+    "used for",
+    "and agentic tool",
+  ];
+
+  it("real reported fragments are not what the clamp would now produce for a naturally overflowing bullet", () => {
+    // Reconstruct a plausible full-length source bullet that would have
+    // been blindly sliced down to each fragment, and verify the new clamp
+    // does not reproduce the same dangling ending.
+    const sources = [
+      "Delivered multi-plant capital program strategy for North American nuclear utility, designing governance and contractor selection frameworks for the program",
+      "Identified CapEx and OpEx optimization levers for utility-scale solar project, built investment case for capital reallocation, produced IRR roadmap",
+      "Built integrated agentic AI platform spanning document intelligence, workplan generation, cost modeling, and AI assurance across the full portfolio",
+      "Structured a governance framework and contractor selection model used for the multi-billion-dollar nuclear capital program end to end",
+      "Delivered a RAG-based document intelligence engine and agentic tool for contract and regulatory libraries across the full portfolio",
+    ];
+    for (let i = 0; i < sources.length; i++) {
+      const result = clampBulletText(sources[i], 100); // tight budget forces a real cut
+      if (result === null) continue; // dropping is an acceptable outcome too
+      expect(result.endsWith(REPORTED_FRAGMENTS[i])).toBe(false);
+      expect(endsCleanly(result)).toBe(true);
+    }
+  });
+
+  it("never returns a result ending in a comma", () => {
+    const result = clampBulletText("Identified CapEx and OpEx optimization levers for a utility-scale solar project, delivering capital reallocation, produced a roadmap", 90);
+    expect(result).not.toBeNull();
+    expect(result!.endsWith(",")).toBe(false);
+  });
+
+  it("never returns a result ending in a dangling conjunction or preposition (and/or/with/for)", () => {
+    const cases = [
+      "Delivered board-level recommendation for a multi-billion-dollar program designing governance and",
+      "Built a platform for contract intelligence and cost modeling used for",
+      "Structured the decision document across financial, technical, and regulatory dimensions and",
+    ];
+    for (const text of cases) {
+      const result = clampBulletText(text, 60);
+      if (result === null) continue;
+      const lastWord = result.replace(/[.!?]+$/, "").trim().split(/\s+/).pop()!.toLowerCase();
+      expect(["and", "or", "with", "for"]).not.toContain(lastWord);
+    }
+  });
+
+  it("always ends in terminal punctuation (a period) when a result is returned", () => {
+    const result = clampBulletText("Delivered a multi-plant capital program strategy for a North American nuclear utility with board-level sign-off", 60);
+    expect(result).not.toBeNull();
+    expect(/[.!?]$/.test(result!)).toBe(true);
+  });
+
+  it("never cuts mid-word", () => {
+    const result = clampBulletText("Delivered multi-plant capital program strategy for North American nuclear utility, unlocking a multi-billion-dollar program", 80);
+    expect(result).not.toBeNull();
+    const original = "Delivered multi-plant capital program strategy for North American nuclear utility, unlocking a multi-billion-dollar program";
+    const withoutPeriod = result!.replace(/\.$/, "");
+    expect(original.startsWith(withoutPeriod) || original.includes(withoutPeriod)).toBe(true);
+  });
+
+  it("drops the bullet entirely (returns null) rather than emit an ungrammatical fragment when no clean cut exists", () => {
+    // Every word in this text is a dangling conjunction/preposition, so no
+    // matter how far back the algorithm retreats, the last remaining word
+    // is always banned — there is no clean cut point anywhere.
+    const pathological = "and or with for and or with for and or with for";
+    const result = clampBulletText(pathological, 100, 30);
+    expect(result).toBeNull();
+  });
+
+  it("accepts a bullet ending on a quantified value (number/%/$) without falsely treating it as ungrammatical", () => {
+    expect(clampBulletText("Grew revenue by 32%", 100)).toBe("Grew revenue by 32%.");
+    expect(clampBulletText("Delivered a $10.45B portfolio cockpit", 100)).toBe("Delivered a $10.45B portfolio cockpit.");
+    expect(clampBulletText("Led a team of 12+", 100)).toBe("Led a team of 12+.");
+  });
+
+  it("leaves an already-short, already-complete bullet unchanged (plus a period), regardless of the minChars floor", () => {
+    expect(clampBulletText("Second bullet", 150)).toBe("Second bullet.");
+  });
+});
+
+describe("no rendered experience bullet ever ends badly, across a full clampToOnePageBudget pass", () => {
+  it("every surviving bullet ends cleanly after clamping a profile full of overflowing, comma/conjunction-ending source bullets", () => {
+    const content = richConsultingContent({
+      experience: [{
+        company: "Bain & Company", role: "Consultant", tenure: "2020 - Present", location: "",
+        bullets: [
+          makeBullet("Delivered multi-plant capital program strategy for North American nuclear utility, designing governance and contractor selection frameworks and", 1),
+          makeBullet("Identified CapEx and OpEx optimization levers for utility-scale solar project, delivering capital reallocation,", 2),
+          makeBullet("Built integrated agentic AI platform spanning document intelligence, cost modeling, and AI assurance and", 3),
+          makeBullet("Structured governance framework and contractor selection model used for", 4),
+        ],
+      }],
+    });
+    const clamped = clampToOnePageBudget(content, "consulting");
+    expect(clamped.experience[0].bullets.length).toBeGreaterThan(0);
+    for (const b of clamped.experience[0].bullets) {
+      expect(endsCleanly(b.text)).toBe(true);
+    }
   });
 });
 
