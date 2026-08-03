@@ -9,10 +9,19 @@ import { ResumeContent, ResumeBullet } from "./resume-schema";
 import { RESUME_SPECS, ResumeArchetype } from "./resume-archetype";
 
 export const ONE_PAGE_BUDGET = {
-  summaryMaxChars: 320,
+  // "Exactly 2 lines, max" for the summary — ~100 chars/line at this layout.
+  summaryMaxChars: 200,
   keyImpactMaxItems: 4,
   keyImpactItemMaxChars: 150,
-  bulletsPerRoleMax: 2,
+  // Per-entry ceiling: a role with several distinct engagements (e.g. a
+  // consulting stint covering 4 separate client projects) can show up to 4
+  // SEPARATE bullets — never collapsed into one generic summary bullet.
+  bulletsPerRoleMax: 4,
+  // Global ceiling across ALL entries combined — keeps the page one page
+  // even when every entry maxes out its per-role count; trimmed by relevance
+  // (lowest priority first, across entries) rather than per-entry, so the
+  // most JD-relevant role keeps more bullets than a barely-relevant one.
+  totalExperienceBulletsMax: 12,
   bulletMaxChars: 150,
   skillsMaxCategories: 3,
   skillsMaxItemsPerCategory: 6,
@@ -43,6 +52,44 @@ function topBulletsByPriority(bullets: ResumeBullet[], max: number): ResumeBulle
 }
 
 /**
+ * Second-stage trim: after each entry is capped individually to
+ * bulletsPerRoleMax, the TOTAL across all entries combined might still
+ * exceed the one-page budget (e.g. 5 roles at 4 bullets each = 20). Trims
+ * the single globally-lowest-priority bullet (highest priority number)
+ * across ALL entries, one at a time, until the total fits — never emptying
+ * an entry down to zero. This is the "final clamp trims the lowest-
+ * relevance bullet if it still overflows" behavior: a deterministic,
+ * one-shot pass over already-known data, not a browser measure-and-trim
+ * loop — it never inspects rendered height and never iterates more than
+ * the number of bullets that actually need trimming.
+ */
+function trimToGlobalBulletBudget(
+  experience: ResumeContent["experience"],
+  maxTotal: number,
+): ResumeContent["experience"] {
+  const entries = experience.map(e => ({ ...e, bullets: [...e.bullets] }));
+  let total = entries.reduce((n, e) => n + e.bullets.length, 0);
+
+  while (total > maxTotal) {
+    let worst: { entryIdx: number; bulletIdx: number; priority: number } | null = null;
+    entries.forEach((e, entryIdx) => {
+      if (e.bullets.length <= 1) return; // never empty an entry entirely
+      e.bullets.forEach((b, bulletIdx) => {
+        if (!worst || b.priority > worst.priority) {
+          worst = { entryIdx, bulletIdx, priority: b.priority };
+        }
+      });
+    });
+    if (!worst) break; // every entry is already down to its last bullet
+    const { entryIdx, bulletIdx } = worst;
+    entries[entryIdx] = { ...entries[entryIdx], bullets: entries[entryIdx].bullets.filter((_, j) => j !== bulletIdx) };
+    total--;
+  }
+
+  return entries;
+}
+
+/**
  * Deterministically enforces the one-page content budget on generated resume
  * content, and nulls out any section this archetype's layout doesn't render.
  * The null-out step is what guarantees a section like "education" renders
@@ -58,13 +105,15 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   const seq = RESUME_SPECS[archetype].sectionSequence;
   const usesSelectedImpact = seq.includes("selectedImpact");
 
+  const perEntryCapped = content.experience.map(e => ({
+    ...e,
+    bullets: topBulletsByPriority(e.bullets, ONE_PAGE_BUDGET.bulletsPerRoleMax),
+  }));
+
   const clamped: ResumeContent = {
     ...content,
     summary: content.summary ? clampText(content.summary, ONE_PAGE_BUDGET.summaryMaxChars) : content.summary,
-    experience: content.experience.map(e => ({
-      ...e,
-      bullets: topBulletsByPriority(e.bullets, ONE_PAGE_BUDGET.bulletsPerRoleMax),
-    })),
+    experience: trimToGlobalBulletBudget(perEntryCapped, ONE_PAGE_BUDGET.totalExperienceBulletsMax),
     skills: content.skills
       .slice(0, ONE_PAGE_BUDGET.skillsMaxCategories)
       .map(g => ({ ...g, items: g.items.slice(0, ONE_PAGE_BUDGET.skillsMaxItemsPerCategory) })),

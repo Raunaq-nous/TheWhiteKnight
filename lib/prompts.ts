@@ -204,7 +204,7 @@ function resumeOutputFormatInstructions(): string {
   "subFocus": string (the specific sub-focus/practice-area of THIS role within its archetype, from your Step 1 analysis — 1 short phrase, e.g. "Capital Excellence: capital project delivery, cost/schedule optimization"),
   "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; one line each, part of the same 3-4 total item budget as "projects" below),
   "sectionOrder": "education-first" | "experience-first",
-  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ] (1-2 bullets per entry, each ONE line — see ONE-PAGE CONTENT BUDGET),
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ] (2-4 bullets per entry, one per distinct engagement, each ONE line — see ONE-PAGE CONTENT BUDGET and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
   "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
   "skills": [ { "category": string, "items": string[] } ],
   "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used),
@@ -222,14 +222,15 @@ export function resumePrompt(profile: Profile, app: Application, archetype: Resu
   const atsKeywords = app.jdParsed?.keywords?.join(", ") ?? "";
   const keyReqs = app.jdParsed?.keyRequirements?.join("; ") ?? "";
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
-  const expCount = profile.experience.length;
   const spec = RESUME_SPECS[archetype];
   // Deterministic pre-ranking pass (BUG 1 fix): reorders every entry's bullets
-  // and every project by relevance to this JD — never drops anything, the
-  // FULL profile still reaches the prompt below, just with the most relevant
-  // material first so the model selects/writes from ranked complete data
-  // instead of an unranked list it has to judge cold.
+  // and every project by relevance to this JD — never drops anything (except
+  // entries explicitly flagged excludeFromResume), the FULL profile still
+  // reaches the prompt below, just with the most relevant material first so
+  // the model selects/writes from ranked complete data instead of an
+  // unranked list it has to judge cold.
   const rankedProfile = rankProfileForResume(profile, app, archetype);
+  const expCount = rankedProfile.experience.length;
   const relevanceHintsBlock = renderRelevanceHintsBlock(computeBulletRelevanceHints(rankedProfile, app));
 
   return `You are a senior resume strategist specializing in ${spec.label} hiring. Write a tailored resume for ${profile.name} applying for the ${app.role} role at ${app.company}.
@@ -265,24 +266,34 @@ WHAT "QUANTIFIED IMPACT" MEANS HERE — prefer these units of proof over generic
 LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
 
 ONE-PAGE CONTENT BUDGET — this resume is generated to fit ONE page from the start, not trimmed after the fact. Write within these limits directly; a server-side clamp enforces them afterward as a backstop, but writing over budget just means your best material gets cut arbitrarily instead of by your own judgment:
-- Summary: 2-3 lines, ~300 characters max.
+- Summary: EXACTLY 2 lines max, ~200 characters max.
 - Key Projects & Impact (if this archetype uses it): 3-4 items total, ONE line each.
-- Experience: EVERY entry must appear, but each entry gets only 1-2 bullets, and EVERY bullet is ONE line (~120-140 characters) — a crisp, compressed clause, never a paragraph. If a project needs more than one line of detail, that detail belongs in Key Projects & Impact, not stretched into a giant experience bullet.
+- Experience: EVERY entry must appear. Each entry gets 2-4 bullets — see THE CRITICAL RULE below — and EVERY bullet is its own line, max ~150 characters (~1.5 lines), a crisp compressed clause, never a paragraph. If a project needs more than one line of detail, that extra depth belongs in Key Projects & Impact, not stretched into a giant experience bullet.
 - Skills: max 3 categories, max 6 items each.
 - Education: one line per entry (institution/degree/years), no achievements bullets.
 
+THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES — read this literally, it is the most common failure mode: a profile experience entry is a JOB, not a single project. Its bullets frequently describe MULTIPLE DISTINCT ENGAGEMENTS — separate clients, separate deals, separate initiatives done during that one role. When that's true:
+- Render 2-4 SEPARATE bullets under that entry, each covering ONE distinct engagement. NEVER collapse multiple distinct engagements into one generic summary bullet for the role (e.g. "Led various client engagements across sectors" is a failure — name the actual distinct engagements instead, each as its own bullet).
+- Select WHICH engagements to surface, and how many (2 vs 4), by relevance to THIS job's target priorities — the most JD-relevant role can carry more bullets than a barely-relevant older role.
+- The bullets under each entry above are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING below. Pick from the top of that ranking, then apply the SUB-FOCUS lens to refine the choice; do not ignore the ranking and pick arbitrarily.
+- Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics.
+
+BULLET FORMULA — every single bullet, no exceptions:
+- Start with a strong action verb (Led, Designed, Delivered, Built, Identified, Structured, Developed, Formulated).
+- PARC/XYZ logic in one clause: the problem or context, what you specifically did, the measurable result — compressed to fit the character cap, not truncated mid-thought.
+- END with a quantified outcome: $ value, %, program/deal size, headcount, timeline, IRR. If the source bullet has no explicit number, use the strongest TRUE scope marker already present in the profile text (e.g. "$10.45B", "16 projects", "10+ sites", "12+ mandates") — NEVER invent a number or scale that is not already in the profile.
+- The FIRST bullet under the most relevant/most recent role must be the single strongest quantified result available anywhere in the profile for this JD — priority 1, always.
+
 EXPERIENCE INCLUSION RULES:
-- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them, each trimmed to its 1-2 strongest bullets per the budget above.
-- The bullets under each entry above are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING below. Pick from the top of that ranking for each entry, then apply the SUB-FOCUS lens to refine the choice; do not ignore the ranking and pick arbitrarily.
-- Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics. See the DETERMINISTIC RELEVANCE RANKING above for where this specifically applies.
-- MUST NOT drop entire experience entries, even a weak one — trim its bullets instead.
+- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
+- MUST NOT drop entire experience entries, even a weak one — trim its bullets instead (down to 2, never below 2 for an entry that has 2+ distinct engagements available).
 - Preserve the exact company name and tenure for every entry.
 
-NO REPETITION — if a fact, project, or number appears in Key Projects & Impact, do NOT also restate it (even paraphrased) in the summary or in an experience bullet. Each fact lives in exactly one place. Pick the single best home for it: the Key Projects & Impact band if it's a headline win, otherwise the relevant experience bullet.
+NO REPETITION — if a fact, engagement, or number appears in Key Projects & Impact, do NOT also restate it (even paraphrased) in the summary or in an experience bullet. Each fact lives in exactly one place. Pick the single best home for it: the Key Projects & Impact band if it's a headline win, otherwise the relevant experience bullet. These are two distinct layers — zero overlap between them.
 
 PROFILE SUMMARY:
 - ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
-- If a summary is written: 2-3 lines MAX (~300 characters), a crisp positioning statement — what the candidate does, plus the single strongest proof point for THIS role. NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
+- If a summary is written: EXACTLY 2 lines max (~200 characters) — ties the candidate's background together and names the target role. NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
 
 ARCHETYPE — ${spec.label}:
 - MANDATORY SECTIONS (include if the profile has any data for them): ${spec.mandatorySections.join(", ")}.

@@ -155,6 +155,24 @@ describe("rankProfileForResume — deterministic pre-ranking pass", () => {
     expect(ranked.experience[0].bullets).toContain(UNRELATED_BULLET);
   });
 
+  it("drops an experience entry flagged excludeFromResume — the ONLY case where an entry is actually dropped, not just reordered", () => {
+    const profile = richMultiRoleProfile();
+    profile.experience.push({
+      id: "e3", company: "Delbomblr Inc", role: "Business Consultant", tenure: "Feb 2018 - Jun 2019",
+      location: "", current: false, bullets: "", excludeFromResume: true,
+    });
+    const ranked = rankProfileForResume(profile, baseApp(), "consulting");
+    expect(ranked.experience).toHaveLength(2); // the 3rd (excluded) entry never appears
+    expect(ranked.experience.some(e => e.company === "Delbomblr Inc")).toBe(false);
+  });
+
+  it("keeps an entry with no excludeFromResume flag (default: shown)", () => {
+    const profile = richMultiRoleProfile();
+    const ranked = rankProfileForResume(profile, baseApp(), "consulting");
+    expect(ranked.experience.every(e => !e.excludeFromResume || false)).toBe(true);
+    expect(ranked.experience).toHaveLength(2);
+  });
+
   it("for a capital-projects JD, ranks capital-delivery bullets above the tool-building bullet and above an unrelated bullet", () => {
     const profile = richMultiRoleProfile();
     const ranked = rankProfileForResume(profile, baseApp(), "consulting");

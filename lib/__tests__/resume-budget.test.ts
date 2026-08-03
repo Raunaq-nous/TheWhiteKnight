@@ -96,6 +96,61 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     expect(clamped.experience).toHaveLength(content.experience.length);
   });
 
+  it("allows a genuinely multi-engagement role to keep up to bulletsPerRoleMax (4) distinct bullets, never collapsed to 1", () => {
+    const content = richConsultingContent({
+      experience: [{
+        company: "Bain & Company", role: "Consultant", tenure: "2020 - Present", location: "",
+        bullets: [
+          makeBullet("Delivered nuclear capital program: board-level recommendation, multi-billion-dollar program", 1),
+          makeBullet("Identified CapEx/OpEx optimization for solar project: IRR improvement roadmap", 2),
+          makeBullet("Led concept selection study for O&G company: enabled investment commitment", 3),
+          makeBullet("Built AI platform: RAG document intelligence, agentic workplan generator", 4),
+        ],
+      }],
+    });
+    const clamped = clampToOnePageBudget(content, "consulting");
+    expect(clamped.experience).toHaveLength(1);
+    expect(clamped.experience[0].bullets).toHaveLength(4); // all 4 distinct engagements survive
+  });
+
+  it("global bullet trim is asymmetric by relevance — a highly-relevant role keeps more bullets than a barely-relevant one", () => {
+    // 4 entries x 4 bullets = 16 total, over the 12-bullet global cap, so a
+    // real trim must happen — spread across entries by priority, not evenly.
+    const content = richConsultingContent({
+      experience: [
+        { company: "Most Relevant Co", role: "Consultant", tenure: "2023 - Present", location: "", bullets: [1, 2, 3, 4].map(p => makeBullet(`Engagement ${p}`, p)) },
+        { company: "Relevant Co", role: "Consultant", tenure: "2021 - 2023", location: "", bullets: [11, 12, 13, 14].map(p => makeBullet(`Engagement ${p}`, p)) },
+        { company: "Somewhat Relevant Co", role: "Analyst", tenure: "2019 - 2021", location: "", bullets: [21, 22, 23, 24].map(p => makeBullet(`Engagement ${p}`, p)) },
+        { company: "Barely Relevant Co", role: "Analyst", tenure: "2015 - 2018", location: "", bullets: [31, 32, 33, 34].map(p => makeBullet(`Old engagement ${p}`, p)) },
+      ],
+    });
+    const clamped = clampToOnePageBudget(content, "consulting");
+    const total = clamped.experience.reduce((n, e) => n + e.bullets.length, 0);
+    expect(total).toBe(12); // trimmed from 16 down to the global cap
+
+    const mostRelevant = clamped.experience.find(e => e.company === "Most Relevant Co")!;
+    const barelyRelevant = clamped.experience.find(e => e.company === "Barely Relevant Co")!;
+    // Global trim removes highest priority-number bullets first, regardless
+    // of which entry they're in — so the more relevant role (lower numbers)
+    // should end up with more surviving bullets than the least relevant one.
+    expect(mostRelevant.bullets).toHaveLength(4); // fully preserved
+    expect(mostRelevant.bullets.length).toBeGreaterThan(barelyRelevant.bullets.length);
+    expect(barelyRelevant.bullets.length).toBeGreaterThanOrEqual(1); // never emptied entirely
+  });
+
+  it("global trim never empties an entry down to zero bullets, even under extreme pressure", () => {
+    const content = richConsultingContent({
+      experience: Array.from({ length: 10 }, (_, i) => ({
+        company: `Co ${i}`, role: "Consultant", tenure: "2020", location: "",
+        bullets: [1, 2, 3, 4].map(p => makeBullet(`Bullet ${p}`, p)),
+      })),
+    });
+    const clamped = clampToOnePageBudget(content, "consulting");
+    for (const e of clamped.experience) {
+      expect(e.bullets.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
   it("caps the combined Key Projects & Impact band to keyImpactMaxItems total, keyWins first", () => {
     const clamped = clampToOnePageBudget(richConsultingContent(), "consulting");
     const total = (clamped.keyWins?.length ?? 0) + (clamped.projects?.length ?? 0);

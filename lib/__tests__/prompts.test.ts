@@ -217,7 +217,7 @@ describe("prompt builder snapshots", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("summary -> selectedImpact -> experience -> skills -> education");
     expect(consulting).toContain("KEY PROJECTS & IMPACT");
-    expect(consulting).toContain("crisp 2-3 line positioning statement");
+    expect(consulting).toContain("EXACTLY 2 lines, max");
     expect(consulting).toContain("NEVER INCLUDE: certifications, leadership");
 
     const ib = resumePrompt(MOCK_PROFILE, MOCK_APP, "finance_ib");
@@ -235,8 +235,20 @@ describe("prompt builder snapshots", () => {
   it("resumePrompt enforces the one-page content budget structurally, not via post-hoc trimming (BUG: 2-page exports)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("ONE-PAGE CONTENT BUDGET");
-    expect(consulting).toMatch(/1-2 bullets per entry/);
+    expect(consulting).toMatch(/2-4 bullets/);
     expect(consulting).toMatch(/3-4 items total/);
+  });
+
+  it("resumePrompt requires 2-4 SEPARATE bullets per distinct engagement, not one generic bullet per role", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES");
+    expect(consulting).toContain("NEVER collapse multiple distinct engagements into one generic summary bullet");
+  });
+
+  it("resumePrompt's bullet formula requires a quantified ending and forbids inventing numbers", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("BULLET FORMULA");
+    expect(consulting).toContain("NEVER invent a number or scale");
   });
 
   it("resumePrompt's Key Projects & Impact instruction says it renders immediately after the summary, before experience", () => {

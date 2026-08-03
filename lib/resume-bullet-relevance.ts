@@ -81,15 +81,19 @@ function rankBulletLines(bulletsText: string, jdTerms: Set<string>, demote: bool
 // Reorders (never drops) every experience entry's bullets and every project
 // by relevance to this JD, so the complete profile reaches the prompt with
 // the most relevant material first. The model still selects/trims from this
-// full, ranked set — this pass never truncates content.
+// full, ranked set — this pass never truncates content, EXCEPT entries the
+// candidate explicitly flagged excludeFromResume (kept everywhere else in
+// the app — profile, scoring — just never surfaced on a generated resume).
 export function rankProfileForResume(profile: Profile, app: Application, archetype: ResumeArchetype): Profile {
   const jdTerms = jdTermSet(app);
   const demote = demotesToolBuilding(archetype);
 
-  const experience = profile.experience.map(e => ({
-    ...e,
-    bullets: rankBulletLines(e.bullets, jdTerms, demote),
-  }));
+  const experience = profile.experience
+    .filter(e => !e.excludeFromResume)
+    .map(e => ({
+      ...e,
+      bullets: rankBulletLines(e.bullets, jdTerms, demote),
+    }));
 
   const projects = profile.projects
     ? [...profile.projects].sort((a, b) => {

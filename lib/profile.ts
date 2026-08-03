@@ -9,6 +9,11 @@ export type ExperienceEntry = {
   location: string;
   current: boolean;
   bullets: string; // newline-separated, free-form
+  // Keeps the entry in the candidate's career history (profile, scoring,
+  // other documents) while hiding it specifically from generated resumes —
+  // e.g. a placeholder/empty stint the candidate never wants on a resume,
+  // without deleting the underlying record. Optional; defaults to shown.
+  excludeFromResume?: boolean;
 };
 
 export type EducationEntry = {
