@@ -7,22 +7,27 @@
 
 import { ResumeContent, ResumeBullet } from "./resume-schema";
 import { RESUME_SPECS, ResumeArchetype } from "./resume-archetype";
+import { dedupeExperienceAgainstTopBand } from "./resume-dedupe";
 
 export const ONE_PAGE_BUDGET = {
   // "Exactly 2 lines, max" for the summary — ~100 chars/line at this layout.
   summaryMaxChars: 200,
-  keyImpactMaxItems: 4,
-  keyImpactItemMaxChars: 150,
-  // Per-entry ceiling: a role with several distinct engagements (e.g. a
-  // consulting stint covering 4 separate client projects) can show up to 4
-  // SEPARATE bullets — never collapsed into one generic summary bullet.
-  bulletsPerRoleMax: 4,
-  // Global ceiling across ALL entries combined — keeps the page one page
-  // even when every entry maxes out its per-role count; trimmed by relevance
-  // (lowest priority first, across entries) rather than per-entry, so the
-  // most JD-relevant role keeps more bullets than a barely-relevant one.
-  totalExperienceBulletsMax: 12,
-  bulletMaxChars: 150,
+  keyImpactMaxItems: 3,
+  keyImpactItemMaxChars: 180,
+  // Per-entry: 2-3 bullets per shown role (BUG D — tightened from 4).
+  bulletsPerRoleMax: 3,
+  // At most this many ROLES are shown at all — the rest are dropped
+  // entirely (lowest JD-relevance first), not just trimmed to fewer
+  // bullets. New in this pass (BUG D): with the raised per-bullet char
+  // cap, showing every role would blow the one-page budget; showing fewer,
+  // richer roles reads better and actually fits.
+  experienceMaxRoles: 4,
+  // Global ceiling across ALL shown roles combined.
+  totalExperienceBulletsMax: 10,
+  // Target ~200 chars (enforced at generation, lib/prompts.ts); hard
+  // ceiling here is deliberately higher than the target so the clamp is a
+  // rare backstop, not the primary shortener (BUG B).
+  bulletMaxChars: 240,
   skillsMaxCategories: 3,
   skillsMaxItemsPerCategory: 6,
   educationMaxEntries: 2,
@@ -79,15 +84,18 @@ function withTerminalPeriod(s: string): string {
 }
 
 /**
- * Clamps a droppable list item (an experience bullet, a key win, a project
- * description) to at most maxChars while guaranteeing the result is a
- * complete, grammatical clause ending in a period — never a dangling
- * conjunction/preposition ("...and", "...for"), never a trailing comma,
- * never a mid-word cut. Walks backward through whole words from the
- * character limit until it finds a cut point that reads as a complete
- * clause. Returns null (meaning: drop this item entirely) if no such cut
- * point exists at or above minChars — emitting a fragment is worse than
- * omitting the item.
+ * Clamps a droppable list item (a key win, a project description) to at
+ * most maxChars while guaranteeing the result is a complete, grammatical
+ * clause ending in a period — never a dangling conjunction/preposition,
+ * never a trailing comma, never a mid-word cut. Walks backward through
+ * whole words from the character limit until it finds a cut point that
+ * reads as a complete clause. Returns null (drop this item entirely) if no
+ * such cut point exists at or above minChars.
+ *
+ * Experience bullets use clampBulletPreservingOutcome instead (below),
+ * which additionally guarantees the OUTCOME clause specifically survives —
+ * this plain version has no concept of "the important part is at the end,
+ * protect it specially," it just avoids grammatically broken endings.
  */
 export function clampBulletText(text: string, maxChars: number, minChars = 30): string | null {
   // Reserve 1 character for the terminal period this function always adds,
@@ -122,14 +130,83 @@ export function clampBulletText(text: string, maxChars: number, minChars = 30): 
   return null;
 }
 
+// Marks the quantified/scope-marker "outcome" of a CAR bullet — a dollar
+// value, a percentage, a "N+ [things]" scale marker, or one of a handful of
+// fixed high-signal phrases (board-level, C-suite, multi-billion-dollar).
+// Used to find the LAST clause of a bullet that contains real impact, so
+// clamping can protect it and shorten everything BEFORE it instead (BUG B).
+const OUTCOME_MARKER_PATTERN =
+  /\$[\d,.]+\s?(?:[bmk]illion)?\b|\d+(\.\d+)?%|\b\d+\+\b|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d+\+?\s?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?)\b/i;
+
+/**
+ * Splits text into clauses (after each comma/semicolon/colon), then finds
+ * the LAST clause (searching from the end) that contains an outcome marker.
+ * Everything from that clause onward is "the outcome" (protected);
+ * everything before it is "the setup" (may be shortened).  Returns
+ * setup === null when no clause has a marker at all — callers fall back to
+ * treating the whole text as ordinary (non-outcome-protected) content.
+ */
+function splitOutcomeClause(text: string): { setup: string | null; outcome: string } {
+  const clauses = text.trim().split(/(?<=[,;:])\s+/).filter(Boolean);
+  for (let i = clauses.length - 1; i >= 0; i--) {
+    if (OUTCOME_MARKER_PATTERN.test(clauses[i])) {
+      const outcome = stripTrailingPunctuation(clauses.slice(i).join(" "));
+      const setup = i > 0 ? stripTrailingPunctuation(clauses.slice(0, i).join(" ")) : "";
+      return { setup, outcome };
+    }
+  }
+  return { setup: null, outcome: stripTrailingPunctuation(text.trim()) };
+}
+
+/**
+ * Clamps an EXPERIENCE bullet to at most maxChars while NEVER shortening
+ * the outcome clause (BUG B, the highest-priority fix in this pass): only
+ * the setup/context portion is trimmed. If the outcome clause alone (plus a
+ * period) already exceeds maxChars, or the bullet has no identifiable
+ * outcome and doesn't fit any other way, the WHOLE BULLET is dropped
+ * (returns null) rather than emit an impact-less fragment.
+ */
+export function clampBulletPreservingOutcome(text: string, maxChars: number, minChars = 30): string | null {
+  const { setup, outcome } = splitOutcomeClause(text);
+
+  // No identifiable outcome clause at all — fall back to the grammar-safe
+  // (but not outcome-aware) clamp; there's nothing specific to protect.
+  if (setup === null) return clampBulletText(text, maxChars, minChars);
+
+  const outcomeFinal = withTerminalPeriod(outcome);
+  if (outcomeFinal.length > maxChars) {
+    // Can't fit even the outcome alone — an impact-less bullet is worse
+    // than no bullet at all.
+    return null;
+  }
+  if (!setup) return outcomeFinal;
+
+  const connector = ", ";
+  let candidate = `${setup}${connector}${outcomeFinal}`;
+  if (candidate.length <= maxChars) return candidate;
+
+  // Shorten the SETUP only, word by word from its own end, never touching
+  // the outcome. clampBulletText's grammar logic (never dangling on a
+  // conjunction/preposition) applies to the setup fragment too so the seam
+  // still reads cleanly, just without requiring ITS OWN terminal period
+  // (the outcome supplies that).
+  const setupBudget = maxChars - connector.length - outcomeFinal.length;
+  if (setupBudget < 10) return outcomeFinal; // no room for any setup — outcome alone
+  const trimmedSetup = clampBulletText(setup, setupBudget + 1, Math.min(minChars, setupBudget));
+  if (!trimmedSetup) return outcomeFinal;
+  const setupNoPeriod = stripTrailingPunctuation(trimmedSetup);
+  candidate = `${setupNoPeriod}${connector}${outcomeFinal}`;
+  return candidate.length <= maxChars ? candidate : outcomeFinal;
+}
+
 function topBulletsByPriority(bullets: ResumeBullet[], max: number): ResumeBullet[] {
   const candidates = [...bullets].sort((a, b) => a.priority - b.priority).slice(0, max);
   const clamped = candidates
-    .map(b => ({ ...b, text: clampBulletText(b.text, ONE_PAGE_BUDGET.bulletMaxChars) }))
+    .map(b => ({ ...b, text: clampBulletPreservingOutcome(b.text, ONE_PAGE_BUDGET.bulletMaxChars) }))
     .filter((b): b is ResumeBullet => b.text !== null);
 
   // Never leave an entry with zero bullets just because every candidate
-  // failed the grammar check — fall back to the single best (lowest
+  // failed the outcome/grammar check — fall back to the single best (lowest
   // priority number) candidate, plain-clamped, rather than show nothing.
   if (clamped.length === 0 && candidates.length > 0) {
     const best = candidates[0];
@@ -139,16 +216,31 @@ function topBulletsByPriority(bullets: ResumeBullet[], max: number): ResumeBulle
 }
 
 /**
+ * Drops the lowest-relevance ROLES entirely (not just their bullets) when
+ * there are more than maxRoles — new in this pass (BUG D). A role's
+ * relevance proxy is its single best (lowest-numbered) bullet priority,
+ * since "priority" is assigned on a shared global scale across the whole
+ * resume (the same assumption trimToGlobalBulletBudget already relies on).
+ * Roles with no bullets at all are always dropped first.
+ */
+function capRolesByRelevance(experience: ResumeContent["experience"], maxRoles: number): ResumeContent["experience"] {
+  if (experience.length <= maxRoles) return experience;
+  const bestPriority = (e: ResumeContent["experience"][number]) =>
+    e.bullets.length > 0 ? Math.min(...e.bullets.map(b => b.priority)) : Infinity;
+  return [...experience]
+    .sort((a, b) => bestPriority(a) - bestPriority(b))
+    .slice(0, maxRoles);
+}
+
+/**
  * Second-stage trim: after each entry is capped individually to
- * bulletsPerRoleMax, the TOTAL across all entries combined might still
- * exceed the one-page budget (e.g. 5 roles at 4 bullets each = 20). Trims
- * the single globally-lowest-priority bullet (highest priority number)
- * across ALL entries, one at a time, until the total fits — never emptying
- * an entry down to zero. This is the "final clamp trims the lowest-
- * relevance bullet if it still overflows" behavior: a deterministic,
- * one-shot pass over already-known data, not a browser measure-and-trim
- * loop — it never inspects rendered height and never iterates more than
- * the number of bullets that actually need trimming.
+ * bulletsPerRoleMax, the TOTAL across all shown entries might still exceed
+ * the one-page budget. Trims the single globally-lowest-priority bullet
+ * (highest priority number) across ALL entries, one at a time, until the
+ * total fits — never emptying an entry down to zero. This is the "final
+ * clamp trims the lowest-relevance bullet if it still overflows" behavior:
+ * a deterministic, one-shot pass over already-known data, not a browser
+ * measure-and-trim loop.
  */
 function trimToGlobalBulletBudget(
   experience: ResumeContent["experience"],
@@ -192,7 +284,8 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   const seq = RESUME_SPECS[archetype].sectionSequence;
   const usesSelectedImpact = seq.includes("selectedImpact");
 
-  const perEntryCapped = content.experience.map(e => ({
+  const roleCapped = capRolesByRelevance(content.experience, ONE_PAGE_BUDGET.experienceMaxRoles);
+  const perEntryCapped = roleCapped.map(e => ({
     ...e,
     bullets: topBulletsByPriority(e.bullets, ONE_PAGE_BUDGET.bulletsPerRoleMax),
   }));
@@ -207,10 +300,13 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
     education: content.education
       .slice(0, ONE_PAGE_BUDGET.educationMaxEntries)
       .map(ed => ({ ...ed, achievements: null })),
+    // BUG A: certifications are never rendered, for any archetype,
+    // regardless of what the model returned or what's stored — a blanket
+    // product decision, not an archetype-specific one.
+    certifications: null,
   };
 
   if (!seq.includes("leadership")) clamped.leadership = null;
-  if (!seq.includes("certifications")) clamped.certifications = null;
 
   // Grammar-aware, droppable clamp for a keyWins string — an item that can't
   // be trimmed to a complete clause is dropped entirely rather than shown as
@@ -240,7 +336,11 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
       : null;
   }
 
-  return clamped;
+  // BUG C: semantic dedupe — drop any experience bullet that describes the
+  // same underlying engagement as an already-selected top-band item. Runs
+  // last, after both layers have their final content, so it sees exactly
+  // what will actually render.
+  return dedupeExperienceAgainstTopBand(clamped);
 }
 
 // Rough line-count estimate for the rendered document, used only to verify
@@ -267,7 +367,9 @@ export function estimateResumeLineCount(content: ResumeContent, archetype: Resum
     } else if (key === "experience" && content.experience.length > 0) {
       lines += 1;
       for (const e of content.experience) {
-        lines += 1 + (e.location ? 1 : 0) + e.bullets.length;
+        // Bullets are now longer (~200 chars target) — a single logical
+        // bullet line can wrap to ~2 visual lines at this layout's width.
+        lines += 1 + (e.location ? 1 : 0) + e.bullets.reduce((n, b) => n + textLines(b.text), 0);
       }
     } else if (key === "education" && content.education.length > 0) {
       lines += 1;

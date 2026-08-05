@@ -273,3 +273,31 @@ export type ResumeGapQuestion = z.infer<typeof ResumeGapQuestionSchema>;
 export const ResumeGapAnswerResultSchema = z.object({
   newBulletText: z.string().describe("The new bullet, or an empty string if the answer had no usable fact"),
 });
+
+// ---------------------------------------------------------------------------
+// ResumeRequirementMap — returned by /api/resume/requirement-map. The
+// interactive builder's first step: extract this JD's specific requirements
+// and rate how well the profile evidences each one, BEFORE any resume draft
+// exists — see lib/resume-requirement-map.ts for the reactive-probing logic
+// this map feeds.
+// ---------------------------------------------------------------------------
+
+export const RequirementEvidenceSchema = z.object({
+  sourceType: z.enum(["experience", "project", "keyWin"]),
+  sourceId: z.string().describe("Company name (experience) or project name — exact match to the profile"),
+  bulletText: z.string().describe("The exact bullet/description text used as evidence, copied verbatim from the profile"),
+});
+
+export const RequirementCoverageSchema = z.object({
+  requirement: z.string().describe("The specific JD requirement, in the JD's own words where possible"),
+  rating: z.enum(["strong", "weak", "none"]),
+  evidence: RequirementEvidenceSchema.nullable().optional().describe("Omit or null when rating is 'none'"),
+  reasoning: z.string().describe("One line explaining the rating"),
+});
+
+export const ResumeRequirementMapSchema = z.object({
+  requirements: z.array(RequirementCoverageSchema),
+});
+
+export type RequirementCoverage = z.infer<typeof RequirementCoverageSchema>;
+export type ResumeRequirementMap = z.infer<typeof ResumeRequirementMapSchema>;

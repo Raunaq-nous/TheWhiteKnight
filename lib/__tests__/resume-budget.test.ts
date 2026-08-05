@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampToOnePageBudget, clampText, clampBulletText, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET } from "../resume-budget";
+import { clampToOnePageBudget, clampText, clampBulletText, clampBulletPreservingOutcome, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET } from "../resume-budget";
 import type { ResumeContent } from "../resume-schema";
 
 // A rendered bullet must never end in a comma, a dangling conjunction/
@@ -20,9 +20,12 @@ function makeBullet(text: string, priority: number) {
 // Realistic space-separated filler of approximately targetLen characters —
 // unlike a single giant "AAAA..." blob (which has no word boundaries and so
 // doesn't exercise the clamp's real word-boundary logic realistically), this
-// mirrors actual bullet text: many ordinary-length words in a row.
-function longFiller(targetLen: number): string {
-  const words = "Delivered measurable outcomes across multiple engagements for global clients spanning finance technology and infrastructure sectors with substantial impact".split(" ");
+// mirrors actual bullet text: many ordinary-length words in a row. Takes a
+// distinct word pool per call site so unrelated fixture fields (experience
+// bullets vs. keyWins/projects) don't accidentally share enough vocabulary
+// to trip the semantic dedupe (BUG C) against each other.
+function longFiller(targetLen: number, pool = "Delivered measurable outcomes across multiple engagements for global clients spanning finance technology and infrastructure sectors with substantial impact"): string {
+  const words = pool.split(" ");
   let out = "";
   let i = 0;
   while (out.length < targetLen) {
@@ -31,6 +34,7 @@ function longFiller(targetLen: number): string {
   }
   return out.slice(0, targetLen);
 }
+const KEY_WIN_POOL = "Negotiated regional agreements involving distinct partners across separate territories covering logistics procurement and vendor consolidation workstreams entirely";
 
 function richConsultingContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
   return {
@@ -38,16 +42,20 @@ function richConsultingContent(overrides: Partial<ResumeContent> = {}): ResumeCo
     contactLine: "jordan@example.com | 555-0100",
     summary: longFiller(500), // deliberately over budget
     sectionOrder: "experience-first",
+    // 6 entries, each with its OWN distinct priority band (entry i:
+    // 10*i+1..10*i+4) so role-capping/global-trimming behavior is
+    // deterministic — entry 0 is always the most relevant, entry 5 always
+    // the least, with no ties to arbitrate.
     experience: Array.from({ length: 6 }, (_, i) => ({
       company: `Company ${i}`,
       role: "Consultant",
       tenure: "2020 - Present",
       location: "",
       bullets: [
-        makeBullet(longFiller(300), 1), // over budget, must clamp
-        makeBullet("Second bullet.", 2),
-        makeBullet("Third bullet.", 3),
-        makeBullet("Fourth bullet.", 4),
+        makeBullet(i === 0 ? longFiller(300) : `Bullet ${i}-1.`, i * 10 + 1), // entry 0's first bullet is deliberately over budget, must clamp
+        makeBullet(`Bullet ${i}-2.`, i * 10 + 2),
+        makeBullet(`Bullet ${i}-3.`, i * 10 + 3),
+        makeBullet(`Bullet ${i}-4.`, i * 10 + 4),
       ],
     })),
     education: Array.from({ length: 4 }, (_, i) => ({
@@ -58,8 +66,8 @@ function richConsultingContent(overrides: Partial<ResumeContent> = {}): ResumeCo
       achievements: ["Dean's list", "Honors"],
     })),
     skills: Array.from({ length: 6 }, (_, i) => ({ category: `Cat ${i}`, items: Array.from({ length: 10 }, (_, j) => `Skill ${i}-${j}`) })),
-    projects: Array.from({ length: 6 }, (_, i) => ({ name: `Project ${i}`, description: longFiller(250) })),
-    keyWins: Array.from({ length: 6 }, (_, i) => `Win ${i}: ${longFiller(240)}`),
+    projects: Array.from({ length: 6 }, (_, i) => ({ name: `Project ${i}`, description: longFiller(250, KEY_WIN_POOL) })),
+    keyWins: Array.from({ length: 6 }, (_, i) => `Win ${i}: ${longFiller(240, KEY_WIN_POOL)}`),
     leadership: ["Led club A", "Led club B"],
     certifications: [{ name: "Cert A" }],
     ...overrides,
@@ -180,6 +188,77 @@ describe("clampBulletText — never truncates mid-sentence (BUG 2)", () => {
   });
 });
 
+// BUG B — THE MOST IMPORTANT FIX: the outcome clause must survive clamping.
+// The real reported example: profile bullet's outcome ("enabling investment
+// commitment on a previously non-feasible project") was being deleted
+// because the old clamp trimmed from the END, and impact sits at the end of
+// a CAR bullet.
+describe("clampBulletPreservingOutcome — impact must survive (BUG B)", () => {
+  const OG_BULLET =
+    "Led concept selection study for South American national O&G company: designed AI-augmented evaluation framework across financial, technical, and regulatory dimensions; structured C-suite decision document enabling investment commitment on a previously non-feasible project";
+
+  it("the exact reported O&G example renders with its outcome intact", () => {
+    const result = clampBulletPreservingOutcome(OG_BULLET, 240);
+    expect(result).not.toBeNull();
+    expect(result).toContain("enabling investment commitment on a previously non-feasible project");
+  });
+
+  it("preserves the outcome even under a tight cap that forces real trimming", () => {
+    const result = clampBulletPreservingOutcome(OG_BULLET, 150);
+    expect(result).not.toBeNull();
+    expect(result).toContain("enabling investment commitment on a previously non-feasible project");
+    expect(result!.length).toBeLessThanOrEqual(150);
+  });
+
+  it("shortens the SETUP, never the outcome, as the cap tightens", () => {
+    const loose = clampBulletPreservingOutcome(OG_BULLET, 240)!;
+    const tight = clampBulletPreservingOutcome(OG_BULLET, 150)!;
+    // The outcome clause is identical in both — only the setup shrank.
+    const outcome = "structured C-suite decision document enabling investment commitment on a previously non-feasible project.";
+    expect(loose.toLowerCase()).toContain(outcome.toLowerCase());
+    expect(tight.toLowerCase()).toContain(outcome.toLowerCase());
+    expect(tight.length).toBeLessThan(loose.length);
+  });
+
+  it("drops the whole bullet (returns null) when even the outcome alone can't fit — never emits an impact-less bullet", () => {
+    const result = clampBulletPreservingOutcome(OG_BULLET, 40);
+    expect(result).toBeNull();
+  });
+
+  it("preserves specific scope markers ($10.45B, 16 projects, board-level, C-suite) rather than paraphrasing them away", () => {
+    const cases = [
+      { text: "Built a portfolio intelligence cockpit spanning finance, ops, and delivery workstreams across a $10.45B, 16-project, 10-site capital program.", marker: "$10.45B" },
+      { text: "Delivered multi-plant capital program strategy for North American nuclear utility, securing board-level sign-off on the recommendation.", marker: "board-level" },
+      { text: "Led concept selection study for South American O&G company, structuring a C-suite decision document on the investment case.", marker: "C-suite" },
+    ];
+    for (const { text, marker } of cases) {
+      const result = clampBulletPreservingOutcome(text, 240);
+      expect(result).not.toBeNull();
+      expect(result).toContain(marker);
+    }
+  });
+
+  it("no rendered bullet is impact-less when its source contained an outcome clause, across a full clampToOnePageBudget pass", () => {
+    const content = richConsultingContent({
+      experience: [{
+        company: "Bain & Company", role: "Consultant", tenure: "2025 - Present", location: "",
+        bullets: [{ text: OG_BULLET, priority: 1 }],
+      }],
+    });
+    const clamped = clampToOnePageBudget(content, "consulting");
+    const bain = clamped.experience.find(e => e.company === "Bain & Company")!;
+    expect(bain.bullets.length).toBeGreaterThan(0);
+    expect(bain.bullets[0].text).toContain("enabling investment commitment on a previously non-feasible project");
+  });
+
+  it("falls back to the plain grammar-safe clamp when no outcome marker exists at all", () => {
+    const noMarker = "Led a cross-functional workshop series to align stakeholders on a shared roadmap for the coming quarter";
+    const result = clampBulletPreservingOutcome(noMarker, 60);
+    expect(result).not.toBeNull();
+    expect(/[.!?]$/.test(result!)).toBe(true);
+  });
+});
+
 describe("no rendered experience bullet ever ends badly, across a full clampToOnePageBudget pass", () => {
   it("every surviving bullet ends cleanly after clamping a profile full of overflowing, comma/conjunction-ending source bullets", () => {
     const content = richConsultingContent({
@@ -212,8 +291,9 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     for (const e of clamped.experience) {
       expect(e.bullets.length).toBeLessThanOrEqual(ONE_PAGE_BUDGET.bulletsPerRoleMax);
     }
-    // Priority 1 and 2 survive, 3 and 4 are cut, for every entry.
-    expect(clamped.experience[0].bullets.map(b => b.priority).sort()).toEqual([1, 2]);
+    // Entry 0 has the lowest (most relevant) priority band and is never
+    // touched by the global trim — its top 3 (of 4) bullets survive intact.
+    expect(clamped.experience[0].bullets.map(b => b.priority).sort((a, b) => a - b)).toEqual([1, 2, 3]);
   });
 
   it("clamps every surviving bullet's text length", () => {
@@ -225,32 +305,45 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     }
   });
 
-  it("never drops an experience entry — all entries survive, only bullets are trimmed", () => {
-    const content = richConsultingContent();
+  it("drops the weakest roles entirely once there are more than experienceMaxRoles (BUG D) — never more than the cap survive", () => {
+    const content = richConsultingContent(); // 6 entries, distinct priority bands
     const clamped = clampToOnePageBudget(content, "consulting");
-    expect(clamped.experience).toHaveLength(content.experience.length);
+    expect(clamped.experience.length).toBeLessThanOrEqual(ONE_PAGE_BUDGET.experienceMaxRoles);
+    expect(clamped.experience.length).toBe(4);
+    // The 2 lowest-relevance roles (highest priority bands) are gone entirely.
+    const companies = clamped.experience.map(e => e.company);
+    expect(companies).toContain("Company 0");
+    expect(companies).not.toContain("Company 4");
+    expect(companies).not.toContain("Company 5");
   });
 
-  it("allows a genuinely multi-engagement role to keep up to bulletsPerRoleMax (4) distinct bullets, never collapsed to 1", () => {
+  it("does not drop any role when there are experienceMaxRoles or fewer to begin with", () => {
+    const content = richConsultingContent({ experience: richConsultingContent().experience.slice(0, 3) });
+    const clamped = clampToOnePageBudget(content, "consulting");
+    expect(clamped.experience).toHaveLength(3);
+  });
+
+  it("allows a genuinely multi-engagement role to keep up to bulletsPerRoleMax (3) distinct bullets, never collapsed to 1", () => {
     const content = richConsultingContent({
       experience: [{
         company: "Bain & Company", role: "Consultant", tenure: "2020 - Present", location: "",
         bullets: [
-          makeBullet("Delivered nuclear capital program: board-level recommendation, multi-billion-dollar program", 1),
-          makeBullet("Identified CapEx/OpEx optimization for solar project: IRR improvement roadmap", 2),
-          makeBullet("Led concept selection study for O&G company: enabled investment commitment", 3),
-          makeBullet("Built AI platform: RAG document intelligence, agentic workplan generator", 4),
+          makeBullet("Delivered nuclear capital program: board-level recommendation, multi-billion-dollar program.", 1),
+          makeBullet("Identified CapEx/OpEx optimization for solar project: delivered IRR improvement roadmap.", 2),
+          makeBullet("Led concept selection study for O&G company: enabled investment commitment on the project.", 3),
+          makeBullet("Built AI platform: RAG document intelligence, agentic workplan generator, 16-project scope.", 4),
         ],
       }],
     });
     const clamped = clampToOnePageBudget(content, "consulting");
     expect(clamped.experience).toHaveLength(1);
-    expect(clamped.experience[0].bullets).toHaveLength(4); // all 4 distinct engagements survive
+    expect(clamped.experience[0].bullets).toHaveLength(3); // top 3 of 4 distinct engagements survive, not collapsed to 1
   });
 
   it("global bullet trim is asymmetric by relevance — a highly-relevant role keeps more bullets than a barely-relevant one", () => {
-    // 4 entries x 4 bullets = 16 total, over the 12-bullet global cap, so a
-    // real trim must happen — spread across entries by priority, not evenly.
+    // 4 entries (== experienceMaxRoles, so no role gets dropped) x 4 bullets
+    // = 16, capped per-entry to 3 (=12), then over the 10-bullet global cap,
+    // so a real cross-entry trim must still happen.
     const content = richConsultingContent({
       experience: [
         { company: "Most Relevant Co", role: "Consultant", tenure: "2023 - Present", location: "", bullets: [1, 2, 3, 4].map(p => makeBullet(`Engagement ${p}`, p)) },
@@ -260,15 +353,16 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
       ],
     });
     const clamped = clampToOnePageBudget(content, "consulting");
+    expect(clamped.experience).toHaveLength(4); // none dropped — exactly at the role cap
     const total = clamped.experience.reduce((n, e) => n + e.bullets.length, 0);
-    expect(total).toBe(12); // trimmed from 16 down to the global cap
+    expect(total).toBe(10); // trimmed down to the global cap
 
     const mostRelevant = clamped.experience.find(e => e.company === "Most Relevant Co")!;
     const barelyRelevant = clamped.experience.find(e => e.company === "Barely Relevant Co")!;
     // Global trim removes highest priority-number bullets first, regardless
     // of which entry they're in — so the more relevant role (lower numbers)
     // should end up with more surviving bullets than the least relevant one.
-    expect(mostRelevant.bullets).toHaveLength(4); // fully preserved
+    expect(mostRelevant.bullets).toHaveLength(3); // fully preserved at the per-role cap
     expect(mostRelevant.bullets.length).toBeGreaterThan(barelyRelevant.bullets.length);
     expect(barelyRelevant.bullets.length).toBeGreaterThanOrEqual(1); // never emptied entirely
   });

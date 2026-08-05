@@ -6,7 +6,7 @@ import { Profile } from "./profile";
 import type { Application } from "./store";
 import { getModelSettings } from "./model-settings";
 import { ExtractedProfileData, namesMatch, isNewBullet, splitBullets } from "./profile-merge";
-import { ProfileQuestion, ResumeGapQuestion } from "./schemas";
+import { ProfileQuestion, ResumeGapQuestion, RequirementCoverage } from "./schemas";
 
 function providerSettings() {
   const s = getModelSettings();
@@ -95,6 +95,15 @@ export function replaceBulletInProfile(
     ...profile,
     projects: profile.projects.map(p => (namesMatch(p.name, targetId) ? { ...p, description: newText } : p)),
   };
+}
+
+// --- Interactive resume builder, step 1: the JD requirement map ---
+
+export async function generateRequirementMap(profile: Profile, app: Application): Promise<RequirementCoverage[]> {
+  const { requirements } = await postJson<{ requirements: RequirementCoverage[] }>("/api/resume/requirement-map", {
+    profile, app, providerSettings: providerSettings(),
+  });
+  return requirements;
 }
 
 // --- Job-scoped gap analysis + write-back (resume rebuild #5) ---

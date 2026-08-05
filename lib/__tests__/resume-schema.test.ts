@@ -128,13 +128,19 @@ describe("ResumeContentSchema nullable optional fields", () => {
 describe("resolveSectionSequence", () => {
   const base = (): ResumeContent => ResumeContentSchema.parse(baseResumeContent()) as ResumeContent;
 
-  it("uses the stamped sequence when present, appending forgotten content-bearing keys", () => {
+  it("uses the stamped sequence when present, appending forgotten content-bearing keys (but never certifications — BUG A)", () => {
     const r = { ...base(), sectionSequence: ["summary", "experience"] as ResumeContent["sectionSequence"] };
     const seq = resolveSectionSequence(r);
     expect(seq.slice(0, 2)).toEqual(["summary", "experience"]);
     expect(seq).toContain("education");
     expect(seq).toContain("skills");
-    expect(seq).toContain("certifications");
+    expect(seq).not.toContain("certifications");
+  });
+
+  it("strips certifications even when the stamped sequence explicitly lists it (BUG A: unconditional, any render path)", () => {
+    const r = { ...base(), sectionSequence: ["summary", "experience", "certifications", "education"] as ResumeContent["sectionSequence"] };
+    const seq = resolveSectionSequence(r);
+    expect(seq).not.toContain("certifications");
   });
 
   it("falls back to legacy order from sectionOrder for pre-sequence content", () => {
@@ -302,6 +308,30 @@ describe("resumeContentToMarkdown with the new sections", () => {
     expect(headings[headings.length - 1]).toBe("## Education");
     // No heading can ever appear twice.
     expect(new Set(headings).size).toBe(headings.length);
+  });
+
+  it("strips certifications UNCONDITIONALLY, even for an archetype whose spec used to allow them (BUG A: blanket rule, not archetype-specific)", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      sectionSequence: null,
+      certifications: [{ name: "AWS Certified", issuer: "Amazon" }],
+    }) as ResumeContent;
+
+    for (const archetype of ["product", "ai_ml_engineering", "finance_ib", "vc_investing", "general"] as const) {
+      const md = resumeContentToMarkdown(parsed, archetype);
+      expect(md, `${archetype} should never render certifications`).not.toContain("## Certifications");
+      expect(md, `${archetype} should never render certifications`).not.toContain("AWS Certified");
+    }
+  });
+
+  it("strips certifications even with NO archetype known at all (true legacy fallback)", () => {
+    const parsed = ResumeContentSchema.parse({
+      ...(baseResumeContent() as any),
+      sectionSequence: null,
+      certifications: [{ name: "AWS Certified" }],
+    }) as ResumeContent;
+    const md = resumeContentToMarkdown(parsed); // no archetype argument at all
+    expect(md).not.toContain("## Certifications");
   });
 
   it("no section heading can ever render twice, for any resolved sequence", () => {

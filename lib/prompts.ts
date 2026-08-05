@@ -202,14 +202,15 @@ function resumeOutputFormatInstructions(): string {
   "summary": string,
   "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),
   "subFocus": string (the specific sub-focus/practice-area of THIS role within its archetype, from your Step 1 analysis — 1 short phrase, e.g. "Capital Excellence: capital project delivery, cost/schedule optimization"),
-  "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; one line each, part of the same 3-4 total item budget as "projects" below),
+  "keyWins": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; one line each, exactly 3 total combined with "projects" below),
   "sectionOrder": "education-first" | "experience-first",
-  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ] (2-4 bullets per entry, one per distinct engagement, each ONE line — see ONE-PAGE CONTENT BUDGET and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "text": string, "priority": number } ] } ] (2-3 bullets per entry, one per distinct engagement, each ONE line ending in its quantified outcome — see ONE-PAGE CONTENT BUDGET and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
   "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
   "skills": [ { "category": string, "items": string[] } ],
-  "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used),
-  "certifications": [ { "name": string, "issuer": string (optional), "date": string (optional) } ] (optional, omit key entirely if none qualify)
+  "projects": [ { "name": string, "description": string, "repoUrl": string (optional) } ] (optional, omit key entirely if not used)
 }
+
+NEVER output a "certifications" field at all, under any circumstances — omit the key entirely regardless of what the profile contains.
 
 Do NOT output a "sectionSequence" field — the system sets the final section order from the archetype spec.
 
@@ -265,33 +266,36 @@ WHAT "QUANTIFIED IMPACT" MEANS HERE — prefer these units of proof over generic
 
 LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
 
-ONE-PAGE CONTENT BUDGET — this resume is generated to fit ONE page from the start, not trimmed after the fact. Write within these limits directly; a server-side clamp enforces them afterward as a backstop, but writing over budget just means your best material gets cut arbitrarily instead of by your own judgment:
+ONE-PAGE CONTENT BUDGET — this resume is generated to fit ONE page from the start, not trimmed after the fact. Write within these limits directly; a server-side clamp enforces them afterward as a backstop, but writing over budget just means your best material gets cut arbitrarily instead of by your own judgment. This budget is TIGHTER on counts than before specifically because bullets are now allowed to run longer — fewer, richer bullets, not more, short ones:
 - Summary: EXACTLY 2 lines max, ~200 characters max.
-- Key Projects & Impact (if this archetype uses it): 3-4 items total, ONE line each.
-- Experience: EVERY entry must appear. Each entry gets 2-4 bullets — see THE CRITICAL RULE below — and EVERY bullet is its own line, max ~150 characters (~1.5 lines), a crisp compressed clause, never a paragraph. If a project needs more than one line of detail, that extra depth belongs in Key Projects & Impact, not stretched into a giant experience bullet.
+- Key Projects & Impact (if this archetype uses it): exactly 3 items, ONE line each.
+- Experience: show at most 4 roles — the ${expCount} entries in the profile are pre-ranked by relevance above; if there are more than 4, the weakest for THIS JD will be dropped entirely by the automatic clamp, so spend your effort on the top 4, not evenly across all of them. Each shown role gets 2-3 bullets (never 1, never more than 3), and EVERY bullet is ONE line, target ~200 characters, hard ceiling 240 — a crisp, compressed clause, never a paragraph. If a project needs more depth than that, that depth belongs in Key Projects & Impact, not stretched into a giant experience bullet. Roughly 10 bullets total across the whole Experience section.
 - Skills: max 3 categories, max 6 items each.
 - Education: one line per entry (institution/degree/years), no achievements bullets.
 
-THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES — read this literally, it is the most common failure mode: a profile experience entry is a JOB, not a single project. Its bullets frequently describe MULTIPLE DISTINCT ENGAGEMENTS — separate clients, separate deals, separate initiatives done during that one role. When that's true:
-- Render 2-4 SEPARATE bullets under that entry, each covering ONE distinct engagement. NEVER collapse multiple distinct engagements into one generic summary bullet for the role (e.g. "Led various client engagements across sectors" is a failure — name the actual distinct engagements instead, each as its own bullet).
-- Select WHICH engagements to surface, and how many (2 vs 4), by relevance to THIS job's target priorities — the most JD-relevant role can carry more bullets than a barely-relevant older role.
+THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES — read this literally, it is a common failure mode: a profile experience entry is a JOB, not a single project. Its bullets frequently describe MULTIPLE DISTINCT ENGAGEMENTS — separate clients, separate deals, separate initiatives done during that one role. When that's true:
+- Render 2-3 SEPARATE bullets under that entry, each covering ONE distinct engagement. NEVER collapse multiple distinct engagements into one generic summary bullet for the role (e.g. "Led various client engagements across sectors" is a failure — name the actual distinct engagements instead, each as its own bullet).
+- Select WHICH engagements to surface by relevance to THIS job's target priorities — the most JD-relevant role can carry more bullets than a barely-relevant older role.
 - The bullets under each entry above are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING below. Pick from the top of that ranking, then apply the SUB-FOCUS lens to refine the choice; do not ignore the ranking and pick arbitrarily.
 - Direct delivery beats tool-building when both are plausible picks: if two bullets from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics.
 
-BULLET FORMULA — every single bullet, no exceptions:
+BULLET FORMULA — every single bullet, no exceptions, and THIS IS THE MOST IMPORTANT RULE IN THIS PROMPT: a bullet that loses its outcome is a failed bullet, full stop.
 - Start with a strong action verb (Led, Designed, Delivered, Built, Identified, Structured, Developed, Formulated).
-- PARC/XYZ logic in one clause: the problem or context, what you specifically did, the measurable result.
-- END with a quantified outcome: $ value, %, program/deal size, headcount, timeline, IRR. If the source bullet has no explicit number, use the strongest TRUE scope marker already present in the profile text (e.g. "$10.45B", "16 projects", "10+ sites", "12+ mandates") — NEVER invent a number or scale that is not already in the profile.
-- The FIRST bullet under the most relevant/most recent role must be the single strongest quantified result available anywhere in the profile for this JD — priority 1, always.
-- HARD LENGTH RULE: every bullet must be UNDER 150 CHARACTERS, INCLUDING the quantified ending — count characters as you write, do not write the full thought and then plan to cut it. This is not an editing pass; write the complete, compressed clause from scratch. NEVER write a bullet you expect to be truncated afterward.
-- Every bullet MUST be a complete, grammatical sentence/clause ending in a period. NEVER end a bullet on a dangling conjunction or preposition ("...and", "...with", "...for", "...used for", "...designing governance and") and NEVER end with a trailing comma — those are incomplete-sentence failures, not acceptable output, even under length pressure. If the full thought does not fit under 150 characters, cut earlier content or drop a clause, but the bullet you output must always be a finished sentence.
+- Structure: action verb -> the specific engagement/client/deal -> the measurable, quantified result. All three parts are required. A bullet that only says what you did, without what it produced, is incomplete — "what I did" is not enough, it must also say "and what it produced."
+- The outcome clause is NOT optional decoration at the end you can cut under length pressure — it is the entire point of the bullet. If you are running long, compress the SETUP/CONTEXT (the "for [client], across [dimensions]" part), never the result.
+- END with the quantified outcome: $ value, %, program/deal size, headcount, timeline, IRR. If the source bullet has no explicit number, use the strongest TRUE scope marker already present in the profile text — preserve these exactly, do not paraphrase them away: "$10.45B", "16 projects", "10+ sites", "12+ mandates", "board-level", "C-suite", "multi-billion-dollar". NEVER invent a number or scale that is not already in the profile.
+- The FIRST bullet under the most relevant/most recent role is the single most-read line on the page. It must always hold the single strongest quantified result available anywhere in the profile relevant to THIS JD — priority 1, always.
+- HARD LENGTH RULE: target ~200 characters per bullet, never exceed 240, INCLUDING the quantified ending — count characters as you write, do not write the full thought and then plan to cut it. This is not an editing pass; write the complete, compressed clause from scratch, compressing the SETUP first if you're running long, never the outcome. NEVER write a bullet you expect to be truncated afterward.
+- Every bullet MUST be a complete, grammatical sentence/clause ending in a period. NEVER end a bullet on a dangling conjunction or preposition ("...and", "...with", "...for", "...used for", "...designing governance and") and NEVER end with a trailing comma — those are incomplete-sentence failures, not acceptable output, even under length pressure. If the full thought does not fit, cut earlier content, never the result, but the bullet you output must always be a finished sentence.
 
 EXPERIENCE INCLUSION RULES:
-- There are ${expCount} experience entries in the profile. You MUST include ALL ${expCount} of them.
-- MUST NOT drop entire experience entries, even a weak one — trim its bullets instead (down to 2, never below 2 for an entry that has 2+ distinct engagements available).
-- Preserve the exact company name and tenure for every entry.
+- There are ${expCount} experience entries in the profile, already ranked above by relevance to this JD. Show at most 4 roles — write for all of them if you want, but budget your best effort on the strongest 4, since a weaker 5th+ role may be dropped entirely by the automatic one-page clamp.
+- Within a shown role, MUST NOT drop it to zero bullets — trim to its 2-3 strongest instead.
+- Preserve the exact company name and tenure for every entry you include.
 
-NO REPETITION — if a fact, engagement, or number appears in Key Projects & Impact, do NOT also restate it (even paraphrased) in the summary or in an experience bullet. Each fact lives in exactly one place. Pick the single best home for it: the Key Projects & Impact band if it's a headline win, otherwise the relevant experience bullet. These are two distinct layers — zero overlap between them.
+NO REPETITION — SEMANTIC, not string-matching: if a fact or engagement appears in Key Projects & Impact, do NOT also restate the SAME underlying engagement (same client/company + same project) in an experience bullet, even if phrased completely differently — "Built a Series A financial model for an EMEA B2B marketplace" and "facilitated a multi-million-dollar raise for an EMEA marketplace" are THE SAME engagement and must appear in exactly one place, not both. Each fact lives in exactly one place. Pick the single best home for it: the Key Projects & Impact band if it's a headline win, otherwise the relevant experience bullet. A deterministic server-side check also enforces this as a backstop, but do not rely on it — pick distinct engagements for each layer yourself.
+
+CERTIFICATIONS: NEVER include a certifications section or field, regardless of what the archetype instructions below say and regardless of what the profile contains. This is an absolute rule, not archetype-specific.
 
 PROFILE SUMMARY:
 - ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
@@ -304,7 +308,7 @@ ARCHETYPE — ${spec.label}:
 - BULLET STYLE: ${spec.bulletPattern}
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
-- CERTIFICATIONS: ${spec.certificationPolicy}
+- CERTIFICATIONS: omit entirely — never include a certifications section, for any archetype (see the absolute CERTIFICATIONS rule above).
 ${spec.sectionSequence.includes("selectedImpact") ? '- KEY PROJECTS & IMPACT — MANDATORY, this is not optional for this archetype, and it renders as a HIGHLIGHTED block immediately after the summary, before experience. Populate BOTH fields, they render together under ONE combined heading, never as two separate sections: a "keyWins" array of the highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role), AND a "projects" array with ONLY the profile projects that most directly match THIS role\'s sub-focus. 3-4 items TOTAL across both arrays combined, ONE line each, most relevant first, each with a real number from the profile where the profile has one. This is the most relevant material for THIS specific JD, ranked and pulled from the full profile — not an afterthought. Do not leave "keyWins" empty when the profile has quantified achievements available — search across every experience entry for them.' : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.includeKeyWins) ? '- KEY WINS: include a "keyWins" array of the 3-4 highest-impact, quantified achievements pulled from across ALL experience entries (not just the current role). Each one line, each with a real number from the profile. These are the resume\'s headline band — pick the wins that best match THIS role\'s sub-focus, not generic wins.' : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.sectionSequence.includes("projects")) ? '- RELEVANT PROJECTS: include a "projects" array with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, one line each, most relevant first. If no project genuinely matches, omit the key.' : ""}
@@ -1256,6 +1260,55 @@ RULES:
 4. Do not change parts of the bullet unrelated to the question/answer.
 
 Output ONLY raw JSON: { "rewrittenText": "the rewritten bullet" }. No preamble, no explanation.`;
+}
+
+// ---------------------------------------------------------------------------
+// Interactive resume builder, step 1: the JD requirement map. Extracts this
+// JD's SPECIFIC requirements and rates how well the FULL profile already
+// evidences each one — before any resume draft exists. This is the
+// foundation the checkbox draft's reactive probing (lib/resume-requirement-
+// map.ts) and the JD-specific gap questions are both built on.
+// ---------------------------------------------------------------------------
+
+export function requirementMapPrompt(profile: Profile, app: Application): string {
+  return `You are analyzing how well ${profile.name}'s profile covers the ${app.role} role at ${app.company}'s requirements, BEFORE writing any resume content. This is a diagnostic pass, not a drafting pass.
+
+${buildProfileContext(profile)}
+
+---
+
+${buildJDContext(app)}
+
+---
+
+TASK:
+
+STEP 1 — Extract 4-6 SPECIFIC requirements this JD most cares about. Go beneath generic archetype language: name the actual practice area, deliverable type, or capability the JD keeps returning to (its own section headers, repeated phrases, and the key requirements list are the strongest signal).
+
+STEP 2 — For EACH requirement, search the ENTIRE profile (every experience bullet across every role, every project) for the single best piece of matching evidence, and rate coverage:
+- "strong": a specific bullet or project directly and truthfully proves this requirement, ideally with a real number or scope marker.
+- "weak": something in the profile is related but generic, unquantified, or only tangential (e.g. a bullet that touches the topic as a side detail, or a tool-building bullet standing in for direct delivery).
+- "none": nothing in the profile addresses this requirement at all — do not force a stretch match.
+
+For "strong" or "weak", identify the EXACT source: whether it's an experience bullet (name the company) or a project (name the project), and copy the bulletText VERBATIM from the profile above — this exact string is used later to track whether that evidence is still present if the user edits their resume, so it must match character-for-character.
+
+${RESUME_BASE_RULES}
+
+Do not invent evidence. If nothing in the profile addresses a requirement, rating must be "none" and evidence must be omitted — never fabricate a bullet or stretch an unrelated one into "strong"/"weak" coverage just to avoid a gap.
+
+Output ONLY raw JSON matching exactly this shape, nothing before or after:
+{
+  "requirements": [
+    {
+      "requirement": "the specific JD requirement, in the JD's own words where possible",
+      "rating": "strong" | "weak" | "none",
+      "evidence": { "sourceType": "experience" | "project", "sourceId": "exact company or project name from the profile", "bulletText": "exact bullet/description text, copied verbatim" } (omit entirely when rating is "none"),
+      "reasoning": "one line explaining the rating"
+    }
+  ]
+}
+
+Output the JSON now. No preamble, no markdown code fence, no explanation.`;
 }
 
 // ---------------------------------------------------------------------------

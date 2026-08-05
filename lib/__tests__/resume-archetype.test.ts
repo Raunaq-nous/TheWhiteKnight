@@ -169,7 +169,7 @@ describe("RESUME_SPECS", () => {
 
   it("finance_ib and vc_investing both ban a summary; only finance_ib also bans projects/leadership", () => {
     expect(RESUME_SPECS.finance_ib.omittedSections).toEqual(expect.arrayContaining(["summary", "projects", "leadership"]));
-    expect(RESUME_SPECS.vc_investing.omittedSections).toEqual(["summary"]);
+    expect(RESUME_SPECS.vc_investing.omittedSections).toEqual(["summary", "certifications"]);
   });
 });
 

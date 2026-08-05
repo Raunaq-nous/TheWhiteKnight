@@ -167,27 +167,30 @@ const LEGACY_EXP_FIRST: ResumeSectionKey[] = ["summary", "experience", "projects
  * (stamped or archetype-derived) explicitly asked for it.
  */
 export function resolveSectionSequence(r: ResumeContent, archetype?: ResumeArchetype): ResumeSectionKey[] {
-  const base = r.sectionSequence?.length
+  // BUG A: certifications are never rendered, period — strip the key out of
+  // the resolved base itself (not just the auto-append skip list below) so
+  // even an explicitly stamped or stored sectionSequence that still lists
+  // "certifications" (e.g. content saved before this rule existed) can
+  // never surface a certifications section, on any render path.
+  const base: ResumeSectionKey[] = (r.sectionSequence?.length
     ? [...r.sectionSequence]
     : archetype
       ? [...RESUME_SPECS[archetype].sectionSequence]
-      : [...(r.sectionOrder === "education-first" ? LEGACY_EDU_FIRST : LEGACY_EXP_FIRST)];
+      : [...(r.sectionOrder === "education-first" ? LEGACY_EDU_FIRST : LEGACY_EXP_FIRST)]
+  ).filter((key): key is ResumeSectionKey => key !== "certifications");
 
   // "selectedImpact" already renders keyWins + projects data combined —
   // never auto-append them standalone too, or the same data would render
   // twice (once combined as "## Key Projects & Impact", once as separate
   // "## Key Wins"/"## Relevant Projects" sections).
-  const skip = new Set<ResumeSectionKey>(["selectedImpact"]);
+  const skip = new Set<ResumeSectionKey>(["selectedImpact", "certifications"]);
   if (base.includes("selectedImpact")) {
     skip.add("keyWins");
     skip.add("projects");
   }
-  // When the archetype is known, its omittedSections (e.g. consulting bans
-  // certifications/leadership) must win even over the "never silently drop
-  // saved data" append — otherwise stray certification data left over from
-  // an older edit/generation would still surface a "## Certifications"
-  // section on an archetype that explicitly excludes it (a real, reported
-  // regression).
+  // When the archetype is known, its other omittedSections (e.g. consulting
+  // also bans leadership) must win even over the "never silently drop saved
+  // data" append below.
   if (archetype) {
     for (const omitted of RESUME_SPECS[archetype].omittedSections) skip.add(omitted);
   }
