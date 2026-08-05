@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Profile } from "../profile";
 import type { Application } from "../store";
-import { afScoringPrompt, resumePrompt, coverLetterPrompt } from "../prompts";
+import { afScoringPrompt, resumePrompt, coverLetterPrompt, requirementMapPrompt } from "../prompts";
 
 // Minimal deterministic mocks — stable inputs make stable snapshots.
 
@@ -235,20 +235,37 @@ describe("prompt builder snapshots", () => {
   it("resumePrompt enforces the one-page content budget structurally, not via post-hoc trimming (BUG: 2-page exports)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("ONE-PAGE CONTENT BUDGET");
-    expect(consulting).toMatch(/2-4 bullets/);
-    expect(consulting).toMatch(/3-4 items total/);
+    expect(consulting).toMatch(/2-3 bullets/);
+    expect(consulting).toMatch(/exactly 3 items/);
+    expect(consulting).toMatch(/at most 4 roles/);
   });
 
-  it("resumePrompt requires 2-4 SEPARATE bullets per distinct engagement, not one generic bullet per role", () => {
+  it("resumePrompt requires 2-3 SEPARATE bullets per distinct engagement, not one generic bullet per role", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES");
     expect(consulting).toContain("NEVER collapse multiple distinct engagements into one generic summary bullet");
   });
 
-  it("resumePrompt's bullet formula requires a quantified ending and forbids inventing numbers", () => {
+  it("resumePrompt's bullet formula requires a quantified ending and forbids inventing numbers (BUG B)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("BULLET FORMULA");
     expect(consulting).toContain("NEVER invent a number or scale");
+    expect(consulting).toContain("a bullet that loses its outcome is a failed bullet");
+    expect(consulting).toContain("never the outcome");
+  });
+
+  it("resumePrompt bans certifications unconditionally, for every archetype (BUG A)", () => {
+    for (const archetype of ["consulting", "product", "ai_ml_engineering", "finance_ib", "vc_investing", "general"] as const) {
+      const output = resumePrompt(MOCK_PROFILE, MOCK_APP, archetype);
+      expect(output).toContain("NEVER output a \"certifications\" field at all");
+    }
+  });
+
+  it("resumePrompt's dedupe rule is semantic (same engagement, different phrasing), not string-matching (BUG C)", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("NO REPETITION");
+    expect(consulting).toContain("SEMANTIC, not string-matching");
+    expect(consulting).toContain("EMEA B2B marketplace");
   });
 
   it("resumePrompt's Key Projects & Impact instruction says it renders immediately after the summary, before experience", () => {
@@ -292,5 +309,26 @@ describe("prompt builder snapshots", () => {
   it("coverLetterPrompt includes no em dashes rule", () => {
     const output = coverLetterPrompt(MOCK_PROFILE, MOCK_APP);
     expect(output).toContain("No em dashes");
+  });
+});
+
+describe("requirementMapPrompt — interactive builder step 1", () => {
+  it("asks for 4-6 specific requirements rated strong/weak/none with verbatim evidence", () => {
+    const output = requirementMapPrompt(MOCK_PROFILE, MOCK_APP);
+    expect(output).toContain('"strong" | "weak" | "none"');
+    expect(output).toContain("copied verbatim");
+    expect(output).toContain("4-6 SPECIFIC requirements");
+  });
+
+  it("forbids fabricating evidence for uncovered requirements", () => {
+    const output = requirementMapPrompt(MOCK_PROFILE, MOCK_APP);
+    expect(output).toContain("Do not invent evidence");
+    expect(output).toContain('rating must be "none"');
+  });
+
+  it("includes the full profile and JD context", () => {
+    const output = requirementMapPrompt(MOCK_PROFILE, MOCK_APP);
+    expect(output).toContain("Acme AI");
+    expect(output).toContain("OpenAI");
   });
 });

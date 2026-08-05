@@ -15,12 +15,13 @@ import { ContactsPanel } from "../contacts-panel";
 import { FormQASection } from "../form-qa-section";
 import { ProfileEnrichmentBanner, ProfileSuggestion } from "../profile-enrichment-banner";
 import { ResumeContent, resumeContentToMarkdown } from "../../lib/resume-schema";
-import { ResumeArchetype, RESUME_ARCHETYPE_LABELS } from "../../lib/resume-archetype";
+import { ResumeArchetype, RESUME_ARCHETYPE_LABELS, withArchetypeSequence } from "../../lib/resume-archetype";
 import { ResumeExportView } from "../resume-document";
 import { extractProfileData } from "../../lib/profile-enrichment";
 import { diffExtractionAgainstProfile, MergeDiffItem } from "../../lib/profile-merge";
 import { ProfileMergeReview } from "../profile-merge-review";
 import { ResumeGapFillBox } from "../resume-gap-fill-box";
+import { ResumeBuilder } from "../resume-builder";
 import { showToast } from "../../lib/toast";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
@@ -61,6 +62,7 @@ function ApplicationDetail() {
   const [resumeGenerating, setResumeGenerating] = useState(false);
   const [resumeGenError, setResumeGenError] = useState("");
   const [showResumeExport, setShowResumeExport] = useState(false);
+  const [showResumeBuilder, setShowResumeBuilder] = useState(false);
   const [resumeRefineText, setResumeRefineText] = useState("");
   const [resumeRefining, setResumeRefining] = useState(false);
   const [resumeRefineError, setResumeRefineError] = useState("");
@@ -77,10 +79,18 @@ function ApplicationDetail() {
       setNoteText(found.notes ?? "");
       setNextActionText(found.nextAction ?? "");
       if (found.resumeMarkdown) setSavedResume(found.resumeMarkdown);
-      if (found.resumeContent) setResumeContent(found.resumeContent);
       if (found.resumeArchetype) {
         setResumeArchetypeChoice(found.resumeArchetype);
         setResumeArchetypeUsed(found.resumeArchetype);
+      }
+      if (found.resumeContent) {
+        // BUG A: a resume saved before sectionSequence existed (or from any
+        // stale record) must never render in legacy order — re-stamp it
+        // against the CURRENT archetype spec the moment it's loaded, before
+        // anything renders, rather than relying only on the render path's
+        // own fallback.
+        const needsRenormalize = !found.resumeContent.sectionSequence?.length && found.resumeArchetype;
+        setResumeContent(needsRenormalize ? withArchetypeSequence(found.resumeContent, found.resumeArchetype!) : found.resumeContent);
       }
     }
     setLoadingApp(false);
@@ -793,6 +803,9 @@ window.addEventListener('load', function() {
               <button className="btn btn-primary" onClick={handleGenerateResume} disabled={resumeGenerating}>
                 {resumeGenerating ? "GENERATING..." : "TAILOR RESUME"}
               </button>
+              <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => setShowResumeBuilder(true)}>
+                BUILD RESUME (INTERACTIVE)
+              </button>
               {resumeArchetypeUsed && !resumeGenerating && (
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--text-tertiary)" }}>
                   as {RESUME_ARCHETYPE_LABELS[resumeArchetypeUsed]}
@@ -1389,6 +1402,17 @@ window.addEventListener('load', function() {
     </main>
     {showResumeExport && resumeContent && (
       <ResumeExportView content={resumeContent} archetype={resumeArchetypeUsed} onClose={() => setShowResumeExport(false)} />
+    )}
+    {showResumeBuilder && app && (
+      <ResumeBuilder
+        app={app}
+        onClose={() => setShowResumeBuilder(false)}
+        onConfirm={async (data, archetype) => {
+          await persistResumeContent(data, archetype);
+          setShowResumeBuilder(false);
+          setShowResumeExport(true);
+        }}
+      />
     )}
     </>
   );
