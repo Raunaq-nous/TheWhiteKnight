@@ -19,7 +19,7 @@ function baseResumeContent(): unknown {
         role: "PM",
         tenure: "2022 - Present",
         location: null,
-        bullets: [{ text: "Shipped a thing", priority: 1 }],
+        bullets: [{ sourceBulletId: "e_base1", text: "Shipped a thing", priority: 1 }],
       },
     ],
     education: [
@@ -88,7 +88,7 @@ describe("ResumeContentSchema nullable optional fields", () => {
     input.education[0].field = "Computer Science";
     input.education[0].gpa = "3.8";
     input.education[0].achievements = ["Dean's list"];
-    input.projects = [{ name: "Side Project", description: "A thing I built" }];
+    input.projects = [{ sourceBulletId: "p_side", name: "Side Project", description: "A thing I built" }];
     input.certifications = [{ name: "AWS Certified" }];
     input.leadership = ["Led the campus coding club"];
     const result = ResumeContentSchema.safeParse(input);
@@ -239,7 +239,7 @@ describe("resumeContentToMarkdown with the new sections", () => {
         role: "Consultant",
         tenure: "2020 - Present",
         location: null,
-        bullets: [{ text: "Led capital project reviews", priority: 1 }],
+        bullets: [{ sourceBulletId: "e_bain1", text: "Led capital project reviews", priority: 1 }],
       }],
     }) as ResumeContent;
     const md = resumeContentToMarkdown(parsed);
@@ -251,7 +251,8 @@ describe("resumeContentToMarkdown with the new sections", () => {
     const parsed = ResumeContentSchema.parse({
       ...(baseResumeContent() as any),
       keyWins: ["Closed a $10M deal"],
-      projects: [{ name: "Cost Tracker", description: "Built a capital spend dashboard" }],
+      keyWinIds: ["e_base1"],
+      projects: [{ sourceBulletId: "p_costtracker", name: "Cost Tracker", description: "Built a capital spend dashboard" }],
       sectionSequence: ["summary", "selectedImpact", "experience", "education", "skills"],
     }) as ResumeContent;
     const md = resumeContentToMarkdown(parsed);
@@ -293,7 +294,8 @@ describe("resumeContentToMarkdown with the new sections", () => {
       ...(baseResumeContent() as any),
       sectionSequence: null,
       keyWins: ["Delivered a $10.45B portfolio intelligence cockpit."],
-      projects: [{ name: "Cost Tracker", description: "Built a capital spend dashboard." }],
+      keyWinIds: ["e_base1"],
+      projects: [{ sourceBulletId: "p_costtracker", name: "Cost Tracker", description: "Built a capital spend dashboard." }],
       certifications: [{ name: "PMP" }],
     }) as ResumeContent;
 
@@ -339,7 +341,8 @@ describe("resumeContentToMarkdown with the new sections", () => {
       ...(baseResumeContent() as any),
       sectionSequence: ["summary", "selectedImpact", "experience", "skills", "education"],
       keyWins: ["Win A"],
-      projects: [{ name: "P1", description: "Did a thing." }],
+      keyWinIds: ["e_base1"],
+      projects: [{ sourceBulletId: "p_p1", name: "P1", description: "Did a thing." }],
       leadership: ["Led a club"],
       certifications: [{ name: "Cert A" }],
     }) as ResumeContent;

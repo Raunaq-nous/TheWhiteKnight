@@ -3,6 +3,7 @@ import { checkRateLimit } from "../../../../lib/rate-limit";
 import { chatJSON, ProviderSettings } from "../../../../lib/ai-client";
 import { ResumeRequirementMapSchema, ResumeRequirementMap } from "../../../../lib/schemas";
 import { requirementMapPrompt } from "../../../../lib/prompts";
+import { listProfileBullets } from "../../../../lib/profile-bullets";
 import type { Profile } from "../../../../lib/profile";
 import type { Application } from "../../../../lib/store";
 
@@ -41,7 +42,20 @@ export async function POST(req: NextRequest) {
       ResumeRequirementMapSchema,
     );
 
-    return NextResponse.json({ requirements: data.requirements ?? [] });
+    // Best-effort tag each requirement's evidence with its real profile
+    // bullet id, by exact verbatim text match (bulletText is required to be
+    // copied verbatim from the profile — see RequirementEvidenceSchema) —
+    // this puts the requirement map on the same id space the resume
+    // generator selects from and the checkbox draft/dedupe key off, without
+    // needing the model to know about ids at all.
+    const bulletsByText = new Map(listProfileBullets(profile).map(b => [b.text.trim(), b.id]));
+    const requirements = (data.requirements ?? []).map(r =>
+      r.evidence
+        ? { ...r, evidence: { ...r.evidence, sourceBulletId: bulletsByText.get(r.evidence.bulletText.trim()) ?? null } }
+        : r,
+    );
+
+    return NextResponse.json({ requirements });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Requirement map generation failed" }, { status: 500 });
   }

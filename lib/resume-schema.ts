@@ -7,6 +7,17 @@ import { normalizeTextForATS } from "./ats";
 import { RESUME_SPECS, ResumeArchetype } from "./resume-archetype";
 
 export const ResumeBulletSchema = z.object({
+  // The id of a real profile bullet (from the AVAILABLE BULLETS list handed
+  // to the model — see lib/profile-bullets.ts). This is the ONLY thing that
+  // determines the rendered text: lib/resume-selection.ts resolves it back
+  // to the exact profile bullet (or a compressed variant that preserves its
+  // outcome clause) server-side, ignoring whatever the model wrote in
+  // "text" below. A bullet whose id doesn't resolve to a real profile
+  // bullet is dropped, never rendered — selection, not rewriting.
+  sourceBulletId: z.string(),
+  // Not trusted for rendering — see sourceBulletId above. Kept in the
+  // schema so the model has somewhere to put its own working copy without
+  // failing validation; always overwritten server-side.
   text: z.string(),
   // 1 = most relevant to this JD / keep at all costs. Higher = cut first when
   // the rendered page overflows. The model ranks these; the fit loop trims them.
@@ -44,6 +55,10 @@ export const ResumeSkillGroupSchema = z.object({
 });
 
 export const ResumeProjectSchema = z.object({
+  // Same contract as ResumeBulletSchema.sourceBulletId above: the id of a
+  // real profile project bullet. name/description/repoUrl are resolved from
+  // the matching profile project server-side, not trusted from the model.
+  sourceBulletId: z.string(),
   name: z.string(),
   description: z.string(),
   repoUrl: z.string().nullable().optional(),
@@ -81,7 +96,8 @@ export const ResumeContentSchema = z.object({
   summary: z.string(),
   targetPriorities: z.array(z.string()).nullable().optional().describe("The 3-5 things the target JD most values, extracted before writing — drives selection and framing"),
   subFocus: z.string().nullable().optional().describe("The specific sub-focus/practice-area of THIS role within its archetype, e.g. 'Capital Excellence — capital project delivery, cost/schedule optimization' vs 'Performance Improvement — operational turnaround, cost reduction'. Drives which wins/projects get foregrounded."),
-  keyWins: z.array(z.string()).nullable().optional().describe("3-4 highest-impact quantified achievements pulled from across all experience — archetypes that include a Key Wins band"),
+  keyWins: z.array(z.string()).nullable().optional().describe("Resolved server-side from keyWinIds — the model should not write text here directly, see keyWinIds"),
+  keyWinIds: z.array(z.string()).nullable().optional().describe("Ids of profile bullets (experience or project, from the AVAILABLE BULLETS list) to feature as top-line quantified wins — 3-4 ids, most relevant first. This is the ONLY way to populate keyWins; free text here is ignored."),
   sectionOrder: z.enum(["education-first", "experience-first"]),
   sectionSequence: z.array(ResumeSectionKeySchema).nullable().optional().describe("Injected deterministically from the archetype spec server-side — never model output"),
   experience: z.array(ResumeExperienceEntrySchema),

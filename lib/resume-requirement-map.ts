@@ -76,8 +76,15 @@ export function applyCheckedState(content: ResumeContent, checked: BuilderChecke
   const impactSectionChecked = checked.sections.selectedImpact ?? checked.sections.keyWins ?? checked.sections.projects ?? true;
   const experienceSectionChecked = checked.sections.experience ?? true;
 
+  // keyWins and keyWinIds are parallel, index-aligned arrays (see
+  // lib/resume-selection.ts) — filtered together so an unchecked win's id
+  // never survives alongside a checked one at the wrong index.
+  const keyWinKeepMask = (content.keyWins ?? []).map((_, i) => checked.keyWins[i] ?? true);
   const keyWins = impactSectionChecked
-    ? (content.keyWins ?? []).filter((_, i) => checked.keyWins[i] ?? true)
+    ? (content.keyWins ?? []).filter((_, i) => keyWinKeepMask[i])
+    : [];
+  const keyWinIds = impactSectionChecked
+    ? (content.keyWinIds ?? []).filter((_, i) => keyWinKeepMask[i])
     : [];
   const projects = impactSectionChecked
     ? (content.projects ?? []).filter((_, i) => checked.projects[i] ?? true)
@@ -92,6 +99,7 @@ export function applyCheckedState(content: ResumeContent, checked: BuilderChecke
     ...content,
     summary: (checked.sections.summary ?? true) ? content.summary : "",
     keyWins,
+    keyWinIds,
     projects,
     experience,
     skills: (checked.sections.skills ?? true) ? content.skills : [],

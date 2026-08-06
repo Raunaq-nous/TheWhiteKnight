@@ -308,10 +308,6 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
 
   if (!seq.includes("leadership")) clamped.leadership = null;
 
-  // Grammar-aware, droppable clamp for a keyWins string — an item that can't
-  // be trimmed to a complete clause is dropped entirely rather than shown as
-  // a fragment.
-  const clampWin = (w: string) => clampBulletText(w, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
   // Same, for a project's description — the whole project entry is dropped
   // if its description can't be trimmed grammatically.
   const clampProject = (p: NonNullable<ResumeContent["projects"]>[number]) => {
@@ -319,18 +315,43 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
     return description ? { ...p, description } : null;
   };
 
+  // keyWins and keyWinIds are parallel, index-aligned arrays (see BUG-C-2
+  // architectural change: keyWins is resolved server-side from real profile
+  // bullet ids, never model-authored prose) — this clamps both in lockstep
+  // so a win's id never drifts out of sync with its text, which is what
+  // both the checkbox UI's provenance and the id-based dedupe below depend
+  // on. Grammar-aware, droppable: an item that can't be trimmed to a
+  // complete clause is dropped from BOTH arrays at the same index.
+  const clampKeyWins = (maxItems: number) => {
+    const wins = (content.keyWins ?? []).slice(0, maxItems);
+    const ids = (content.keyWinIds ?? []).slice(0, maxItems);
+    const keptWins: string[] = [];
+    const keptIds: string[] = [];
+    wins.forEach((w, i) => {
+      const clamped = clampBulletText(w, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+      if (clamped !== null) { keptWins.push(clamped); keptIds.push(ids[i] ?? ""); }
+    });
+    return { keyWins: keptWins, keyWinIds: keptIds };
+  };
+
   if (usesSelectedImpact) {
     // Combined Key Projects & Impact band — the total item count across both
     // arrays is what's capped, since they render together as one list.
-    const keptWins = (content.keyWins ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems);
-    const remaining = ONE_PAGE_BUDGET.keyImpactMaxItems - keptWins.length;
+    const { keyWins, keyWinIds } = clampKeyWins(ONE_PAGE_BUDGET.keyImpactMaxItems);
+    const remaining = ONE_PAGE_BUDGET.keyImpactMaxItems - keyWins.length;
     const keptProjects = remaining > 0 ? (content.projects ?? []).slice(0, remaining) : [];
-    clamped.keyWins = keptWins.map(clampWin).filter((w): w is string => w !== null);
+    clamped.keyWins = keyWins;
+    clamped.keyWinIds = keyWinIds;
     clamped.projects = keptProjects.map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null);
   } else {
-    clamped.keyWins = seq.includes("keyWins")
-      ? (content.keyWins ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(clampWin).filter((w): w is string => w !== null)
-      : null;
+    if (seq.includes("keyWins")) {
+      const { keyWins, keyWinIds } = clampKeyWins(ONE_PAGE_BUDGET.keyImpactMaxItems);
+      clamped.keyWins = keyWins;
+      clamped.keyWinIds = keyWinIds;
+    } else {
+      clamped.keyWins = null;
+      clamped.keyWinIds = null;
+    }
     clamped.projects = seq.includes("projects")
       ? (content.projects ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null)
       : null;

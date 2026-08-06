@@ -286,6 +286,13 @@ export const RequirementEvidenceSchema = z.object({
   sourceType: z.enum(["experience", "project", "keyWin"]),
   sourceId: z.string().describe("Company name (experience) or project name — exact match to the profile"),
   bulletText: z.string().describe("The exact bullet/description text used as evidence, copied verbatim from the profile"),
+  // Filled in server-side (app/api/resume/requirement-map/route.ts) by
+  // matching bulletText against the same profile bullet ids the resume
+  // generator selects from (lib/profile-bullets.ts) — not requested from
+  // the model, since bulletText already has to be verbatim for this to
+  // resolve. Lets the requirement map, the checkbox draft, and dedupe all
+  // key off the same id space (see lib/resume-selection.ts).
+  sourceBulletId: z.string().nullable().optional(),
 });
 
 export const RequirementCoverageSchema = z.object({

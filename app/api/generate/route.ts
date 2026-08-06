@@ -5,6 +5,7 @@ import { SkillGapResultSchema } from "../../../lib/schemas";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../../lib/resume-schema";
 import { detectResumeArchetype, withArchetypeSequence, ResumeArchetype } from "../../../lib/resume-archetype";
 import { clampToOnePageBudget } from "../../../lib/resume-budget";
+import { resolveResumeSelections } from "../../../lib/resume-selection";
 import {
   GenerationAction,
   ContactProfile,
@@ -73,10 +74,15 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      // Section order is stamped deterministically from the archetype spec,
-      // and the one-page content budget is clamped deterministically — both
-      // never trusted to the model.
-      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(data), archetype), archetype), archetype });
+      // The model only ever SELECTS bullet ids (see lib/resume-selection.ts)
+      // — resolveResumeSelections turns those ids into real profile text
+      // (or a compressed, outcome-preserving variant) before anything else
+      // touches this content, so nothing downstream ever sees model-authored
+      // experience/project/key-win prose. Section order is then stamped
+      // deterministically from the archetype spec, and the one-page content
+      // budget is clamped deterministically — neither is trusted to the model.
+      const resolved = resolveResumeSelections(data, profile);
+      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype), archetype), archetype });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
@@ -95,7 +101,8 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(data), archetype), archetype), archetype });
+      const resolved = resolveResumeSelections(data, profile);
+      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype), archetype), archetype });
     }
 
     let prompt = "";
