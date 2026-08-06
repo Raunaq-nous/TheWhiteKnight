@@ -111,6 +111,44 @@ describe("dedupeExperienceAgainstTopBand (BUG C)", () => {
     expect(deduped.experience[0].bullets[0].text).toBe(EXPERIENCE_BULLET_TEXT);
   });
 
+  it("dedupes by exact sourceBulletId (BUG C architecture: selection, not rewriting) even when the two texts would NOT trip the fuzzy text fallback", () => {
+    // Two texts too dissimilar for sameEngagement to catch on its own —
+    // this only dedupes because they share the same sourceBulletId, which
+    // is the primary mechanism now (see lib/resume-dedupe.ts header comment).
+    const sharedId = "e_shared123";
+    const content = baseContent({
+      keyWins: ["Terse win phrasing."],
+      keyWinIds: [sharedId],
+      experience: [{
+        company: "Aranca", role: "Engagement Lead", tenure: "2022 - 2025", location: "",
+        bullets: [
+          { sourceBulletId: sharedId, text: "A completely differently worded fuller bullet about an unrelated-sounding topic entirely.", priority: 1 },
+          { sourceBulletId: "e_other", text: "Structured commercial framework and return analysis for a global port operator across three regions.", priority: 2 },
+        ],
+      }],
+    } as Partial<ResumeContent>);
+    expect(sameEngagement("Terse win phrasing.", "A completely differently worded fuller bullet about an unrelated-sounding topic entirely.")).toBe(false);
+    const deduped = dedupeExperienceAgainstTopBand(content);
+    const remainingIds = deduped.experience[0].bullets.map(b => b.sourceBulletId);
+    expect(remainingIds).not.toContain(sharedId);
+    expect(remainingIds).toContain("e_other");
+  });
+
+  it("also matches by project sourceBulletId", () => {
+    const sharedId = "p_shared456";
+    const content = baseContent({
+      projects: [{ sourceBulletId: sharedId, name: "Series A Model", description: "Some project description." }],
+      experience: [{
+        company: "Aranca", role: "Engagement Lead", tenure: "2022 - 2025", location: "",
+        bullets: [{ sourceBulletId: sharedId, text: "Totally different wording for the exact same project.", priority: 1 }],
+      }],
+    } as Partial<ResumeContent>);
+    const deduped = dedupeExperienceAgainstTopBand(content);
+    // Only bullet in the entry collided — the entry keeps its single
+    // highest-priority bullet rather than being emptied to zero.
+    expect(deduped.experience[0].bullets).toHaveLength(1);
+  });
+
   it("leaves unrelated bullets in other roles untouched", () => {
     const content = baseContent({
       keyWins: [KEY_WIN_TEXT],

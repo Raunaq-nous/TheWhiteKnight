@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { injectGapAnswerIntoResume } from "../resume-gap-fill";
 import { appendGapAnswerToProfile } from "../profile-enrichment";
 import { resumePrompt } from "../prompts";
+import { bulletId } from "../profile-bullets";
 import type { ResumeContent } from "../resume-schema";
 import type { Profile } from "../profile";
 import type { Application } from "../store";
@@ -34,7 +35,11 @@ describe("injectGapAnswerIntoResume — experience", () => {
     const { content: next, applied } = injectGapAnswerIntoResume(content, "experience", "Bain & Company", "Delivered $12M in cost savings across 3 capital programs");
     expect(applied).toBe(true);
     expect(next.experience[0].bullets).toHaveLength(2);
-    expect(next.experience[0].bullets[1]).toEqual({ text: "Delivered $12M in cost savings across 3 capital programs", priority: 1 });
+    expect(next.experience[0].bullets[1]).toEqual({
+      sourceBulletId: bulletId("experience", "Bain & Company", "Delivered $12M in cost savings across 3 capital programs"),
+      text: "Delivered $12M in cost savings across 3 capital programs",
+      priority: 1,
+    });
     // Existing bullet is untouched.
     expect(next.experience[0].bullets[0].text).toBe("Led capital project reviews");
   });

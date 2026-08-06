@@ -240,18 +240,19 @@ describe("prompt builder snapshots", () => {
     expect(consulting).toMatch(/at most 4 roles/);
   });
 
-  it("resumePrompt requires 2-3 SEPARATE bullets per distinct engagement, not one generic bullet per role", () => {
+  it("resumePrompt requires 2-3 SEPARATE bullet ids per distinct engagement, not one generic bullet per role", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES");
-    expect(consulting).toContain("NEVER collapse multiple distinct engagements into one generic summary bullet");
+    expect(consulting).toContain("NEVER select a single generic \"summary of the role\" bullet");
   });
 
-  it("resumePrompt's bullet formula requires a quantified ending and forbids inventing numbers (BUG B)", () => {
+  it("resumePrompt selects bullets by id rather than writing them, and its selection formula still protects the outcome (BUG B architecture: selection, not rewriting)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("BULLET FORMULA");
-    expect(consulting).toContain("NEVER invent a number or scale");
-    expect(consulting).toContain("a bullet that loses its outcome is a failed bullet");
-    expect(consulting).toContain("never the outcome");
+    expect(consulting).toContain("SELECTION, NOT WRITING");
+    expect(consulting).toContain("BULLET SELECTION FORMULA");
+    expect(consulting).toContain("a bullet that loses its outcome is a failed pick");
+    expect(consulting).toContain("AVAILABLE BULLETS");
+    expect(consulting).toMatch(/\[e_\w+\]/); // at least one real bullet id rendered into the prompt
   });
 
   it("resumePrompt bans certifications unconditionally, for every archetype (BUG A)", () => {
@@ -261,11 +262,10 @@ describe("prompt builder snapshots", () => {
     }
   });
 
-  it("resumePrompt's dedupe rule is semantic (same engagement, different phrasing), not string-matching (BUG C)", () => {
+  it("resumePrompt's dedupe rule is id-based (BUG C architecture: selection, not rewriting)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("NO REPETITION");
-    expect(consulting).toContain("SEMANTIC, not string-matching");
-    expect(consulting).toContain("EMEA B2B marketplace");
+    expect(consulting).toContain("pick each engagement's id for exactly ONE slot");
   });
 
   it("resumePrompt's Key Projects & Impact instruction says it renders immediately after the summary, before experience", () => {
@@ -279,10 +279,10 @@ describe("prompt builder snapshots", () => {
     expect(consulting).toContain("first principles");
   });
 
-  it("resumePrompt bans repeating the same fact across Key Projects & Impact, summary, and experience bullets (BUG: repeated content)", () => {
+  it("resumePrompt bans repeating the same bullet id across Key Projects & Impact and experience bullets (BUG: repeated content)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("NO REPETITION");
-    expect(consulting).toContain("Each fact lives in exactly one place");
+    expect(consulting).toContain("do not also select that SAME id for an experience entry's bullets");
   });
 
   it("resumePrompt requires JD priority extraction before writing", () => {

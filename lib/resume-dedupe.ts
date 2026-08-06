@@ -1,18 +1,20 @@
-// Semantic dedupe between the Key Projects & Impact band and experience
-// bullets (BUG C). String-equality/high-Jaccard-on-full-text dedupe misses
-// the real failure mode: the SAME engagement described in different words
-// in two places (e.g. a terse "Built Series A financial model for EMEA B2B
-// marketplace, facilitating a multi-million-dollar raise" key win vs. a
-// fuller "Built a Series A financial model for an EMEA B2B marketplace,
-// structuring revenue projections, unit economics, and growth thesis..."
-// experience bullet) — these share almost no generic verbs/connectors, so a
-// whole-text similarity score stays well under any reasonable threshold.
+// Dedupe between the Key Projects & Impact band and experience bullets
+// (BUG C). Since resume content moved to selection-by-id (see
+// lib/resume-selection.ts), the PRIMARY check is now exact: every top-band
+// item and every experience bullet carries the profile bullet id it was
+// resolved from, so "is this the same engagement" is a set-membership check
+// on ids, not a fuzzy text comparison — no threshold, no false negatives
+// from rephrasing.
 //
-// Instead this compares only the DISTINCTIVE vocabulary of each text (after
-// stripping common resume verbs/connectors) using containment — intersection
-// over the SMALLER set's size, not Jaccard's union — since one side is
-// usually much terser than the other and containment is what "the short
-// summary's core nouns all appear inside the fuller bullet" actually means.
+// The text-containment check below is kept as a FALLBACK ONLY, for content
+// that predates ids (a resume saved before this architecture change) or
+// where an id is missing for some other reason. It compares the DISTINCTIVE
+// vocabulary of each text (after stripping common resume verbs/connectors)
+// using containment — intersection over the SMALLER set's size, not
+// Jaccard's union — since one side is usually much terser than the other
+// and containment is what "the short summary's core nouns all appear
+// inside the fuller bullet" actually means. This is what caught the
+// original reported EMEA B2B case before ids existed.
 
 import { ResumeContent } from "./resume-schema";
 
@@ -60,14 +62,25 @@ export function sameEngagement(a: string, b: string): boolean {
  * removed, the single least-duplicate one is kept instead.
  */
 export function dedupeExperienceAgainstTopBand(content: ResumeContent): ResumeContent {
+  const topBandIds = new Set(
+    [...(content.keyWinIds ?? []), ...(content.projects ?? []).map(p => p.sourceBulletId)].filter(Boolean),
+  );
   const topBandTexts = [
     ...(content.keyWins ?? []),
     ...(content.projects ?? []).map(p => p.description),
   ];
-  if (topBandTexts.length === 0) return content;
+  if (topBandIds.size === 0 && topBandTexts.length === 0) return content;
+
+  const isDuplicate = (b: { sourceBulletId?: string | null; text: string }) => {
+    // Exact id match wins outright — no ambiguity possible.
+    if (b.sourceBulletId && topBandIds.has(b.sourceBulletId)) return true;
+    // Fallback for content without ids (legacy, or an id resolution miss):
+    // same fuzzy-text check this module used before ids existed.
+    return topBandTexts.some(t => sameEngagement(t, b.text));
+  };
 
   const experience = content.experience.map(e => {
-    const survivors = e.bullets.filter(b => !topBandTexts.some(t => sameEngagement(t, b.text)));
+    const survivors = e.bullets.filter(b => !isDuplicate(b));
     if (survivors.length > 0) return { ...e, bullets: survivors };
     // Every bullet collided with a top-band item — keep the single
     // highest-priority one rather than leave the role with nothing.
