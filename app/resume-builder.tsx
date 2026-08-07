@@ -18,6 +18,7 @@ import {
 } from "../lib/resume-requirement-map";
 import { ResumeContent, resolveSectionSequence } from "../lib/resume-schema";
 import { ResumeArchetype } from "../lib/resume-archetype";
+import { generateResumeAudit, ResumeAuditResult } from "../lib/resume-audit";
 import type { Application } from "../lib/store";
 import { showToast } from "../lib/toast";
 
@@ -25,6 +26,19 @@ const RATING_COLOR: Record<"strong" | "weak" | "none", string> = {
   strong: "var(--success)",
   weak: "var(--accent)",
   none: "var(--error, #e55)",
+};
+
+const VERDICT_COLOR: Record<ResumeAuditResult["verdict"], string> = {
+  strong_pass: "var(--success)",
+  pass: "var(--success)",
+  borderline: "var(--accent)",
+  weak: "var(--error, #e55)",
+  reject: "var(--error, #e55)",
+};
+
+const SEVERITY_COLOR: Record<"minor" | "major", string> = {
+  minor: "var(--accent)",
+  major: "var(--error, #e55)",
 };
 
 /**
@@ -51,7 +65,7 @@ export function ResumeBuilder({
   onClose,
 }: {
   app: Application;
-  onConfirm: (content: ResumeContent, archetype: ResumeArchetype) => void;
+  onConfirm: (content: ResumeContent, archetype: ResumeArchetype, audit: ResumeAuditResult | null, atsReadable: boolean | null) => void;
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<"map" | "drafting" | "draft" | "error">("map");
@@ -62,6 +76,14 @@ export function ResumeBuilder({
   const [checked, setChecked] = useState<BuilderCheckedState | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState<string | null>(null);
+
+  // Adversarial hiring-side score (feature: adversarial resume evaluation).
+  // Runs automatically once a draft exists; RE-SCORE lets the user refresh
+  // it after editing checkboxes without spamming a call on every toggle.
+  const [auditPhase, setAuditPhase] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [audit, setAudit] = useState<ResumeAuditResult | null>(null);
+  const [atsReadable, setAtsReadable] = useState<boolean | null>(null);
+  const [auditError, setAuditError] = useState("");
 
   useEffect(() => {
     const profile = getProfile();
@@ -84,9 +106,24 @@ export function ResumeBuilder({
       const sequence = resolveSectionSequence(data, arch);
       setChecked(defaultCheckedState(data, sequence));
       setPhase("draft");
+      runAudit(data, arch);
     } catch (e: any) {
       setError(e.message || "Draft generation failed.");
       setPhase("map");
+    }
+  };
+
+  const runAudit = async (content: ResumeContent, arch: ResumeArchetype) => {
+    setAuditPhase("loading");
+    setAuditError("");
+    try {
+      const { audit: result, atsReadable: readable } = await generateResumeAudit(content, arch, app);
+      setAudit(result);
+      setAtsReadable(readable);
+      setAuditPhase("done");
+    } catch (e: any) {
+      setAuditError(e.message || "Resume audit failed.");
+      setAuditPhase("error");
     }
   };
 
@@ -167,7 +204,7 @@ export function ResumeBuilder({
 
   const handleConfirm = () => {
     if (!draft || !applied) return;
-    onConfirm(applied, archetype);
+    onConfirm(applied, archetype, audit, atsReadable);
   };
 
   return (
@@ -204,6 +241,76 @@ export function ResumeBuilder({
           )}
           {phase === "drafting" && <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--accent)", marginTop: 12 }}>Drafting resume...</div>}
         </div>
+
+        {/* Adversarial hiring-side score — shown once a draft exists, before CONFIRM & GENERATE PDF is even reachable. */}
+        {draft && (
+          <div style={{ marginBottom: 24, background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div className="label" style={{ color: "var(--accent)" }}>ADVERSARIAL SCORE — HIRING SIDE</div>
+              {auditPhase !== "loading" && (
+                <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 8px" }} onClick={() => runAudit(draft, archetype)}>RE-SCORE</button>
+              )}
+            </div>
+
+            {auditPhase === "loading" && (
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-tertiary)" }}>Scoring like a skeptical screener would...</div>
+            )}
+            {auditPhase === "error" && (
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--error)" }}>{auditError}</div>
+            )}
+
+            {audit && auditPhase === "done" && (
+              <div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 10 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.75rem", fontWeight: 700, color: VERDICT_COLOR[audit.verdict] }}>{audit.overallScore}/10</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", color: VERDICT_COLOR[audit.verdict] }}>{audit.verdict.replace(/_/g, " ")}</span>
+                  {atsReadable === false && <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", color: "var(--error)" }}>ATS PARSE ISSUES FOUND</span>}
+                </div>
+
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>{audit.summary}</p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                  {audit.categories.map(c => (
+                    <div key={c.category} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderBottom: "1px solid var(--border-light)", paddingBottom: 6 }}>
+                      <span style={{ minWidth: 32, fontWeight: 700, color: c.score >= 4 ? "var(--success)" : c.score >= 3 ? "var(--accent)" : "var(--error)" }}>{c.score}/5</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: "var(--text-primary)" }}>{c.label}</div>
+                        {c.evidence.length > 0 && <div style={{ color: "var(--text-tertiary)", fontSize: "0.6875rem", marginTop: 2 }}>{c.evidence.join(" · ")}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {audit.deductions.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div className="label" style={{ fontSize: "0.625rem", color: "var(--error)", marginBottom: 6 }}>DEDUCTIONS</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {audit.deductions.map((d, i) => (
+                        <div key={i} style={{ display: "flex", gap: 8, fontFamily: "var(--font-mono)", fontSize: "0.75rem" }}>
+                          <span style={{ color: SEVERITY_COLOR[d.severity], textTransform: "uppercase", minWidth: 46 }}>{d.severity}</span>
+                          <span style={{ color: "var(--text-secondary)" }}>{d.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {audit.bonusPoints.length > 0 && (
+                  <div>
+                    <div className="label" style={{ fontSize: "0.625rem", color: "var(--success)", marginBottom: 6 }}>BONUS POINTS</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {audit.bonusPoints.map((b, i) => (
+                        <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                          <span style={{ color: "var(--success)", fontWeight: 700 }}>{b.reason}:</span> {b.detail}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Step 4: gaps needing a targeted question — shown from the start for weak/none, and live for anything that just lost coverage */}
         {needsAttention.length > 0 && (

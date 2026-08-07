@@ -7,6 +7,7 @@ import {
 import { showToast } from "./toast";
 import type { ResumeContent } from "./resume-schema";
 import type { ResumeArchetype } from "./resume-archetype";
+import type { ResumeAuditResult } from "./schemas";
 
 export type InterviewRound = "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
 
@@ -80,6 +81,10 @@ export type Application = {
   // existed, and for copy/download compatibility.
   resumeContent?: ResumeContent;
   resumeArchetype?: ResumeArchetype;
+  // Adversarial, hiring-side score of the resume currently staged above —
+  // stored alongside it (not just shown transiently in the builder) so
+  // scores can be correlated against real response rates later.
+  resumeAudit?: ResumeAuditResult & { scoredAt: string; atsReadable: boolean };
 };
 
 export type TargetBucket = {

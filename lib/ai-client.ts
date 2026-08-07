@@ -8,6 +8,12 @@ const OPENAI_BASE = "https://api.openai.com/v1";
 // DeepSeek V4 Pro is a reasoning model — high quality but it spends tokens on internal
 // chain-of-thought before the final answer. We compensate with a much larger token budget.
 const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4-Pro";
+// Fast, cheap, non-reasoning Together model for high-volume structured
+// tasks that don't need DEFAULT_MODEL's reasoning depth (e.g. resume
+// audit scoring — one call per generated draft, plain classification/
+// scoring work). Not a REASONING_MODEL_PATTERNS match, so chatTogether
+// never applies the 5x reasoning token multiplier to it either.
+export const CHEAP_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo";
 const DEFAULT_VISION_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
 // Fallback vision models tried in order when the primary returns 5xx
 const FALLBACK_VISION_MODELS = [
@@ -176,6 +182,17 @@ async function chatOpenAI(messages: ChatMessage[], opts: ChatOptions, apiKey: st
   }, "OpenAI");
   const result = await response.json();
   return result.choices?.[0]?.message?.content?.trim() ?? "";
+}
+
+// Opts to force CHEAP_MODEL for a call, WITHOUT ever overriding a model the
+// user explicitly configured on a non-Together provider — chatAnthropic/
+// chatOpenAI resolve `opts.model ?? provider.model`, so setting opts.model
+// unconditionally would clobber a user's own Anthropic/OpenAI model choice
+// with a Together-only model id. Only forces the override on the Together
+// path (the default, and the only path CHEAP_MODEL is actually valid for).
+export function cheapModelOpts(provider?: ProviderSettings): Partial<ChatOptions> {
+  if (provider && provider.provider !== "together") return {};
+  return { model: CHEAP_MODEL };
 }
 
 export async function chat(messages: ChatMessage[], opts: ChatOptions = {}, provider?: ProviderSettings): Promise<string> {
