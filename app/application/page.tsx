@@ -22,6 +22,7 @@ import { diffExtractionAgainstProfile, MergeDiffItem } from "../../lib/profile-m
 import { ProfileMergeReview } from "../profile-merge-review";
 import { ResumeGapFillBox } from "../resume-gap-fill-box";
 import { ResumeBuilder } from "../resume-builder";
+import { ResumeAuditResult } from "../../lib/schemas";
 import { showToast } from "../../lib/toast";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
@@ -154,15 +155,19 @@ function ApplicationDetail() {
   // Resume generation produces structured content (ResumeContent), not a
   // markdown string, so it's kept out of the generic handleGenerate/aiOutput
   // flow below and given its own handler + render surface (ResumeExportView).
-  const persistResumeContent = async (data: ResumeContent, archetype: ResumeArchetype): Promise<boolean> => {
+  const persistResumeContent = async (data: ResumeContent, archetype: ResumeArchetype, audit?: ResumeAuditResult | null, atsReadable?: boolean | null): Promise<boolean> => {
     if (!app) return false;
     const md = resumeContentToMarkdown(data, archetype);
+    // Only touch resumeAudit when a fresh one was actually produced (the
+    // interactive builder path) — leave whatever's already stored alone for
+    // callers (refine, plain generate) that don't score every edit.
+    const auditChange = audit ? { resumeAudit: { ...audit, scoredAt: new Date().toISOString(), atsReadable: atsReadable ?? true } } : {};
     setResumeContent(data);
     setResumeArchetypeUsed(archetype);
     setSavedResume(md);
-    const ok = await updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md });
+    const ok = await updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md, ...auditChange });
     if (ok) {
-      setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md } : prev);
+      setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md, ...auditChange } : prev);
     } else {
       showToast("Resume updated here, but saving it to the application failed. Reloading may lose this change.", "error");
     }
@@ -1407,8 +1412,8 @@ window.addEventListener('load', function() {
       <ResumeBuilder
         app={app}
         onClose={() => setShowResumeBuilder(false)}
-        onConfirm={async (data, archetype) => {
-          await persistResumeContent(data, archetype);
+        onConfirm={async (data, archetype, audit, atsReadable) => {
+          await persistResumeContent(data, archetype, audit, atsReadable);
           setShowResumeBuilder(false);
           setShowResumeExport(true);
         }}

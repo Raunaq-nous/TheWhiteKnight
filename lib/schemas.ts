@@ -308,3 +308,46 @@ export const ResumeRequirementMapSchema = z.object({
 
 export type RequirementCoverage = z.infer<typeof RequirementCoverageSchema>;
 export type ResumeRequirementMap = z.infer<typeof ResumeRequirementMapSchema>;
+
+// ---------------------------------------------------------------------------
+// ResumeAuditResult — returned by /api/resume/audit. Adversarial, hiring-side
+// scoring of a GENERATED resume against the target JD: not "does this job
+// match the candidate" (that's AFScoreResult, scored on the JD from the
+// candidate's side) but "would a screener reading THIS resume rate it well
+// against THIS JD" — category scores with evidence, explicit deductions,
+// and bonus points, modeled on the same shape a real recruiting screen
+// produces. See lib/resume-ats-check.ts for the deterministic formatting
+// deductions merged into this alongside the model's own.
+// ---------------------------------------------------------------------------
+
+export const ResumeAuditCategorySchema = z.object({
+  category: z.enum(["jd_requirement_coverage", "quantified_impact", "clarity_and_structure", "seniority_signal"]),
+  label: z.string().describe("Human-readable label for this category, e.g. \"JD Requirement Coverage\""),
+  score: z.number().min(1).max(5),
+  evidence: z.array(z.string()).describe("Specific bullets/phrases from THIS resume that justify the score — copied verbatim, not paraphrased"),
+});
+
+export const ResumeAuditDeductionSchema = z.object({
+  type: z.enum(["missing_quantification", "vague_bullet", "unaddressed_requirement", "formatting_problem"]),
+  detail: z.string(),
+  severity: z.enum(["minor", "major"]),
+});
+
+export const ResumeAuditBonusSchema = z.object({
+  reason: z.string(),
+  detail: z.string(),
+});
+
+export const ResumeAuditResultSchema = z.object({
+  categories: z.array(ResumeAuditCategorySchema),
+  bonusPoints: z.array(ResumeAuditBonusSchema),
+  deductions: z.array(ResumeAuditDeductionSchema),
+  overallScore: z.number().min(1).max(10),
+  verdict: z.enum(["strong_pass", "pass", "borderline", "weak", "reject"]),
+  summary: z.string().describe("One paragraph, written as the screener's actual verdict on the resume, second person, direct — not meta-commentary about the resume being well-written"),
+});
+
+export type ResumeAuditCategory = z.infer<typeof ResumeAuditCategorySchema>;
+export type ResumeAuditDeduction = z.infer<typeof ResumeAuditDeductionSchema>;
+export type ResumeAuditBonus = z.infer<typeof ResumeAuditBonusSchema>;
+export type ResumeAuditResult = z.infer<typeof ResumeAuditResultSchema>;
