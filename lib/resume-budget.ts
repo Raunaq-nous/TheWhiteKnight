@@ -135,7 +135,7 @@ export function clampBulletText(text: string, maxChars: number, minChars = 30): 
 // fixed high-signal phrases (board-level, C-suite, multi-billion-dollar).
 // Used to find the LAST clause of a bullet that contains real impact, so
 // clamping can protect it and shorten everything BEFORE it instead (BUG B).
-const OUTCOME_MARKER_PATTERN =
+export const OUTCOME_MARKER_PATTERN =
   /\$[\d,.]+\s?(?:[bmk]illion)?\b|\d+(\.\d+)?%|\b\d+\+\b|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d+\+?\s?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?)\b/i;
 
 /**
@@ -146,7 +146,7 @@ const OUTCOME_MARKER_PATTERN =
  * setup === null when no clause has a marker at all — callers fall back to
  * treating the whole text as ordinary (non-outcome-protected) content.
  */
-function splitOutcomeClause(text: string): { setup: string | null; outcome: string } {
+export function splitOutcomeClause(text: string): { setup: string | null; outcome: string } {
   const clauses = text.trim().split(/(?<=[,;:])\s+/).filter(Boolean);
   for (let i = clauses.length - 1; i >= 0; i--) {
     if (OUTCOME_MARKER_PATTERN.test(clauses[i])) {

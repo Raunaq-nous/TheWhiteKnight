@@ -1,0 +1,64 @@
+// Client wrapper for the DOCX-first export pipeline (app/api/resume/export).
+// Replaces the old window.print()-based HTML-to-PDF flow entirely — see
+// app/resume-document.tsx.
+
+import type { ResumeContent } from "./resume-schema";
+import type { ResumeArchetype } from "./resume-archetype";
+
+export type ResumeExportResult = { docxBase64: string; pdfBase64: string; pageCount: number };
+export type ResumeExportGateFailure = { error: string; gate: "format" | "pdf_extraction"; violations: unknown[]; pageCount?: number };
+
+export class ResumeExportError extends Error {
+  gate?: "format" | "pdf_extraction";
+  violations: unknown[];
+  pageCount?: number;
+  constructor(payload: ResumeExportGateFailure | { error: string }) {
+    super(payload.error);
+    this.name = "ResumeExportError";
+    if ("gate" in payload) {
+      this.gate = payload.gate;
+      this.violations = payload.violations;
+      this.pageCount = payload.pageCount;
+    } else {
+      this.violations = [];
+    }
+  }
+}
+
+export async function exportResumeDocxAndPdf(resumeContent: ResumeContent, archetype?: ResumeArchetype | null): Promise<ResumeExportResult> {
+  const res = await fetch("/api/resume/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resumeContent, archetype }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ResumeExportError(data);
+  return data as ResumeExportResult;
+}
+
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mimeType });
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Triggers both file downloads — the .docx is editable, the .pdf is what gets sent. */
+export function downloadResumeExport(result: ResumeExportResult, baseFilename: string): void {
+  downloadBlob(
+    base64ToBlob(result.docxBase64, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    `${baseFilename}.docx`,
+  );
+  downloadBlob(base64ToBlob(result.pdfBase64, "application/pdf"), `${baseFilename}.pdf`);
+}

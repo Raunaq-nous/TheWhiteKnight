@@ -145,6 +145,22 @@ log "pm2 $(pm2 -v) installed"
 log "Step 2 done"
 
 # ────────────────────────────────────────────────────────────
+# 2b. LibreOffice headless (DOCX -> PDF resume export)
+# ────────────────────────────────────────────────────────────
+# Measured footprint: a single `soffice --headless --convert-to pdf`
+# conversion of a one-page resume peaks at ~190MB RSS for the few seconds
+# the conversion runs, then exits — the app serializes every conversion
+# through one queue (lib/server/resume-pdf-pipeline.ts) so this never
+# multiplies on a small box. --no-install-recommends keeps this to the
+# Writer component only (~60MB disk), not the full office suite.
+banner "Step 2b: LibreOffice headless (DOCX/PDF resume export)"
+if ! command -v soffice &>/dev/null; then
+  apt_install --no-install-recommends libreoffice-writer
+fi
+log "$(soffice --version)"
+log "Step 2b done"
+
+# ────────────────────────────────────────────────────────────
 # 3. Clone repository
 # ────────────────────────────────────────────────────────────
 banner "Step 3: clone $REPO_URL @ $BRANCH"

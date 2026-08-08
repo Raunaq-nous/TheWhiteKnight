@@ -26,6 +26,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN apk add --no-cache python3 make g++
+# LibreOffice headless — DOCX -> PDF resume export (lib/server/resume-pdf-pipeline.ts).
+# libreoffice-writer alone (not the full apk libreoffice meta-package) keeps
+# this to just the component that actually does the conversion.
+RUN apk add --no-cache libreoffice-writer
 
 # Copy only what next start needs
 COPY --from=builder /app/package.json /app/package-lock.json ./
