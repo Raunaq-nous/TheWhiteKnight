@@ -8,6 +8,7 @@ This is a local-first app. The canonical data store is a SQLite file on your own
 
 - Node 20 or later (`node --version`)
 - npm 10 or later (`npm --version`)
+- LibreOffice headless (`soffice --version`) — converts the generated resume `.docx` to `.pdf`. Install just the Writer component: `apt-get install --no-install-recommends libreoffice-writer` (Debian/Ubuntu) or `apk add libreoffice-writer` (Alpine, already in the Docker image). Measured footprint: ~190MB RSS per conversion, for a few seconds; conversions are serialized so this never multiplies.
 - An [Upstash Redis](https://upstash.com/) database (used for auth/sessions until a later phase moves auth into SQLite)
 - A [Together AI](https://api.together.ai/) API key for AI generation
 

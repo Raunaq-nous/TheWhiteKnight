@@ -1,27 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence } from "../lib/resume-schema";
 import { ResumeArchetype } from "../lib/resume-archetype";
 
-// Letter page at 96 CSS px/in with 0.5in margins — the content box we must
-// fit inside is 10in tall.
-const PAGE_HEIGHT_IN = 11;
-const MARGIN_IN = 0.5;
-const PX_PER_IN = 96;
-const TARGET_CONTENT_HEIGHT_PX = (PAGE_HEIGHT_IN - MARGIN_IN * 2) * PX_PER_IN;
-
-// One page is guaranteed structurally: generation is budgeted (lib/prompts.ts)
-// and then deterministically clamped server-side (lib/resume-budget.ts) BEFORE
-// this component ever sees the content — no client-side content trimming.
-// The only thing left to a browser measurement is this tiny, bounded
-// typographic safety net: if real font metrics still overflow the page
-// (rare — budget-compliant content is sized to fit at SAFETY_SCALES[0]),
-// step down through a fixed handful of font-size scales. It never removes,
-// reorders, or rewrites content, and it never iterates more than the length
-// of this array.
-const SAFETY_SCALES = [1, 0.96, 0.92, 0.88] as const;
+// This preview is a visual approximation only — it no longer has any role
+// in whether the exported document fits one page. The actual PDF is a
+// direct LibreOffice conversion of the generated .docx (lib/resume-docx.ts,
+// lib/server/resume-pdf-pipeline.ts), verified server-side by the PDF
+// extraction gate (lib/resume-pdf-extract-gate.ts), which is what this
+// on-screen render used to try to reproduce with browser font metrics.
 
 function sortedBullets(bullets: ResumeContent["experience"][number]["bullets"]) {
   return [...bullets].sort((a, b) => a.priority - b.priority);
@@ -71,11 +60,9 @@ function LinkIcon({ kind }: { kind: LinkKind }) {
   );
 }
 
-// Fixed one-page layout — renders whatever content/order it's given at a
-// fixed base size, scaled only by the bounded typographic safety net in
-// ResumeExportView (see SAFETY_SCALES above). No content-fitting logic
-// here; contentRef exposes the auto-height inner box for that safety net's
-// one-shot measurement.
+// Visual approximation only, always rendered at scale 1 — see the module
+// header comment. contentRef is kept as an unused optional hook point, not
+// load-bearing for anything.
 function ResumePage({
   content,
   scale,
@@ -270,140 +257,79 @@ function ResumePage({
   );
 }
 
-export type FitStatus = "measuring" | "fit";
-
 /**
- * Full one-page export view. Rendered through a portal as a direct child of
- * <body> so print CSS can hide the entire app with display:none (which
- * removes its layout space) and print ONLY the resume — a fixed overlay
- * left in the normal tree gets repeated on every printed page.
- *
- * One page is guaranteed structurally BEFORE this component ever renders:
- * generation is budgeted (lib/prompts.ts) and then deterministically
- * clamped (lib/resume-budget.ts) server-side. This component does NOT trim,
- * reorder, or rewrite content — it renders the given content once at a
- * fixed size. The only measurement here is a tiny, bounded safety net: if
- * real browser font metrics still overflow the page (rare), it steps down
- * through SAFETY_SCALES a few times, never more.
+ * On-screen preview + export trigger for the DOCX-first pipeline
+ * (lib/resume-docx.ts, lib/server/resume-pdf-pipeline.ts). This component
+ * used to BE the PDF (browser print-to-PDF via window.print(), with a
+ * font-scale-stepping safety net to try to force one page). That approach
+ * is gone: the .docx is the source of truth, the .pdf is a direct
+ * LibreOffice conversion of it, and both are gated server-side (format
+ * gate before generation, PDF-extraction gate after) — so there is nothing
+ * left for this component to measure or fit. It only shows a visual
+ * approximation and triggers the real export.
  */
 export function ResumeExportView({
   content,
   archetype,
   onClose,
-  onContentSettled,
 }: {
   content: ResumeContent;
   archetype?: ResumeArchetype | null;
   onClose: () => void;
-  onContentSettled?: (content: ResumeContent) => void;
 }) {
-  const [safetyStep, setSafetyStep] = useState(0);
-  const [settled, setSettled] = useState(false);
-  const [overflowed, setOverflowed] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "error">("idle");
+  const [exportError, setExportError] = useState("");
+  const [pageCount, setPageCount] = useState<number | null>(null);
 
   const sequence: ResumeSectionKey[] = resolveSectionSequence(content, archetype ?? undefined);
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Marks <body> so the print stylesheet can hide everything except the
-  // portal root without affecting screen rendering.
-  useEffect(() => {
-    document.body.classList.add("resume-print-mode");
-    return () => document.body.classList.remove("resume-print-mode");
-  }, []);
-
-  useEffect(() => {
-    setSafetyStep(0);
-    setSettled(false);
-    setOverflowed(false);
-  }, [content, archetype]);
-
-  useEffect(() => {
-    if (settled) {
-      onContentSettled?.(content);
-      return;
+  const handleExport = async () => {
+    setExportState("exporting");
+    setExportError("");
+    try {
+      const { exportResumeDocxAndPdf, downloadResumeExport } = await import("../lib/resume-export");
+      const result = await exportResumeDocxAndPdf(content, archetype);
+      const filename = (content.name || "resume").toLowerCase().replace(/\s+/g, "-");
+      downloadResumeExport(result, filename);
+      setPageCount(result.pageCount);
+      setExportState("done");
+    } catch (e: any) {
+      setExportError(e.message || "Export failed.");
+      setExportState("error");
     }
-    const el = contentRef.current;
-    if (!el) return;
-
-    const ratio = el.scrollHeight / TARGET_CONTENT_HEIGHT_PX;
-    if (ratio <= 1) { setSettled(true); return; }
-    if (safetyStep < SAFETY_SCALES.length - 1) { setSafetyStep(s => s + 1); return; }
-    // Exhausted every safety step and it still overflows — an edge case the
-    // upstream budget/clamp should prevent. Surface it rather than silently
-    // deleting content to force a fit.
-    setOverflowed(true);
-    setSettled(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, safetyStep, settled, mounted]);
-
-  const handlePrint = () => window.print();
+  };
 
   if (!mounted) return null;
 
   return createPortal(
     <div className="resume-export-root" style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#525659", overflow: "auto" }}>
       <div className="resume-export-toolbar" style={{
-        position: "sticky", top: 0, zIndex: 2, display: "flex", justifyContent: "center",
+        position: "sticky", top: 0, zIndex: 2, display: "flex", justifyContent: "center", flexWrap: "wrap",
         gap: 10, padding: "10px 16px", background: "#2d2f31", boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
       }}>
-        <button onClick={handlePrint} className="btn btn-primary" style={{ fontSize: "0.75rem" }}>
-          SAVE AS PDF
+        <button onClick={handleExport} className="btn btn-primary" style={{ fontSize: "0.75rem" }} disabled={exportState === "exporting"}>
+          {exportState === "exporting" ? "GENERATING DOCX + PDF..." : "EXPORT DOCX + PDF"}
         </button>
-        <span style={{ color: overflowed ? "#e08a8a" : settled ? "#8fd19e" : "#ccc", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center" }}>
-          {overflowed ? "MAY EXCEED ONE PAGE" : settled ? "ONE-PAGE LAYOUT" : "RENDERING..."}
-        </span>
+        {exportState === "done" && pageCount !== null && (
+          <span style={{ color: "#8fd19e", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center" }}>
+            MEASURED: {pageCount} PAGE{pageCount === 1 ? "" : "S"}
+          </span>
+        )}
+        {exportState === "error" && (
+          <span style={{ color: "#e08a8a", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center", maxWidth: 520, whiteSpace: "pre-wrap" }}>
+            {exportError}
+          </span>
+        )}
         <button onClick={onClose} className="btn" style={{ fontSize: "0.75rem" }}>CLOSE</button>
       </div>
       <div className="resume-export-scroll" style={{ display: "flex", justifyContent: "center", padding: "24px 0 48px" }}>
         <div className="resume-page-frame" style={{ boxShadow: "0 0 12px rgba(0,0,0,0.4)" }}>
-          <ResumePage content={content} scale={SAFETY_SCALES[safetyStep]} sequence={sequence} contentRef={contentRef} />
+          <ResumePage content={content} scale={1} sequence={sequence} />
         </div>
       </div>
-      <style>{`
-        @page { size: letter portrait; margin: 0.5in; }
-        @media print {
-          /* The app (everything that is not this portal) is removed from
-             layout entirely — display:none, not visibility:hidden — so the
-             printed document is exactly as tall as the resume content. */
-          body.resume-print-mode > :not(.resume-export-root) { display: none !important; }
-
-          /* The overlay leaves fixed positioning for print. A position:fixed
-             box is repeated on every printed page per the CSS paged-media
-             spec — that was the cause of the N repeated cut-off pages. */
-          .resume-export-root {
-            position: static !important;
-            overflow: visible !important;
-            background: #fff !important;
-          }
-          .resume-export-toolbar { display: none !important; }
-          .resume-export-scroll { display: block !important; padding: 0 !important; }
-          .resume-page-frame { box-shadow: none !important; }
-
-          /* @page margin supplies the 0.5in margins; the on-screen page
-             padding and 11in min-height would double them / force overflow. */
-          .resume-page {
-            width: auto !important;
-            min-height: 0 !important;
-            height: auto !important;
-            padding: 0 !important;
-            box-shadow: none !important;
-          }
-          /* Sections themselves must flow freely across the page boundary —
-             break-inside:avoid at the SECTION level was the actual two-page
-             cause: if Experience (all roles combined) didn't fit in whatever
-             space remained on page 1, the browser refused to split it and
-             pushed the ENTIRE section to page 2, leaving page 1 mostly
-             blank even though the content overall fits one page. Only
-             individual entries (one role + its bullets, one project line,
-             one education entry) get the no-split guarantee, via
-             .resume-entry below. */
-          .resume-entry { break-inside: avoid; page-break-inside: avoid; }
-          .resume-page a { color: #0a58ca !important; text-decoration: underline; }
-        }
-      `}</style>
     </div>,
     document.body,
   );
