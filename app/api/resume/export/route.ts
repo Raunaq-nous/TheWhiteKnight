@@ -37,12 +37,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing resumeContent" }, { status: 400 });
     }
 
+    // Only a HARD failure blocks export — WARN-level issues (weak/missing
+    // outcome, over caps) are reported alongside a successful export, not
+    // instead of one. See lib/resume-format-gate.ts for the severity split.
     const formatGate = runFormatGate(resumeContent);
-    if (!formatGate.ok) {
+    if (formatGate.blocked) {
       return NextResponse.json({
         error: formatGateFailureMessage(formatGate),
         gate: "format",
-        violations: formatGate.violations,
+        violations: formatGate.hardFailures,
       }, { status: 422 });
     }
 
@@ -64,6 +67,8 @@ export async function POST(req: NextRequest) {
       docxBase64: docxBuffer.toString("base64"),
       pdfBase64: pdfBuffer.toString("base64"),
       pageCount: extractionGate.pageCount,
+      warnings: formatGate.warnings,
+      outcomeWarnings: formatGate.outcomeWarnings,
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Resume export failed" }, { status: 500 });

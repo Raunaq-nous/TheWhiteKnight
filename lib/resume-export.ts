@@ -4,8 +4,18 @@
 
 import type { ResumeContent } from "./resume-schema";
 import type { ResumeArchetype } from "./resume-archetype";
+import type { FormatGateViolation, OutcomeWarning } from "./resume-format-gate";
 
-export type ResumeExportResult = { docxBase64: string; pdfBase64: string; pageCount: number };
+export type ResumeExportResult = {
+  docxBase64: string;
+  pdfBase64: string;
+  pageCount: number;
+  // WARN-level format gate issues — export already succeeded; these are
+  // shown, never blocking. outcomeWarnings is the subset routable into the
+  // gap-fill/bullet-rewrite flow (app/resume-document.tsx).
+  warnings: FormatGateViolation[];
+  outcomeWarnings: OutcomeWarning[];
+};
 export type ResumeExportGateFailure = { error: string; gate: "format" | "pdf_extraction"; violations: unknown[]; pageCount?: number };
 
 export class ResumeExportError extends Error {
