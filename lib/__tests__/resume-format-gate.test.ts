@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runFormatGate, formatGateFailureMessage } from "../resume-format-gate";
+import { runFormatGate, formatGateFailureMessage, hasIdentifiableOutcome } from "../resume-format-gate";
 import { ONE_PAGE_BUDGET } from "../resume-budget";
 import type { ResumeContent } from "../resume-schema";
 
@@ -27,100 +27,120 @@ function baseContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
   } as ResumeContent;
 }
 
-describe("runFormatGate", () => {
-  it("passes clean content with no violations", () => {
+function bulletContent(text: string): ResumeContent {
+  return baseContent({
+    experience: [{
+      company: "Acme AI", role: "Senior PM", tenure: "2021", location: "",
+      bullets: [{ sourceBulletId: "e_1", text, priority: 1 }],
+    }],
+  });
+}
+
+describe("hasIdentifiableOutcome — widened detector (PROBLEM 1)", () => {
+  it("accepts the three real bullets the narrower detector wrongly rejected", () => {
+    expect(hasIdentifiableOutcome(
+      "Built digital readiness evaluation framework for a global cloud provider entering India, assessed 10+ GSI partners, delivered tiered engagement model and GTM strategy.",
+    )).toBe(true);
+    expect(hasIdentifiableOutcome(
+      "Structured commercial framework and return analysis for global port operator across APAC, Europe, and Africa bid advisory.",
+    )).toBe(true);
+    expect(hasIdentifiableOutcome(
+      "Led competitive analysis on compliance assurance programs for a top hyperscale cloud provider, directly shaping product roadmap and M&A screening.",
+    )).toBe(true);
+  });
+
+  it("still accepts a quantitative outcome (unchanged behavior)", () => {
+    expect(hasIdentifiableOutcome("Delivered $10.45B portfolio intelligence cockpit.")).toBe(true);
+  });
+
+  it("still rejects pure activity description with no result of any kind", () => {
+    expect(hasIdentifiableOutcome("Worked on various initiatives across the team.")).toBe(false);
+    expect(hasIdentifiableOutcome("Attended weekly stakeholder meetings.")).toBe(false);
+  });
+
+  it("accepts a decision outcome with no number attached", () => {
+    expect(hasIdentifiableOutcome("Structured the C-suite decision document for the board.")).toBe(true);
+    expect(hasIdentifiableOutcome("Enabled investment commitment on a previously non-feasible project.")).toBe(true);
+  });
+});
+
+describe("runFormatGate — graded severity (PROBLEM 2)", () => {
+  it("passes clean content: not blocked, no hard failures, no warnings", () => {
     const result = runFormatGate(baseContent());
-    expect(result.ok).toBe(true);
-    expect(result.violations).toHaveLength(0);
+    expect(result.blocked).toBe(false);
+    expect(result.hardFailures).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
   });
 
-  it("rejects an em-dash anywhere in the content", () => {
-    const content = baseContent({ summary: "Built products - shipped fast" .replace("-", "—") });
+  it("HARD FAILS on an em-dash and blocks export", () => {
+    const content = baseContent({ summary: "Built products - shipped fast".replace("-", "—") });
     const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /em-dash/.test(v.reason))).toBe(true);
+    expect(result.blocked).toBe(true);
+    expect(result.hardFailures.some(v => /em-dash/.test(v.reason))).toBe(true);
   });
 
-  it("rejects brackets", () => {
+  it("HARD FAILS on brackets", () => {
     const content = baseContent({ summary: "Shipped [redacted] feature." });
     const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /bracket/.test(v.reason))).toBe(true);
+    expect(result.blocked).toBe(true);
+    expect(result.hardFailures.some(v => /bracket/.test(v.reason))).toBe(true);
   });
 
-  it("rejects pipes in real document content (contactLine's own \"email | phone\" separator is exempt — see comment in resume-format-gate.ts)", () => {
+  it("HARD FAILS on a pipe in real document content (contactLine's own separator is exempt)", () => {
     const content = baseContent({ summary: "Built products | shipped fast" });
     const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /pipe/.test(v.reason))).toBe(true);
+    expect(result.blocked).toBe(true);
+    expect(result.hardFailures.some(v => /pipe/.test(v.reason))).toBe(true);
   });
 
   it("does not flag contactLine's own \"email | phone\" pipe separator", () => {
-    const content = baseContent({ contactLine: "jordan@example.com | 555-0100" });
-    const result = runFormatGate(content);
-    expect(result.violations.some(v => v.location === "contact line" && /pipe/.test(v.reason))).toBe(false);
+    const result = runFormatGate(baseContent({ contactLine: "jordan@example.com | 555-0100" }));
+    expect(result.hardFailures.some(v => v.location === "contact line" && /pipe/.test(v.reason))).toBe(false);
   });
 
-  it("rejects a bullet over the character cap", () => {
+  it("HARD FAILS on a truncated/mid-sentence bullet (no terminal punctuation) — still blocks export", () => {
+    const content = bulletContent("Delivered 40% growth in engagement");
+    const result = runFormatGate(content);
+    expect(result.blocked).toBe(true);
+    expect(result.hardFailures.some(v => /truncated\/mid-sentence/.test(v.reason))).toBe(true);
+  });
+
+  it("WARNS (does not block) on a bullet over the character cap", () => {
     const longBullet = "Delivered ".repeat(30) + "50% growth.";
     expect(longBullet.length).toBeGreaterThan(ONE_PAGE_BUDGET.bulletMaxChars);
-    const content = baseContent({
-      experience: [{
-        company: "Acme AI", role: "Senior PM", tenure: "2021", location: "",
-        bullets: [{ sourceBulletId: "e_1", text: longBullet, priority: 1 }],
-      }],
-    });
-    const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /character cap/.test(v.reason))).toBe(true);
+    const result = runFormatGate(bulletContent(longBullet));
+    expect(result.blocked).toBe(false);
+    expect(result.warnings.some(v => /character cap/.test(v.reason))).toBe(true);
+    expect(result.hardFailures).toHaveLength(0);
   });
 
-  it("rejects a role with more bullets than the per-role cap", () => {
+  it("WARNS (does not block) on a role with more bullets than the per-role cap", () => {
     const bullets = Array.from({ length: ONE_PAGE_BUDGET.bulletsPerRoleMax + 1 }, (_, i) => ({
       sourceBulletId: `e_${i}`, text: `Delivered result number ${i}, saving $10M.`, priority: i + 1,
     }));
     const content = baseContent({ experience: [{ company: "Acme AI", role: "Senior PM", tenure: "2021", location: "", bullets }] });
     const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /per-role cap/.test(v.reason))).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.warnings.some(v => /per-role cap/.test(v.reason))).toBe(true);
   });
 
-  it("rejects a bullet not ending in terminal punctuation", () => {
-    const content = baseContent({
-      experience: [{
-        company: "Acme AI", role: "Senior PM", tenure: "2021", location: "",
-        bullets: [{ sourceBulletId: "e_1", text: "Delivered 40% growth in engagement", priority: 1 }],
-      }],
-    });
+  it("WARNS (does not block) on a bullet with no identifiable outcome, and records it as a structured outcomeWarning", () => {
+    const content = bulletContent("Worked on various initiatives across the team.");
     const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /terminal punctuation/.test(v.reason))).toBe(true);
+    expect(result.blocked).toBe(false);
+    expect(result.warnings.some(v => /outcome/.test(v.reason))).toBe(true);
+    expect(result.outcomeWarnings).toEqual([
+      { company: "Acme AI", bulletIndex: 0, text: "Worked on various initiatives across the team." },
+    ]);
   });
 
-  it("rejects a bullet with no identifiable outcome clause", () => {
-    const content = baseContent({
-      experience: [{
-        company: "Acme AI", role: "Senior PM", tenure: "2021", location: "",
-        bullets: [{ sourceBulletId: "e_1", text: "Worked on various initiatives across the team.", priority: 1 }],
-      }],
-    });
+  it("does not flag a bullet with a real qualitative outcome as an outcomeWarning", () => {
+    const content = bulletContent("Structured commercial framework and return analysis for global port operator across APAC, Europe, and Africa bid advisory.");
     const result = runFormatGate(content);
-    expect(result.ok).toBe(false);
-    expect(result.violations.some(v => /outcome clause/.test(v.reason))).toBe(true);
+    expect(result.outcomeWarnings).toHaveLength(0);
   });
 
-  it("does not flag a single-clause bullet whose only clause legitimately ends on its outcome", () => {
-    const content = baseContent({
-      experience: [{
-        company: "Acme AI", role: "Senior PM", tenure: "2021", location: "",
-        bullets: [{ sourceBulletId: "e_1", text: "Delivered $10.45B portfolio intelligence cockpit.", priority: 1 }],
-      }],
-    });
-    const result = runFormatGate(content);
-    expect(result.violations.some(v => /outcome clause/.test(v.reason))).toBe(false);
-  });
-
-  it("collects ALL violations across the whole document, not just the first", () => {
+  it("collects both hard failures and warnings independently in the same pass", () => {
     const content = baseContent({
       summary: "Shipped [bad] stuff",
       experience: [{
@@ -129,12 +149,15 @@ describe("runFormatGate", () => {
       }],
     });
     const result = runFormatGate(content);
-    expect(result.violations.length).toBeGreaterThanOrEqual(3); // bracket + missing punctuation + missing outcome
+    expect(result.blocked).toBe(true);
+    // bracket + missing terminal punctuation are HARD; missing outcome is WARN.
+    expect(result.hardFailures.length).toBeGreaterThanOrEqual(2);
+    expect(result.warnings.some(v => /outcome/.test(v.reason))).toBe(true);
   });
 });
 
 describe("formatGateFailureMessage", () => {
-  it("renders a loud, itemized, human-readable message naming each violation's location and reason", () => {
+  it("renders a loud, itemized message naming each HARD violation's location and reason", () => {
     const result = runFormatGate(baseContent({ summary: "Shipped [bad] stuff" }));
     const msg = formatGateFailureMessage(result);
     expect(msg).toContain("FORMAT GATE FAILED");

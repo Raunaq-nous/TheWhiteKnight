@@ -4,6 +4,17 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence } from "../lib/resume-schema";
 import { ResumeArchetype } from "../lib/resume-archetype";
+import type { FormatGateViolation, OutcomeWarning } from "../lib/resume-format-gate";
+import { getProfile, saveProfile } from "../lib/profile";
+import { rewriteBulletFromAnswer, replaceBulletInProfile } from "../lib/profile-enrichment";
+import { showToast } from "../lib/toast";
+
+// Targeted, named question for a bullet the format gate flagged as having
+// no identifiable outcome — same "name the specific thing" convention as
+// buildReactiveProbeQuestion (lib/resume-requirement-map.ts), never generic.
+function buildOutcomeGapQuestion(w: OutcomeWarning): string {
+  return `Your bullet under ${w.company} ("${w.text}") doesn't have an explicit outcome. What was the concrete result — a number, a decision it enabled, or what it produced?`;
+}
 
 // This preview is a visual approximation only — it no longer has any role
 // in whether the exported document fits one page. The actual PDF is a
@@ -281,6 +292,11 @@ export function ResumeExportView({
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const [exportError, setExportError] = useState("");
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [warnings, setWarnings] = useState<FormatGateViolation[]>([]);
+  const [outcomeWarnings, setOutcomeWarnings] = useState<OutcomeWarning[]>([]);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [resolvedKeys, setResolvedKeys] = useState<Set<string>>(new Set());
+  const [submittingKey, setSubmittingKey] = useState<string | null>(null);
 
   const sequence: ResumeSectionKey[] = resolveSectionSequence(content, archetype ?? undefined);
 
@@ -295,10 +311,42 @@ export function ResumeExportView({
       const filename = (content.name || "resume").toLowerCase().replace(/\s+/g, "-");
       downloadResumeExport(result, filename);
       setPageCount(result.pageCount);
+      setWarnings(result.warnings);
+      setOutcomeWarnings(result.outcomeWarnings);
       setExportState("done");
     } catch (e: any) {
       setExportError(e.message || "Export failed.");
       setExportState("error");
+    }
+  };
+
+  const warningKey = (w: OutcomeWarning) => `${w.company}::${w.bulletIndex}`;
+
+  // Strengthens ONE flagged bullet with the user's supplied outcome and
+  // writes it back into the CANONICAL PROFILE (lib/profile-enrichment.ts —
+  // the same rewrite-in-place mechanism Feature 2's profile interview
+  // uses), so every future resume for any JD benefits, not just this
+  // already-exported document.
+  const submitOutcomeAnswer = async (w: OutcomeWarning) => {
+    const key = warningKey(w);
+    const answer = answers[key]?.trim();
+    if (!answer) return;
+    const profile = getProfile();
+    if (!profile) { showToast("No profile found.", "error"); return; }
+    setSubmittingKey(key);
+    try {
+      const question = buildOutcomeGapQuestion(w);
+      const newText = await rewriteBulletFromAnswer(profile, w.company, w.text, question, answer);
+      if (!newText.trim()) { showToast("No usable outcome found in that answer.", "error"); return; }
+      const nextProfile = replaceBulletInProfile(profile, "experience", w.company, w.text, newText);
+      const ok = await saveProfile(nextProfile);
+      if (!ok) { showToast("Rewrite failed to save to your profile.", "error"); return; }
+      setResolvedKeys(prev => new Set(prev).add(key));
+      showToast(`Updated in your profile: "${newText}"`, "ok");
+    } catch (e: any) {
+      showToast(e.message || "Couldn't process that answer.", "error");
+    } finally {
+      setSubmittingKey(null);
     }
   };
 
@@ -325,6 +373,62 @@ export function ResumeExportView({
         )}
         <button onClick={onClose} className="btn" style={{ fontSize: "0.75rem" }}>CLOSE</button>
       </div>
+
+      {exportState === "done" && warnings.length > 0 && (
+        <div style={{ maxWidth: 700, margin: "16px auto 0", background: "var(--surface, #2d2f31)", border: "1px solid var(--border, #444)", borderRadius: "var(--radius, 6px)", padding: 14 }}>
+          <div className="label" style={{ color: "var(--accent, #e8b339)", marginBottom: 8, fontSize: "0.625rem" }}>
+            EXPORTED WITH {warnings.length} WARNING{warnings.length === 1 ? "" : "S"} — DOCUMENT IS STILL YOURS TO SEND
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: outcomeWarnings.length > 0 ? 14 : 0 }}>
+            {warnings.map((w, i) => (
+              <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "#ccc" }}>
+                <span style={{ color: "#e8b339" }}>{w.location}:</span> {w.reason}
+              </div>
+            ))}
+          </div>
+
+          {outcomeWarnings.length > 0 && (
+            <>
+              <div className="label" style={{ color: "var(--accent, #e8b339)", marginBottom: 8, fontSize: "0.625rem" }}>
+                THESE BULLETS COULD BE STRONGER — SUPPLY A REAL OUTCOME
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {outcomeWarnings.map(w => {
+                  const key = warningKey(w);
+                  const resolved = resolvedKeys.has(key);
+                  return (
+                    <div key={key} style={{ opacity: resolved ? 0.6 : 1 }}>
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "#ccc", marginBottom: 6 }}>
+                        {resolved ? "UPDATED IN YOUR PROFILE — " : ""}{buildOutcomeGapQuestion(w)}
+                      </div>
+                      {!resolved && (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            type="text"
+                            value={answers[key] ?? ""}
+                            onChange={e => setAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                            placeholder="Your answer..."
+                            style={{ flex: 1, padding: 8, background: "#1c1e1f", border: "1px solid #444", color: "#eee", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", borderRadius: 4 }}
+                          />
+                          <button
+                            className="btn btn-primary"
+                            style={{ fontSize: "0.75rem", padding: "6px 12px" }}
+                            disabled={submittingKey === key || !answers[key]?.trim()}
+                            onClick={() => submitOutcomeAnswer(w)}
+                          >
+                            {submittingKey === key ? "SAVING..." : "SAVE TO PROFILE"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="resume-export-scroll" style={{ display: "flex", justifyContent: "center", padding: "24px 0 48px" }}>
         <div className="resume-page-frame" style={{ boxShadow: "0 0 12px rgba(0,0,0,0.4)" }}>
           <ResumePage content={content} scale={1} sequence={sequence} />
