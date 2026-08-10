@@ -5,7 +5,7 @@
  * normalizeResumeContent/resumeContentToMarkdown don't crash on null values.
  */
 import { describe, it, expect } from "vitest";
-import { ResumeContentSchema, normalizeResumeContent, resumeContentToMarkdown, resolveSectionSequence, ResumeContent } from "../resume-schema";
+import { ResumeContentSchema, normalizeResumeContent, resumeContentToMarkdown, resolveSectionSequence, ResumeContent, formatDegreeLine } from "../resume-schema";
 
 function baseResumeContent(): unknown {
   return {
@@ -122,6 +122,28 @@ describe("ResumeContentSchema nullable optional fields", () => {
     input.sectionSequence = ["summary", "not-a-section"];
     const result = ResumeContentSchema.safeParse(input);
     expect(result.success).toBe(false);
+  });
+});
+
+// PROBLEM 5: "B.Tech in Mechanical Engineering in Mechanical Engineering" —
+// field was appended even when already embedded in degree.
+describe("formatDegreeLine", () => {
+  it("does not duplicate the field when it is already embedded in degree (the exact reported bug)", () => {
+    expect(formatDegreeLine("B.Tech in Mechanical Engineering", "Mechanical Engineering")).toBe("B.Tech in Mechanical Engineering");
+  });
+
+  it("appends field when degree does not already contain it", () => {
+    expect(formatDegreeLine("B.S.", "Computer Science")).toBe("B.S. in Computer Science");
+  });
+
+  it("is case-insensitive when checking for an existing embed", () => {
+    expect(formatDegreeLine("B.Tech in mechanical engineering", "Mechanical Engineering")).toBe("B.Tech in mechanical engineering");
+  });
+
+  it("returns degree unchanged when field is null, undefined, or blank", () => {
+    expect(formatDegreeLine("B.S.", null)).toBe("B.S.");
+    expect(formatDegreeLine("B.S.", undefined)).toBe("B.S.");
+    expect(formatDegreeLine("B.S.", "   ")).toBe("B.S.");
   });
 });
 

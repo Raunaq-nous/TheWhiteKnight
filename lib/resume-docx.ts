@@ -18,24 +18,32 @@
 //      is what actually guarantees the content is safe to render.
 
 import {
-  AlignmentType, BorderStyle, Document, ExternalHyperlink, Packer, Paragraph, TabStopType, TextRun,
+  AlignmentType, BorderStyle, Document, ExternalHyperlink, LineRuleType, Packer, Paragraph, TabStopType, TextRun,
 } from "docx";
-import { ResumeContent, resolveSectionSequence, ResumeSectionKey } from "./resume-schema";
+import { ResumeContent, resolveSectionSequence, ResumeSectionKey, formatDegreeLine } from "./resume-schema";
 import { ResumeArchetype } from "./resume-archetype";
 
-// Calibri 10-11pt per spec; body text at the smaller end so more content
-// safely fits one page, headings/name a couple points up for hierarchy.
+// Calibri 10-11pt per spec, tightened toward the smaller end (~15-20% more
+// content per page target — real content quality should never be traded
+// for page-fit again; typography is the room-maker instead, see
+// clampBulletText in lib/resume-budget.ts for the compression-quality fix
+// this pairs with).
 const FONT = "Calibri";
-const BODY_SIZE = 21; // half-points -> 10.5pt
+const BODY_SIZE = 20; // half-points -> 10pt (was 10.5pt)
 const NAME_SIZE = 32; // 16pt
 const HEADING_SIZE = 22; // 11pt
-const CONTACT_SIZE = 19; // 9.5pt
+const CONTACT_SIZE = 18; // 9pt (was 9.5pt)
 
-// 0.5in margins, in twips (1440 twips/inch).
-const MARGIN_TWIPS = 720;
-// Page content width at 8.5in page - 2*0.5in margin = 7.5in = 10800 twips —
+// Tight, near-single line spacing (240 twips/line = exactly single) — set
+// explicitly on every paragraph rather than left to the docx library's
+// implicit default, so it can't silently drift.
+const LINE_SPACING = 228;
+
+// 0.4in margins (was 0.5in), in twips (1440 twips/inch).
+const MARGIN_TWIPS = 576;
+// Page content width at 8.5in page - 2*0.4in margin = 7.7in = 11088 twips —
 // used as the right tab-stop position for right-aligned dates/years.
-const RIGHT_TAB_POSITION = 10800;
+const RIGHT_TAB_POSITION = 11088;
 
 const SECTION_LABELS: Partial<Record<ResumeSectionKey, string>> = {
   summary: "SUMMARY",
@@ -116,7 +124,7 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
       heading("education");
       for (const ed of content.education) {
         plan.push({ kind: "entryHeader", left: ed.institution, right: ed.years });
-        let line = `${ed.degree}${ed.field ? ` in ${ed.field}` : ""}`;
+        let line = formatDegreeLine(ed.degree, ed.field);
         if (ed.gpa) line += `, GPA: ${ed.gpa}`;
         plan.push({ kind: "entryRole", text: line });
         for (const a of ed.achievements ?? []) plan.push({ kind: "bullet", text: a });
@@ -142,12 +150,17 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
   return plan;
 }
 
+// Every paragraph gets the same explicit, tight line height — set once
+// here rather than repeated per case, so LINE_SPACING can't drift out of
+// sync between node kinds.
+const TIGHT_LINE = { line: LINE_SPACING, lineRule: LineRuleType.AUTO } as const;
+
 function docxParagraphsForNode(node: DocxPlanNode): Paragraph[] {
   switch (node.kind) {
     case "header": {
       const nameRun = new Paragraph({
         children: [new TextRun({ text: node.name, bold: true, font: FONT, size: NAME_SIZE })],
-        spacing: { after: 40 },
+        spacing: { after: 30, ...TIGHT_LINE },
       });
       const contactChildren: (TextRun | ExternalHyperlink)[] = [
         new TextRun({ text: node.contactLine, font: FONT, size: CONTACT_SIZE }),
@@ -159,25 +172,25 @@ function docxParagraphsForNode(node: DocxPlanNode): Paragraph[] {
           children: [new TextRun({ text: l.label, font: FONT, size: CONTACT_SIZE, color: "0563C1", underline: {} })],
         }));
       }
-      const contactRun = new Paragraph({ children: contactChildren, spacing: { after: 160 } });
+      const contactRun = new Paragraph({ children: contactChildren, spacing: { after: 100, ...TIGHT_LINE } });
       return [nameRun, contactRun];
     }
     case "sectionHeading":
       return [new Paragraph({
         children: [new TextRun({ text: node.heading, bold: true, font: FONT, size: HEADING_SIZE })],
-        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "999999", space: 2 } },
-        spacing: { before: 160, after: 60 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "999999", space: 1 } },
+        spacing: { before: 100, after: 40, ...TIGHT_LINE },
       })];
     case "paragraph":
       return [new Paragraph({
         children: [new TextRun({ text: node.text, font: FONT, size: BODY_SIZE })],
-        spacing: { after: 60 },
+        spacing: { after: 40, ...TIGHT_LINE },
       })];
     case "bullet":
       return [new Paragraph({
         children: [new TextRun({ text: node.text, font: FONT, size: BODY_SIZE })],
         bullet: { level: 0 },
-        spacing: { after: 40 },
+        spacing: { after: 24, ...TIGHT_LINE },
       })];
     case "entryHeader":
       return [new Paragraph({
@@ -187,12 +200,12 @@ function docxParagraphsForNode(node: DocxPlanNode): Paragraph[] {
           new TextRun({ text: "\t", font: FONT, size: BODY_SIZE }),
           new TextRun({ text: node.right, font: FONT, size: BODY_SIZE }),
         ],
-        spacing: { before: 100 },
+        spacing: { before: 70, ...TIGHT_LINE },
       })];
     case "entryRole":
       return [new Paragraph({
         children: [new TextRun({ text: node.text, italics: true, font: FONT, size: BODY_SIZE })],
-        spacing: { after: 40 },
+        spacing: { after: 24, ...TIGHT_LINE },
       })];
     case "skillsLine":
       return [new Paragraph({
@@ -200,7 +213,7 @@ function docxParagraphsForNode(node: DocxPlanNode): Paragraph[] {
           new TextRun({ text: `${node.category}: `, bold: true, font: FONT, size: BODY_SIZE }),
           new TextRun({ text: node.items, font: FONT, size: BODY_SIZE }),
         ],
-        spacing: { after: 40 },
+        spacing: { after: 24, ...TIGHT_LINE },
       })];
   }
 }

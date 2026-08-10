@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clampToOnePageBudget, clampText, clampBulletText, clampBulletPreservingOutcome, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET } from "../resume-budget";
+import { clampToOnePageBudget, clampText, clampBulletText, clampBulletPreservingOutcome, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET, enforceMinBulletsPerRole, capTopBandPerCompany } from "../resume-budget";
 import type { ResumeContent } from "../resume-schema";
 
 // A rendered bullet must never end in a comma, a dangling conjunction/
@@ -24,12 +24,24 @@ function makeBullet(text: string, priority: number) {
 // distinct word pool per call site so unrelated fixture fields (experience
 // bullets vs. keyWins/projects) don't accidentally share enough vocabulary
 // to trip the semantic dedupe (BUG C) against each other.
+// Includes a comma partway through, like every real bullet in this app's
+// actual profile data — the clause-boundary-only compressor (BUG: cutting
+// mid-noun-phrase) needs SOME clause boundary to trim at, or an overflowing
+// bullet with no natural delimiter at all gets dropped entirely rather
+// than mangled, which is correct but not what most of these fixtures are
+// meant to exercise.
+const DANGLING_WORDS = new Set(["and", "or", "but", "nor", "with", "for", "to", "of", "in", "on", "at", "by", "as", "the", "a", "an", "from"]);
+
 function longFiller(targetLen: number, pool = "Delivered measurable outcomes across multiple engagements for global clients spanning finance technology and infrastructure sectors with substantial impact"): string {
   const words = pool.split(" ");
   let out = "";
   let i = 0;
   while (out.length < targetLen) {
-    out += (out ? " " : "") + words[i % words.length];
+    const word = words[i % words.length];
+    out += (out ? " " : "") + word;
+    // Never land the comma right after a word that would itself read as a
+    // dangling conjunction/preposition once trimmed to this clause.
+    if (out.length >= Math.floor(targetLen * 0.35) && !out.includes(",") && !DANGLING_WORDS.has(word.toLowerCase())) out += ",";
     i++;
   }
   return out.slice(0, targetLen);
@@ -155,17 +167,24 @@ describe("clampBulletText — never truncates mid-sentence (BUG 2)", () => {
   });
 
   it("always ends in terminal punctuation (a period) when a result is returned", () => {
-    const result = clampBulletText("Delivered a multi-plant capital program strategy for a North American nuclear utility with board-level sign-off", 60);
+    const result = clampBulletText("Delivered a multi-plant capital program strategy, with board-level sign-off from the utility", 60);
     expect(result).not.toBeNull();
     expect(/[.!?]$/.test(result!)).toBe(true);
   });
 
-  it("never cuts mid-word", () => {
-    const result = clampBulletText("Delivered multi-plant capital program strategy for North American nuclear utility, unlocking a multi-billion-dollar program", 80);
-    expect(result).not.toBeNull();
+  it("never cuts mid-word or mid-clause — result is always a whole-clause prefix of the source", () => {
     const original = "Delivered multi-plant capital program strategy for North American nuclear utility, unlocking a multi-billion-dollar program";
+    const result = clampBulletText(original, 90);
+    expect(result).not.toBeNull();
     const withoutPeriod = result!.replace(/\.$/, "");
-    expect(original.startsWith(withoutPeriod) || original.includes(withoutPeriod)).toBe(true);
+    expect(original.startsWith(withoutPeriod)).toBe(true);
+  });
+
+  it("drops the item entirely (returns null) when even the FIRST clause alone exceeds the budget — never trims WITHIN a clause", () => {
+    // Same source as above, but too tight for even "Delivered multi-plant
+    // capital program strategy for North American nuclear utility" alone.
+    const original = "Delivered multi-plant capital program strategy for North American nuclear utility, unlocking a multi-billion-dollar program";
+    expect(clampBulletText(original, 80)).toBeNull();
   });
 
   it("drops the bullet entirely (returns null) rather than emit an ungrammatical fragment when no clean cut exists", () => {
@@ -252,10 +271,57 @@ describe("clampBulletPreservingOutcome — impact must survive (BUG B)", () => {
   });
 
   it("falls back to the plain grammar-safe clamp when no outcome marker exists at all", () => {
-    const noMarker = "Led a cross-functional workshop series to align stakeholders on a shared roadmap for the coming quarter";
+    const noMarker = "Led a cross-functional workshop series, to align stakeholders on a shared roadmap for the coming quarter";
     const result = clampBulletPreservingOutcome(noMarker, 60);
     expect(result).not.toBeNull();
     expect(/[.!?]$/.test(result!)).toBe(true);
+  });
+
+  it("drops (returns null) a no-outcome bullet whose first clause alone still exceeds the budget, rather than trim mid-clause", () => {
+    const noMarkerSingleClause = "Led a cross-functional workshop series to align stakeholders on a shared roadmap for the coming quarter";
+    expect(clampBulletPreservingOutcome(noMarkerSingleClause, 60)).toBeNull();
+  });
+});
+
+// PROBLEM 1 (real reported bug): compression cut mid-noun-phrase — the
+// source "Designed a portfolio intelligence cockpit integrating cost,
+// schedule, and risk data with Monte Carlo-driven early-warning alerts and
+// a stage-gate governance framework, demonstrated on..." became "Designed
+// a portfolio," (grammatically terminated, but the object of "Designed"
+// was truncated mid-phrase — nonsense). Fixed by trimming at clause
+// boundaries ONLY, never inside one.
+describe("clause-boundary-only compression — the exact reported bug (PROBLEM 1)", () => {
+  const REAL_SETUP =
+    "Designed a portfolio intelligence cockpit integrating cost, schedule, and risk data with Monte Carlo-driven early-warning alerts and a stage-gate governance framework";
+  const REAL_FULL_BULLET =
+    `${REAL_SETUP}, demonstrated on a $10.45B portfolio of 16 projects across 10+ sites in a single integrated capital planning system.`;
+
+  it("never produces the reported broken fragment, and the result is always a whole-clause prefix of the source", () => {
+    const result = clampBulletText(REAL_SETUP, 70);
+    expect(result).not.toBeNull();
+    expect(result).not.toBe("Designed a portfolio.");
+    expect(REAL_SETUP.startsWith(result!.replace(/\.$/, ""))).toBe(true);
+    // The object of "Designed" ("a portfolio intelligence cockpit") must
+    // survive whole — never truncated mid-noun-phrase.
+    expect(result).toContain("a portfolio intelligence cockpit");
+  });
+
+  it("drops the setup entirely (null) rather than truncate inside the first clause when even that doesn't fit", () => {
+    expect(clampBulletText(REAL_SETUP, 45)).toBeNull();
+  });
+
+  it("the exact real full bullet: outcome survives, and if the setup is trimmed it is trimmed at a whole clause boundary, never mid-phrase", () => {
+    const result = clampBulletPreservingOutcome(REAL_FULL_BULLET, 130);
+    expect(result).not.toBeNull();
+    expect(result).toContain("$10.45B portfolio of 16 projects across 10+ sites");
+    expect(result).not.toContain("Designed a portfolio,");
+    expect(result).not.toMatch(/Designed a portfolio\.[^,]/); // never a bare truncated object
+  });
+
+  it("at a looser budget, keeps the first whole clause of the setup intact alongside the outcome", () => {
+    const result = clampBulletPreservingOutcome(REAL_FULL_BULLET, 200)!;
+    expect(result).toContain("Designed a portfolio intelligence cockpit integrating cost");
+    expect(result).toContain("$10.45B portfolio of 16 projects across 10+ sites");
   });
 });
 
@@ -424,6 +490,137 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     const snapshot = JSON.stringify(content);
     clampToOnePageBudget(content, "consulting");
     expect(JSON.stringify(content)).toBe(snapshot);
+  });
+});
+
+// PROBLEM 4: dedupe promoting a role's best engagements to the top band
+// left the role itself looking thin (one bullet). Fixed with a floor —
+// enforceMinBulletsPerRole un-promotes just enough top-band items so the
+// role keeps at least minBullets in Experience instead.
+function bainContent(bainBulletCount: number, keyWinIds: string[]): ResumeContent {
+  const bullets = Array.from({ length: bainBulletCount }, (_, i) => ({
+    sourceBulletId: `bain_${i}`, text: `Bain engagement number ${i}, delivering real impact.`, priority: i + 1,
+  }));
+  return {
+    name: "Jordan Lee", contactLine: "jordan@example.com | 555-0100", summary: "",
+    sectionOrder: "experience-first",
+    experience: [{ company: "Bain & Company", role: "Consultant", tenure: "2020 - Present", location: "", bullets }],
+    education: [], skills: [], projects: [],
+    keyWins: keyWinIds.map(id => `Win from ${id}`),
+    keyWinIds,
+  } as ResumeContent;
+}
+
+describe("enforceMinBulletsPerRole (PROBLEM 4)", () => {
+  it("un-promotes just enough top-band items to keep a role at the floor, when it started with enough bullets", () => {
+    // 3 Bain bullets, all 3 promoted to keyWinIds — dedupe would otherwise
+    // strip all 3 duplicates from Experience, leaving Bain with zero.
+    const content = bainContent(3, ["bain_0", "bain_1", "bain_2"]);
+    const floored = enforceMinBulletsPerRole(content, 2);
+    // Exactly 1 of the 3 was un-promoted (need = 2 - 0 surviving = 2... but
+    // un-promoting 2 satisfies the floor with the least disruption).
+    expect(floored.keyWinIds!.length).toBeLessThan(3);
+    const stillTopBand = new Set(floored.keyWinIds);
+    const survivingInExperience = content.experience[0].bullets.filter(b => !stillTopBand.has(b.sourceBulletId!));
+    expect(survivingInExperience.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("un-promotes the LOWEST-priority (weakest) duplicated bullets first, keeping the strongest in the top band", () => {
+    const content = bainContent(3, ["bain_0", "bain_1", "bain_2"]); // priorities 1,2,3
+    const floored = enforceMinBulletsPerRole(content, 2);
+    // bain_0 (priority 1, strongest) should be the one that STAYS promoted.
+    expect(floored.keyWinIds).toContain("bain_0");
+  });
+
+  it("does nothing when the role already has enough non-duplicated bullets", () => {
+    const content = bainContent(4, ["bain_0"]); // 3 of 4 bullets remain even after removing the 1 duplicate
+    const floored = enforceMinBulletsPerRole(content, 2);
+    expect(floored).toEqual(content);
+  });
+
+  it("does nothing when a role never had enough bullets to begin with (nothing to redistribute)", () => {
+    const content = bainContent(1, ["bain_0"]);
+    const floored = enforceMinBulletsPerRole(content, 2);
+    expect(floored).toEqual(content);
+  });
+
+  it("is a no-op when there is no top-band content at all", () => {
+    const content = bainContent(3, []);
+    expect(enforceMinBulletsPerRole(content, 2)).toEqual(content);
+  });
+
+  it("integration: a full clampToOnePageBudget pass never leaves a role with fewer than 2 bullets when it had enough to start", () => {
+    const content: ResumeContent = {
+      ...richConsultingContent(),
+      experience: [{
+        company: "Bain & Company", role: "Project Leader", tenure: "2025 - Present", location: "",
+        bullets: [
+          { sourceBulletId: "bain_a", text: "Delivered board-level recommendation for a multi-billion-dollar program.", priority: 1 },
+          { sourceBulletId: "bain_b", text: "Led concept selection enabling investment commitment on the project.", priority: 2 },
+          { sourceBulletId: "bain_c", text: "Structured governance framework across financial and regulatory dimensions.", priority: 3 },
+        ],
+      }],
+      keyWins: ["Win A", "Win B", "Win C"],
+      keyWinIds: ["bain_a", "bain_b", "bain_c"], // all 3 of Bain's bullets promoted
+    };
+    const clamped = clampToOnePageBudget(content, "consulting");
+    const bain = clamped.experience.find(e => e.company === "Bain & Company");
+    expect(bain).toBeDefined();
+    expect(bain!.bullets.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("capTopBandPerCompany (PROBLEM 4: top band should draw from across employers)", () => {
+  it("caps the number of top-band items tracing back to a single company", () => {
+    const content: ResumeContent = {
+      ...bainContent(4, ["bain_0", "bain_1", "bain_2"]),
+      // A second company contributes nothing to the top band here.
+    };
+    const capped = capTopBandPerCompany(content, 2);
+    const bainIdsInTopBand = capped.keyWinIds!.filter(id => id.startsWith("bain_"));
+    expect(bainIdsInTopBand.length).toBeLessThanOrEqual(2);
+  });
+
+  it("keeps the highest-priority (earliest-listed) items for the over-represented company", () => {
+    const content = bainContent(4, ["bain_0", "bain_1", "bain_2"]);
+    const capped = capTopBandPerCompany(content, 2);
+    expect(capped.keyWinIds).toEqual(["bain_0", "bain_1"]);
+  });
+
+  it("does not cap project-sourced top-band items (not tied to any employer)", () => {
+    const content: ResumeContent = {
+      ...bainContent(2, ["bain_0", "bain_1"]),
+      projects: [{ sourceBulletId: "proj_1", name: "P1", description: "A project." }],
+    };
+    const capped = capTopBandPerCompany(content, 1);
+    expect(capped.keyWinIds).toEqual(["bain_0"]);
+    expect(capped.projects).toHaveLength(1); // untouched
+  });
+
+  it("leaves keyWins/keyWinIds index-aligned after capping", () => {
+    const content = bainContent(4, ["bain_0", "bain_1", "bain_2"]);
+    const capped = capTopBandPerCompany(content, 2);
+    expect(capped.keyWins!.length).toBe(capped.keyWinIds!.length);
+  });
+
+  it("draws top-band items from multiple employers when both contribute strong bullets", () => {
+    const content: ResumeContent = {
+      name: "Jordan Lee", contactLine: "jordan@example.com | 555-0100", summary: "",
+      sectionOrder: "experience-first",
+      experience: [
+        { company: "Bain & Company", role: "Consultant", tenure: "2020", location: "", bullets: [
+          { sourceBulletId: "bain_0", text: "Bain win.", priority: 1 },
+        ] },
+        { company: "Aranca", role: "Analyst", tenure: "2018", location: "", bullets: [
+          { sourceBulletId: "aranca_0", text: "Aranca win.", priority: 2 },
+        ] },
+      ],
+      education: [], skills: [], projects: [],
+      keyWins: ["Bain win.", "Aranca win."],
+      keyWinIds: ["bain_0", "aranca_0"],
+    } as ResumeContent;
+    const capped = capTopBandPerCompany(content, 1);
+    expect(capped.keyWinIds).toEqual(["bain_0", "aranca_0"]); // both survive — no employer over the cap of 1
   });
 });
 

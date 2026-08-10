@@ -304,9 +304,11 @@ NO REPETITION — pick each engagement's id for exactly ONE slot: if you select 
 
 CERTIFICATIONS: NEVER include a certifications section or field, regardless of what the archetype instructions below say and regardless of what the profile contains. This is an absolute rule, not archetype-specific.
 
-PROFILE SUMMARY:
+PROFILE SUMMARY — this is the ONLY field you write freely (see SELECTION, NOT WRITING above), and it is judged on two things: does it NAME the target role, and does it LEAD WITH a real number:
 - ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
-- If a summary is written: EXACTLY 2 lines max (~200 characters) — ties the candidate's background together and names the target role. NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
+- If a summary is written: EXACTLY 2 lines max (~200 characters), and it MUST follow this shape: [years/background] positioned for [the exact target role title] + the SINGLE strongest quantified proof point in the profile that is most relevant to THIS JD's target priorities (a real number, deal size, program scale, headcount — not a credential list, not a list of firm names with no figure attached).
+- A summary with no named target role and no number is a FAILED summary. Concrete example of this exact failure: "Strategy consultant and AI builder with 8+ years across MBB, growth advisory, and entrepreneurship." — no role named, no proof point, purely a background list. Do not write anything shaped like this.
+- NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
 
 ARCHETYPE — ${spec.label}:
 - MANDATORY SECTIONS (include if the profile has any data for them): ${spec.mandatorySections.join(", ")}.

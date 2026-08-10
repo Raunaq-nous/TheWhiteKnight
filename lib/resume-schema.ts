@@ -6,6 +6,22 @@ import { z } from "zod";
 import { normalizeTextForATS } from "./ats";
 import { RESUME_SPECS, ResumeArchetype } from "./resume-archetype";
 
+/**
+ * "${degree} in ${field}" — except when field is ALREADY embedded in
+ * degree (e.g. degree="B.Tech in Mechanical Engineering", field=
+ * "Mechanical Engineering" independently on the same record), which used
+ * to render "B.Tech in Mechanical Engineering in Mechanical Engineering".
+ * Every education render site (this file's own markdown export,
+ * lib/resume-docx.ts, app/resume-document.tsx) shares this one function so
+ * the fix can't drift out of sync between them.
+ */
+export function formatDegreeLine(degree: string, field?: string | null): string {
+  const trimmedField = field?.trim();
+  if (!trimmedField) return degree;
+  if (degree.toLowerCase().includes(trimmedField.toLowerCase())) return degree;
+  return `${degree} in ${trimmedField}`;
+}
+
 export const ResumeBulletSchema = z.object({
   // The id of a real profile bullet (from the AVAILABLE BULLETS list handed
   // to the model — see lib/profile-bullets.ts). This is the ONLY thing that
@@ -269,7 +285,7 @@ export function resumeContentToMarkdown(r: ResumeContent, archetype?: ResumeArch
       if (r.education.length === 0) return;
       lines.push("## Education");
       for (const ed of r.education) {
-        let line = `${ed.degree}${ed.field ? ` in ${ed.field}` : ""} | ${ed.institution} | ${ed.years}`;
+        let line = `${formatDegreeLine(ed.degree, ed.field)} | ${ed.institution} | ${ed.years}`;
         if (ed.gpa) line += ` | GPA: ${ed.gpa}`;
         lines.push(line);
         for (const a of ed.achievements ?? []) lines.push(`  - ${a}`);
