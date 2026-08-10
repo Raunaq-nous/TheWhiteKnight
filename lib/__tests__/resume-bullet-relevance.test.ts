@@ -127,11 +127,12 @@ describe("computeBulletRelevanceHints", () => {
 });
 
 describe("renderRelevanceHintsBlock", () => {
-  it("labels TOOL-BUILDING bullets and explains the demotion already applied to the ordering", () => {
+  it("labels TOOL-BUILDING bullets, impact tier, and explains the ordering (impact first, then tool-building demotion)", () => {
     const block = renderRelevanceHintsBlock(computeBulletRelevanceHints(baseProfile(), baseApp()));
     expect(block).toContain("TOOL-BUILDING");
     expect(block).toContain("DETERMINISTIC RELEVANCE RANKING");
-    expect(block).toContain("outranks a TOOL-BUILDING bullet");
+    expect(block).toContain("QUANTIFIED");
+    expect(block).toContain("still ranks behind a same-tier bullet that directly delivers");
   });
 
   it("returns an empty string for no hints", () => {
@@ -196,13 +197,30 @@ describe("rankProfileForResume — deterministic pre-ranking pass", () => {
     expect(ranked.projects![0].name).toBe("Capital Tracker");
   });
 
-  it("does NOT demote tool-building bullets when the archetype's core work IS building AI tools", () => {
-    const profile = baseProfile();
+  it("does NOT demote tool-building bullets when the archetype's core work IS building AI tools, once impact tier is equal", () => {
+    // NUCLEAR_BULLET's quantified outcome (impact bucket 2) legitimately
+    // outranks AI_PLATFORM_BULLET's qualitative-only one (bucket 1)
+    // regardless of tool-building demotion (BUG 3: impact density is
+    // checked before the tool-building demotion, not instead of it) — so
+    // this test isolates the demotion effect with two same-impact-tier,
+    // same-overlap bullets that differ ONLY in whether they're tool-building.
+    const TOOL_BUILDING_BULLET = "Built and shipped an internal automation tool, enabling faster contract review cycles.";
+    const DIRECT_DELIVERY_BULLET = "Directly delivered contract review recommendations, enabling faster cycles for the client.";
+    const profile: Profile = {
+      ...baseProfile(),
+      experience: [{
+        id: "e1", company: "Bain & Company", role: "Consultant", tenure: "2020 - Present", location: "", current: true,
+        bullets: [TOOL_BUILDING_BULLET, DIRECT_DELIVERY_BULLET].join("\n"),
+      }],
+    };
+
+    const rankedDemoted = rankProfileForResume(profile, baseApp(), "consulting");
+    const demotedOrder = rankedDemoted.experience[0].bullets.split("\n").filter(Boolean);
+    expect(demotedOrder[0]).toBe(DIRECT_DELIVERY_BULLET); // tool-building demoted behind direct delivery
+
     const rankedForAI = rankProfileForResume(profile, baseApp(), "ai_ml_engineering");
-    const order = rankedForAI.experience[0].bullets.split("\n").filter(Boolean);
-    // With demotion disabled, raw overlap alone decides — and the AI bullet
-    // has the higher raw overlap (per the computeBulletRelevanceHints test above).
-    expect(order[0]).toBe(AI_PLATFORM_BULLET);
+    const aiOrder = rankedForAI.experience[0].bullets.split("\n").filter(Boolean);
+    expect(aiOrder[0]).toBe(TOOL_BUILDING_BULLET); // demotion disabled — tool-building bullet keeps its slot
   });
 
   it("does not mutate the input profile", () => {

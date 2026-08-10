@@ -280,8 +280,8 @@ Portfolio/Website: (not provided)
 
 FULL WORK EXPERIENCE (every entry below is real and must be included — do not skip any):
 Senior Product Manager | Acme AI | 2021 - Present | San Francisco, CA
-  - Managed 3 cross-functional teams across eng, design, and data
   - Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%
+  - Managed 3 cross-functional teams across eng, design, and data
 
 Product Manager | DataCo | 2018 - 2021 | New York, NY
   - Reduced churn by 18% through targeted onboarding improvements
@@ -327,19 +327,19 @@ We are looking for a Senior PM to lead our API Platform...
 ---
 
 DETERMINISTIC RELEVANCE RANKING — the experience section above is already reordered by this exact logic (most relevant bullet first, within each role); these are the scores behind that order, shown for transparency, not something to re-derive:
-- [Acme AI] overlap=0 :: "Managed 3 cross-functional teams across eng, design, and data"
-- [Acme AI] overlap=0 TOOL-BUILDING :: "Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%"
-- [DataCo] overlap=0 :: "Reduced churn by 18% through targeted onboarding improvements"
-- [DataCo] overlap=1 TOOL-BUILDING :: "Shipped data pipeline product serving 200+ enterprise customers"
+- [Acme AI] impact=QUANTIFIED(1) overlap=0 TOOL-BUILDING :: "Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%"
+- [Acme AI] impact=NO OUTCOME(0) overlap=0 :: "Managed 3 cross-functional teams across eng, design, and data"
+- [DataCo] impact=QUANTIFIED(1) overlap=0 :: "Reduced churn by 18% through targeted onboarding improvements"
+- [DataCo] impact=QUALITATIVE(0) overlap=1 TOOL-BUILDING :: "Shipped data pipeline product serving 200+ enterprise customers"
 
-HOW TO READ THIS — a bullet marked TOOL-BUILDING describes building a tool, platform, or system whose feature names happen to reuse the JD's vocabulary (e.g. "cost modeling engine", "schedule optimization platform"). Unless the JD's core ask IS building AI/software tools, a bullet that shows DIRECTLY DELIVERING the JD's core work (leading the actual capital program, making the actual recommendation, owning the actual deal) outranks a TOOL-BUILDING bullet even when the tool-building bullet's raw overlap score is higher — that demotion is already applied to the ordering above. Respect this ordering when assigning "priority": bullets presented earlier within a role are generally the stronger pick, but still use judgment.
+HOW TO READ THIS — bullets are ranked by IMPACT FIRST: a QUANTIFIED bullet (has a real number/%/scope marker) always outranks a QUALITATIVE one (a real but unquantified outcome — a delivered artifact, a named decision), which always outranks a NO OUTCOME bullet (pure activity description with no result at all) — regardless of raw JD-keyword overlap. A NO OUTCOME bullet should only be selected to fill remaining space after every bullet with real impact has been placed. Within the same impact tier, a bullet marked TOOL-BUILDING (building a tool/platform whose feature names happen to reuse the JD's vocabulary) still ranks behind a same-tier bullet that directly delivers the JD's core work, unless the JD's core ask IS building AI/software tools. Respect this ordering when assigning "priority": bullets presented earlier within a role are the stronger pick — never rank a NO OUTCOME bullet ahead of a QUANTIFIED one.
 
 ---
 
 AVAILABLE BULLETS — every bullet you may put in "experience", "projects", or "keyWinIds" MUST be one of these exact ids. This is the complete, real inventory; nothing outside it exists:
 Acme AI — Senior Product Manager:
-  [e_7oa4xp] Managed 3 cross-functional teams across eng, design, and data
   [e_5vzaor] Led 0-to-1 launch of AI recommendation engine, increasing user engagement by 32%
+  [e_7oa4xp] Managed 3 cross-functional teams across eng, design, and data
 DataCo — Product Manager:
   [e_1mlze9v] Reduced churn by 18% through targeted onboarding improvements
   [e_a6s4n4] Shipped data pipeline product serving 200+ enterprise customers
@@ -413,9 +413,11 @@ NO REPETITION — pick each engagement's id for exactly ONE slot: if you select 
 
 CERTIFICATIONS: NEVER include a certifications section or field, regardless of what the archetype instructions below say and regardless of what the profile contains. This is an absolute rule, not archetype-specific.
 
-PROFILE SUMMARY:
+PROFILE SUMMARY — this is the ONLY field you write freely (see SELECTION, NOT WRITING above), and it is judged on two things: does it NAME the target role, and does it LEAD WITH a real number:
 - Allowed only as a 1-2 line positioning statement for career-switchers into product; otherwise omit.
-- If a summary is written: EXACTLY 2 lines max (~200 characters) — ties the candidate's background together and names the target role. NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
+- If a summary is written: EXACTLY 2 lines max (~200 characters), and it MUST follow this shape: [years/background] positioned for [the exact target role title] + the SINGLE strongest quantified proof point in the profile that is most relevant to THIS JD's target priorities (a real number, deal size, program scale, headcount — not a credential list, not a list of firm names with no figure attached).
+- A summary with no named target role and no number is a FAILED summary. Concrete example of this exact failure: "Strategy consultant and AI builder with 8+ years across MBB, growth advisory, and entrepreneurship." — no role named, no proof point, purely a background list. Do not write anything shaped like this.
+- NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
 
 ARCHETYPE — Product Management:
 - MANDATORY SECTIONS (include if the profile has any data for them): experience, skills.

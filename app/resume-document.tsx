@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ResumeContent, ResumeSectionKey, resolveSectionSequence } from "../lib/resume-schema";
+import { ResumeContent, ResumeSectionKey, resolveSectionSequence, formatDegreeLine } from "../lib/resume-schema";
 import { ResumeArchetype } from "../lib/resume-archetype";
 import type { FormatGateViolation, OutcomeWarning } from "../lib/resume-format-gate";
 import { getProfile, saveProfile } from "../lib/profile";
@@ -202,7 +202,7 @@ function ResumePage({
                 <span style={{ fontWeight: 400, fontStyle: "italic" }}>{ed.years}</span>
               </div>
               <div style={{ fontSize: "9.5pt" }}>
-                {ed.degree}{ed.field ? ` in ${ed.field}` : ""}{ed.gpa ? ` - GPA: ${ed.gpa}` : ""}
+                {formatDegreeLine(ed.degree, ed.field)}{ed.gpa ? ` - GPA: ${ed.gpa}` : ""}
               </div>
               {ed.achievements?.map((a, j) => <div key={j} style={{ fontSize: "9pt", color: "#333" }}>{a}</div>)}
             </div>

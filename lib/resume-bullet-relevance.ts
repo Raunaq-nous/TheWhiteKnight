@@ -1,6 +1,8 @@
 import { Profile } from "./profile";
 import { Application } from "./store";
 import { ResumeArchetype } from "./resume-archetype";
+import { OUTCOME_MARKER_PATTERN } from "./resume-budget";
+import { hasIdentifiableOutcome } from "./resume-format-gate";
 
 // Deterministic pre-ranking pass for resume generation (BUG 1 fix).
 //
@@ -15,14 +17,25 @@ import { ResumeArchetype } from "./resume-archetype";
 // "capital allocation" — the AI bullet scores ~3.8x higher on raw overlap
 // despite being the less relevant proof point for a capital-projects JD).
 //
-// The fix: bullets are bucketed BEFORE they are scored on overlap.
-// Direct-delivery bullets always outrank tool-building bullets, regardless
-// of raw keyword density, UNLESS the target archetype's core work IS
-// building AI/software tools (ai_ml_engineering) — in which case
-// tool-building bullets are exactly what should rank highest. Within each
-// bucket, bullets are ordered by keyword overlap. Nothing is dropped —
-// every bullet/project survives, just reordered so the model sees the most
-// relevant material first and can select/write from the complete set.
+// Bullets are bucketed BEFORE they are scored on overlap, in two
+// dimensions:
+//   1. OUTCOME BUCKET (impact density) — a bullet with a QUANTIFIED
+//      outcome ($/%/scope marker) always outranks one with only a
+//      qualitative outcome (delivered artifact/consequence/decision), which
+//      always outranks one with NO identifiable outcome at all. Space was
+//      going to narrative bullets with zero result ("Understanding India's
+//      competitive structures...") ahead of quantified ones purely because
+//      they scored higher on raw JD-keyword overlap — this bucket is
+//      checked FIRST, before overlap, so that can't happen again. A
+//      no-outcome bullet is only ever selected to fill remaining space.
+//   2. TOOL-BUILDING BUCKET — direct-delivery bullets always outrank
+//      tool-building bullets, regardless of raw keyword density, UNLESS the
+//      target archetype's core work IS building AI/software tools
+//      (ai_ml_engineering).
+// Within matching buckets, bullets are ordered by keyword overlap. Nothing
+// is dropped — every bullet/project survives, just reordered so the model
+// (and the deterministic selection/clamp pipeline downstream) sees the
+// strongest material first.
 const TOOL_BUILDING_PATTERN =
   /\b(built|build|shipped|ship|developed|develop|designed|design|created|create|launched|launch)\b[^.]{0,60}\b(platform|tool|tools|dashboard|engine|app|application|system|automation|agent|agents|bot|pipeline|prototype)\b/i;
 
@@ -47,6 +60,25 @@ function keywordOverlap(text: string, jdTerms: Set<string>): number {
   return overlap;
 }
 
+// Global variant of the (non-global) quantitative outcome pattern, so
+// impactDensity can count EVERY quantified marker in a bullet, not just
+// detect the first one.
+const OUTCOME_MARKER_PATTERN_GLOBAL = new RegExp(OUTCOME_MARKER_PATTERN.source, "gi");
+
+/** Count of quantified outcome markers ($ / % / scope figures) in the text — the "how many numbers back this up" signal. */
+export function impactDensity(text: string): number {
+  return (text.match(OUTCOME_MARKER_PATTERN_GLOBAL) ?? []).length;
+}
+
+export type OutcomeBucket = 2 | 1 | 0; // 2 = quantified, 1 = qualitative only, 0 = none
+
+/** 2 = has a quantified outcome, 1 = has a qualitative-only outcome (delivered artifact/consequence/decision), 0 = no identifiable outcome at all. */
+export function outcomeBucket(text: string): OutcomeBucket {
+  if (impactDensity(text) > 0) return 2;
+  if (hasIdentifiableOutcome(text)) return 1;
+  return 0;
+}
+
 // JD terms available deterministically at resume-generation time — the AF
 // scoring pass already extracted these before this call, unlike the
 // LLM-only targetPriorities/subFocus which don't exist until the resume
@@ -67,14 +99,26 @@ function demotesToolBuilding(archetype: ResumeArchetype): boolean {
   return archetype !== "ai_ml_engineering";
 }
 
+type ScoredBullet = { text: string; idx: number; overlap: number; toolBucket: number; outcome: OutcomeBucket; density: number };
+
+function scoreBullet(text: string, jdTerms: Set<string>, demote: boolean, idx: number): ScoredBullet {
+  const isToolBuilding = TOOL_BUILDING_PATTERN.test(text);
+  const toolBucket = demote && isToolBuilding ? 0 : 1; // 1 = direct-delivery tier, ranks first
+  return { text, idx, overlap: keywordOverlap(text, jdTerms), toolBucket, outcome: outcomeBucket(text), density: impactDensity(text) };
+}
+
+function compareScored(a: ScoredBullet, b: ScoredBullet): number {
+  // Impact density (outcome bucket, then raw marker count) is checked
+  // BEFORE JD-keyword overlap — a quantified bullet must never lose a slot
+  // to a narrative one just because the narrative happens to reuse more of
+  // the JD's vocabulary.
+  return (b.outcome - a.outcome) || (b.toolBucket - a.toolBucket) || (b.density - a.density) || (b.overlap - a.overlap) || (a.idx - b.idx);
+}
+
 function rankBulletLines(bulletsText: string, jdTerms: Set<string>, demote: boolean): string {
   const bullets = bulletsText.split("\n").map(b => b.trim()).filter(Boolean);
-  const scored = bullets.map((text, idx) => {
-    const isToolBuilding = TOOL_BUILDING_PATTERN.test(text);
-    const bucket = demote && isToolBuilding ? 0 : 1; // 1 = direct-delivery tier, ranks first
-    return { text, idx, overlap: keywordOverlap(text, jdTerms), bucket };
-  });
-  scored.sort((a, b) => (b.bucket - a.bucket) || (b.overlap - a.overlap) || (a.idx - b.idx));
+  const scored = bullets.map((text, idx) => scoreBullet(text, jdTerms, demote, idx));
+  scored.sort(compareScored);
   return scored.map(s => s.text).join("\n");
 }
 
@@ -96,11 +140,10 @@ export function rankProfileForResume(profile: Profile, app: Application, archety
     }));
 
   const projects = profile.projects
-    ? [...profile.projects].sort((a, b) => {
-        const scoreA = keywordOverlap(a.description, jdTerms) - (demote && TOOL_BUILDING_PATTERN.test(a.description) ? 100 : 0);
-        const scoreB = keywordOverlap(b.description, jdTerms) - (demote && TOOL_BUILDING_PATTERN.test(b.description) ? 100 : 0);
-        return scoreB - scoreA;
-      })
+    ? [...profile.projects]
+        .map((p, idx) => ({ p, score: scoreBullet(p.description, jdTerms, demote, idx) }))
+        .sort((a, b) => compareScored(a.score, b.score))
+        .map(({ p }) => p)
     : profile.projects;
 
   return { ...profile, experience, projects };
@@ -111,6 +154,8 @@ export type BulletRelevanceHint = {
   text: string;
   keywordOverlap: number;
   toolBuilding: boolean;
+  outcomeBucket: OutcomeBucket;
+  impactDensity: number;
 };
 
 export function computeBulletRelevanceHints(profile: Profile, app: Application): BulletRelevanceHint[] {
@@ -119,19 +164,28 @@ export function computeBulletRelevanceHints(profile: Profile, app: Application):
   for (const entry of profile.experience) {
     const bullets = entry.bullets.split("\n").map(b => b.trim()).filter(Boolean);
     for (const text of bullets) {
-      hints.push({ company: entry.company, text, keywordOverlap: keywordOverlap(text, jdTerms), toolBuilding: TOOL_BUILDING_PATTERN.test(text) });
+      hints.push({
+        company: entry.company,
+        text,
+        keywordOverlap: keywordOverlap(text, jdTerms),
+        toolBuilding: TOOL_BUILDING_PATTERN.test(text),
+        outcomeBucket: outcomeBucket(text),
+        impactDensity: impactDensity(text),
+      });
     }
   }
   return hints;
 }
 
+const OUTCOME_BUCKET_LABEL: Record<OutcomeBucket, string> = { 2: "QUANTIFIED", 1: "QUALITATIVE", 0: "NO OUTCOME" };
+
 export function renderRelevanceHintsBlock(hints: BulletRelevanceHint[]): string {
   if (hints.length === 0) return "";
   const lines = hints
-    .map(h => `- [${h.company}] overlap=${h.keywordOverlap}${h.toolBuilding ? " TOOL-BUILDING" : ""} :: "${h.text}"`)
+    .map(h => `- [${h.company}] impact=${OUTCOME_BUCKET_LABEL[h.outcomeBucket]}(${h.impactDensity}) overlap=${h.keywordOverlap}${h.toolBuilding ? " TOOL-BUILDING" : ""} :: "${h.text}"`)
     .join("\n");
   return `DETERMINISTIC RELEVANCE RANKING — the experience section above is already reordered by this exact logic (most relevant bullet first, within each role); these are the scores behind that order, shown for transparency, not something to re-derive:
 ${lines}
 
-HOW TO READ THIS — a bullet marked TOOL-BUILDING describes building a tool, platform, or system whose feature names happen to reuse the JD's vocabulary (e.g. "cost modeling engine", "schedule optimization platform"). Unless the JD's core ask IS building AI/software tools, a bullet that shows DIRECTLY DELIVERING the JD's core work (leading the actual capital program, making the actual recommendation, owning the actual deal) outranks a TOOL-BUILDING bullet even when the tool-building bullet's raw overlap score is higher — that demotion is already applied to the ordering above. Respect this ordering when assigning "priority": bullets presented earlier within a role are generally the stronger pick, but still use judgment.`;
+HOW TO READ THIS — bullets are ranked by IMPACT FIRST: a QUANTIFIED bullet (has a real number/%/scope marker) always outranks a QUALITATIVE one (a real but unquantified outcome — a delivered artifact, a named decision), which always outranks a NO OUTCOME bullet (pure activity description with no result at all) — regardless of raw JD-keyword overlap. A NO OUTCOME bullet should only be selected to fill remaining space after every bullet with real impact has been placed. Within the same impact tier, a bullet marked TOOL-BUILDING (building a tool/platform whose feature names happen to reuse the JD's vocabulary) still ranks behind a same-tier bullet that directly delivers the JD's core work, unless the JD's core ask IS building AI/software tools. Respect this ordering when assigning "priority": bullets presented earlier within a role are the stronger pick — never rank a NO OUTCOME bullet ahead of a QUANTIFIED one.`;
 }

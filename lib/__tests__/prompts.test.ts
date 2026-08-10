@@ -279,6 +279,16 @@ describe("prompt builder snapshots", () => {
     expect(consulting).toContain("first principles");
   });
 
+  it("resumePrompt requires the summary to name the target role and lead with a quantified proof point (PROBLEM 6: summary too light)", () => {
+    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
+    expect(consulting).toContain("does it NAME the target role");
+    expect(consulting).toContain("does it LEAD WITH a real number");
+    expect(consulting).toContain("SINGLE strongest quantified proof point");
+    // The exact reported failed summary is baked in as a concrete anti-pattern.
+    expect(consulting).toContain("Strategy consultant and AI builder with 8+ years across MBB, growth advisory, and entrepreneurship");
+    expect(consulting).toContain("A summary with no named target role and no number is a FAILED summary");
+  });
+
   it("resumePrompt bans repeating the same bullet id across Key Projects & Impact and experience bullets (BUG: repeated content)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("NO REPETITION");

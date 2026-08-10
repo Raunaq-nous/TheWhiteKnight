@@ -16,6 +16,14 @@ export const ONE_PAGE_BUDGET = {
   keyImpactItemMaxChars: 180,
   // Per-entry: 2-3 bullets per shown role (BUG D — tightened from 4).
   bulletsPerRoleMax: 3,
+  // A shown role must never be left looking thin — the most recent/most
+  // relevant role is the most-read part of the page. Enforced by
+  // un-promoting top-band items rather than by dedupe sparing a duplicate
+  // (see enforceMinBulletsPerRole below).
+  experienceMinBulletsPerRole: 2,
+  // The Key Projects & Impact / Key Wins band must read as a portfolio
+  // across the candidate's career, not a highlight reel of one employer.
+  topBandMaxPerCompany: 2,
   // At most this many ROLES are shown at all — the rest are dropped
   // entirely (lowest JD-relevance first), not just trimmed to fewer
   // bullets. New in this pass (BUG D): with the raised per-bullet char
@@ -83,49 +91,44 @@ function withTerminalPeriod(s: string): string {
   return stripped ? `${stripped}.` : stripped;
 }
 
+// Splits text after each comma/semicolon/colon — the same clause-boundary
+// convention splitOutcomeClause uses below, kept as its own helper so
+// clampBulletText can re-split a setup fragment the same way.
+function clauseSegments(text: string): string[] {
+  return text.trim().split(/(?<=[,;:])\s+/).filter(Boolean);
+}
+
 /**
- * Clamps a droppable list item (a key win, a project description) to at
- * most maxChars while guaranteeing the result is a complete, grammatical
- * clause ending in a period — never a dangling conjunction/preposition,
- * never a trailing comma, never a mid-word cut. Walks backward through
- * whole words from the character limit until it finds a cut point that
- * reads as a complete clause. Returns null (drop this item entirely) if no
- * such cut point exists at or above minChars.
+ * Clamps a droppable list item (a key win, a project description, an
+ * experience bullet's setup) to at most maxChars while guaranteeing the
+ * result is a complete, grammatical clause ending in a period.
  *
- * Experience bullets use clampBulletPreservingOutcome instead (below),
- * which additionally guarantees the OUTCOME clause specifically survives —
- * this plain version has no concept of "the important part is at the end,
- * protect it specially," it just avoids grammatically broken endings.
+ * BUG: compression used to walk backward through WHOLE WORDS from a
+ * character-budget window, which could cut inside a noun phrase — e.g.
+ * "Designed a portfolio intelligence cockpit integrating..." became
+ * "Designed a portfolio," (grammatically terminated by an appended period,
+ * but semantically nonsense — the object of "Designed" got truncated
+ * mid-phrase). Fixed by trimming at CLAUSE boundaries only (comma/
+ * semicolon/colon): a compressed bullet is always some prefix of the
+ * original's real clauses, joined whole, never a word-level slice through
+ * the middle of one. If even the first clause alone doesn't fit, there is
+ * no way to shorten this text without truncating mid-phrase, so the whole
+ * item is dropped (returns null) rather than emit a broken fragment.
  */
-export function clampBulletText(text: string, maxChars: number, minChars = 30): string | null {
+export function clampBulletText(text: string, maxChars: number): string | null {
   // Reserve 1 character for the terminal period this function always adds,
   // so the returned string (period included) never exceeds maxChars.
   const budget = maxChars - 1;
   const original = stripTrailingPunctuation(text.trim());
   if (original.length === 0) return null;
 
-  let window = original;
-  if (window.length > budget) {
-    window = window.slice(0, budget);
-    const lastSpace = window.lastIndexOf(" ");
-    if (lastSpace > 0) window = window.slice(0, lastSpace);
-    window = stripTrailingPunctuation(window);
-  }
-
-  // The first candidate (only cut for LENGTH, not yet for grammar) is exempt
-  // from the minChars floor — a short-but-already-complete bullet like
-  // "Second bullet." must not be rejected just for being short. minChars
-  // only guards against over-shrinking once we start stripping words
-  // specifically because the tail is grammatically dangling.
-  let firstCandidate = true;
-  while (window.length > 0) {
-    if ((firstCandidate || window.length >= minChars) && endsGrammatically(window)) {
-      return withTerminalPeriod(window);
+  const segments = clauseSegments(original);
+  for (let count = segments.length; count >= 1; count--) {
+    const candidate = stripTrailingPunctuation(segments.slice(0, count).join(" "));
+    if (candidate.length === 0) continue;
+    if (candidate.length <= budget && endsGrammatically(candidate)) {
+      return withTerminalPeriod(candidate);
     }
-    firstCandidate = false;
-    const lastSpace = window.lastIndexOf(" ");
-    if (lastSpace <= 0) break;
-    window = stripTrailingPunctuation(window.slice(0, lastSpace));
   }
   return null;
 }
@@ -135,8 +138,15 @@ export function clampBulletText(text: string, maxChars: number, minChars = 30): 
 // fixed high-signal phrases (board-level, C-suite, multi-billion-dollar).
 // Used to find the LAST clause of a bullet that contains real impact, so
 // clamping can protect it and shorten everything BEFORE it instead (BUG B).
+// NOTE: the currency alternative accepts BOTH the spelled-out word
+// ("billion") and the bare abbreviation letter ("B") right after the
+// digits — "$10B" is just as real a scope marker as "$10.45B", and a
+// digit run abutting a bare letter (no space, no decimal point) can never
+// satisfy a trailing \b on its own (word char directly followed by word
+// char), so the abbreviation form needs its own explicit alternative
+// rather than relying on [bmk]illion to (accidentally) cover it.
 export const OUTCOME_MARKER_PATTERN =
-  /\$[\d,.]+\s?(?:[bmk]illion)?\b|\d+(\.\d+)?%|\b\d+\+\b|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d+\+?\s?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?)\b/i;
+  /\$[\d,.]+\s?(?:[bmk]illion|[bmk])?\b|\d+(\.\d+)?%|\b\d+\+\b|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d+\+?\s?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?)\b/i;
 
 /**
  * Splits text into clauses (after each comma/semicolon/colon), then finds
@@ -166,12 +176,12 @@ export function splitOutcomeClause(text: string): { setup: string | null; outcom
  * outcome and doesn't fit any other way, the WHOLE BULLET is dropped
  * (returns null) rather than emit an impact-less fragment.
  */
-export function clampBulletPreservingOutcome(text: string, maxChars: number, minChars = 30): string | null {
+export function clampBulletPreservingOutcome(text: string, maxChars: number): string | null {
   const { setup, outcome } = splitOutcomeClause(text);
 
   // No identifiable outcome clause at all — fall back to the grammar-safe
   // (but not outcome-aware) clamp; there's nothing specific to protect.
-  if (setup === null) return clampBulletText(text, maxChars, minChars);
+  if (setup === null) return clampBulletText(text, maxChars);
 
   const outcomeFinal = withTerminalPeriod(outcome);
   if (outcomeFinal.length > maxChars) {
@@ -185,14 +195,12 @@ export function clampBulletPreservingOutcome(text: string, maxChars: number, min
   let candidate = `${setup}${connector}${outcomeFinal}`;
   if (candidate.length <= maxChars) return candidate;
 
-  // Shorten the SETUP only, word by word from its own end, never touching
-  // the outcome. clampBulletText's grammar logic (never dangling on a
-  // conjunction/preposition) applies to the setup fragment too so the seam
-  // still reads cleanly, just without requiring ITS OWN terminal period
-  // (the outcome supplies that).
+  // Shorten the SETUP only, at whole clause boundaries, never touching the
+  // outcome and never cutting inside a clause (see clampBulletText above —
+  // this is exactly the function that fix applies to).
   const setupBudget = maxChars - connector.length - outcomeFinal.length;
   if (setupBudget < 10) return outcomeFinal; // no room for any setup — outcome alone
-  const trimmedSetup = clampBulletText(setup, setupBudget + 1, Math.min(minChars, setupBudget));
+  const trimmedSetup = clampBulletText(setup, setupBudget + 1);
   if (!trimmedSetup) return outcomeFinal;
   const setupNoPeriod = stripTrailingPunctuation(trimmedSetup);
   candidate = `${setupNoPeriod}${connector}${outcomeFinal}`;
@@ -357,11 +365,98 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
       : null;
   }
 
+  // Every shown role keeps a floor of substantive bullets, and the top band
+  // draws from across employers rather than concentrating on one — both
+  // run BEFORE dedupe, since they change what got PROMOTED to the top band
+  // in the first place, not just what survives after the fact.
+  const diversified = capTopBandPerCompany(clamped, ONE_PAGE_BUDGET.topBandMaxPerCompany);
+  const floored = enforceMinBulletsPerRole(diversified, ONE_PAGE_BUDGET.experienceMinBulletsPerRole);
+
   // BUG C: semantic dedupe — drop any experience bullet that describes the
   // same underlying engagement as an already-selected top-band item. Runs
   // last, after both layers have their final content, so it sees exactly
   // what will actually render.
-  return dedupeExperienceAgainstTopBand(clamped);
+  return dedupeExperienceAgainstTopBand(floored);
+}
+
+/**
+ * Caps how many top-band (Key Wins/Key Projects & Impact) items can trace
+ * back to a single employer — the band should read as a portfolio across
+ * the whole career, not a highlight reel of whichever role has the most
+ * quantified bullets. Only applies to experience-sourced ids (a project
+ * isn't tied to an employer); excess items beyond the cap, in priority
+ * order, are dropped from the top band — they remain visible in their
+ * originating role's Experience bullets if selected there too.
+ */
+export function capTopBandPerCompany(content: ResumeContent, maxPerCompany: number): ResumeContent {
+  const idToCompany = new Map<string, string>();
+  for (const e of content.experience) {
+    for (const b of e.bullets) if (b.sourceBulletId) idToCompany.set(b.sourceBulletId, e.company);
+  }
+
+  const seenCount = new Map<string, number>();
+  const keptKeyWins: string[] = [];
+  const keptKeyWinIds: string[] = [];
+  let dropped = false;
+  (content.keyWinIds ?? []).forEach((id, i) => {
+    const company = idToCompany.get(id);
+    if (company) {
+      const n = seenCount.get(company) ?? 0;
+      if (n >= maxPerCompany) { dropped = true; return; }
+      seenCount.set(company, n + 1);
+    }
+    keptKeyWinIds.push(id);
+    keptKeyWins.push(content.keyWins?.[i] ?? "");
+  });
+
+  if (!dropped) return content;
+  return { ...content, keyWins: keptKeyWins, keyWinIds: keptKeyWinIds };
+}
+
+/**
+ * Ensures no shown role drops below `minBullets` once dedupe removes
+ * whatever duplicates a top-band selection. Rather than let dedupe spare a
+ * duplicate (which would render the same engagement twice), this UN-
+ * PROMOTES just enough of that role's top-band-linked bullets — back out
+ * of keyWinIds/keyWins — so they render in Experience instead, which is
+ * where dedupe would otherwise have deleted them from. A role that never
+ * had `minBullets` to begin with is left as-is; there's nothing to
+ * redistribute.
+ */
+export function enforceMinBulletsPerRole(content: ResumeContent, minBullets: number): ResumeContent {
+  const topBandIds = new Set(
+    [...(content.keyWinIds ?? []), ...(content.projects ?? []).map(p => p.sourceBulletId)].filter(Boolean),
+  );
+  if (topBandIds.size === 0) return content;
+
+  const idsToUnpromote = new Set<string>();
+  for (const e of content.experience) {
+    const survivingCount = e.bullets.filter(b => !topBandIds.has(b.sourceBulletId)).length;
+    if (survivingCount >= minBullets || e.bullets.length < minBullets) continue;
+    // Un-promote the WEAKEST (highest priority number) duplicated bullets
+    // first, so the strongest engagement stays in the top band.
+    const duplicated = [...e.bullets]
+      .filter(b => topBandIds.has(b.sourceBulletId))
+      .sort((a, b) => b.priority - a.priority);
+    let need = minBullets - survivingCount;
+    for (const b of duplicated) {
+      if (need <= 0) break;
+      idsToUnpromote.add(b.sourceBulletId);
+      need--;
+    }
+  }
+  if (idsToUnpromote.size === 0) return content;
+
+  const keyWins: string[] = [];
+  const keyWinIds: string[] = [];
+  (content.keyWinIds ?? []).forEach((id, i) => {
+    if (idsToUnpromote.has(id)) return;
+    keyWinIds.push(id);
+    keyWins.push(content.keyWins?.[i] ?? "");
+  });
+  const projects = (content.projects ?? []).filter(p => !idsToUnpromote.has(p.sourceBulletId));
+
+  return { ...content, keyWins, keyWinIds, projects };
 }
 
 // Rough line-count estimate for the rendered document, used only to verify
