@@ -13,6 +13,7 @@ export type IntegrationSettings = {
   senderName?: string;
   adzunaAppId?: string;
   adzunaAppKey?: string;
+  portfolioGithubToken?: string;
 };
 
 export function getIntegrationSettings(): IntegrationSettings {
@@ -92,6 +93,16 @@ export const INTEGRATION_OPTIONS = [
     keyField: "resendApiKey" as const,
     keyPlaceholder: "re_...",
     keyLink: "https://resend.com/api-keys",
+    required: false,
+  },
+  {
+    id: "portfolio",
+    label: "Portfolio Sync (raunaq-portfolio GitHub token)",
+    description: "Pulls builds/battles/education from your portfolio repo into your profile, and opens a PR (never commits to main) when you push a new project or gap-fill outcome back to it. A read-only fine-grained token (Contents: read) is enough for pulling; pushing also needs Contents: write and Pull requests: write on the same token.",
+    pricing: "Free (GitHub fine-grained personal access token)",
+    keyField: "portfolioGithubToken" as const,
+    keyPlaceholder: "github_pat_...",
+    keyLink: "https://github.com/settings/personal-access-tokens/new",
     required: false,
   },
 ] as const;

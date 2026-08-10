@@ -351,3 +351,20 @@ export type ResumeAuditCategory = z.infer<typeof ResumeAuditCategorySchema>;
 export type ResumeAuditDeduction = z.infer<typeof ResumeAuditDeductionSchema>;
 export type ResumeAuditBonus = z.infer<typeof ResumeAuditBonusSchema>;
 export type ResumeAuditResult = z.infer<typeof ResumeAuditResultSchema>;
+
+// ---------------------------------------------------------------------------
+// PortfolioBuildDraft — returned by /api/portfolio/push. Drafts the
+// portfolio's own three voices (nerd/process/calm) from CareerOS content,
+// which the user reviews as a real PR diff before it ever reaches main.
+// ---------------------------------------------------------------------------
+
+export const PortfolioBuildDraftSchema = z.object({
+  name: z.string(),
+  tags: z.array(z.string()),
+  punchline: z.string().describe("Outcome-shaped one-liner, in the same voice as the profile's quantified outcome"),
+  nerd: z.string().describe("Technical description of what was built"),
+  process: z.string().describe("First-person account of how/why it was built — the portfolio's narrative voice"),
+  calm: z.string().describe("Plain-language, non-technical one-or-two-sentence explanation for a general audience"),
+});
+
+export type PortfolioBuildDraft = z.infer<typeof PortfolioBuildDraftSchema>;

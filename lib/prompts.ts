@@ -1458,3 +1458,39 @@ RULES:
 
 Output ONLY raw JSON: { "newBulletText": "the new bullet, or empty string if the answer had no usable fact" }. No preamble, no explanation.`;
 }
+
+// ---------------------------------------------------------------------------
+// Portfolio PUSH: drafting a portfolio-shaped Build entry from CareerOS
+// content (see lib/portfolio-sync.ts for the field mapping and how the
+// result becomes a real PR diff). Never opens the PR itself and never
+// touches main — this only drafts the prose; app/api/portfolio/push/route.ts
+// does the branch/commit/PR.
+// ---------------------------------------------------------------------------
+
+export function draftPortfolioBuildPrompt(
+  name: string,
+  description: string,
+  outcomes: string,
+  stack: string,
+): string {
+  return `You are drafting one entry for a personal portfolio site's "builds" data file, from a CareerOS project record. The portfolio site shows each build in THREE distinct voices side by side — write all three, genuinely different in register, not the same sentence reworded:
+
+PROJECT: ${name}
+DESCRIPTION (technical, from the resume engine): ${description}
+OUTCOME (quantified, from the resume engine): ${outcomes || "(none recorded)"}
+STACK: ${stack || "(not recorded)"}
+
+WRITE:
+1. "tags": 3-6 short technology/skill tags, drawn from the stack above (split/clean it up, don't invent new ones).
+2. "punchline": ONE outcome-shaped line, same register as the OUTCOME above — this is the headline, it must carry the real quantified result if one exists. Never invent a number that isn't in OUTCOME.
+3. "nerd": a technical paragraph, 2-3 sentences, aimed at another engineer/practitioner — what was actually built, real architecture/technique terms.
+4. "process": a first-person narrative paragraph, 2-4 sentences, on why/how it got built — the story, not just the facts. Genuinely first person ("I built...", "I started from...").
+5. "calm": a plain-language explanation, 1-2 sentences, for someone with zero technical background — no jargon at all.
+
+RULES:
+- Never invent a fact, number, or capability not implied by DESCRIPTION/OUTCOME/STACK above.
+- No em dashes, no smart quotes.
+- Do not repeat the same sentence across nerd/process/calm with only word substitutions — they must read as three genuinely different framings of the same project.
+
+Output ONLY raw JSON matching exactly this shape: { "name": string, "tags": string[], "punchline": string, "nerd": string, "process": string, "calm": string }. No preamble, no explanation.`;
+}
