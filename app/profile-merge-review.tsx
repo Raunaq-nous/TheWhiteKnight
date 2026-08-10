@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { getProfile, saveProfile } from "../lib/profile";
-import { MergeDiffItem, applyMergeDiffItem } from "../lib/profile-merge";
+import { MergeDiffItem, applyMergeDiffItem, CandidateProject } from "../lib/profile-merge";
 import { showToast } from "../lib/toast";
+import { PortfolioPushOffer } from "./portfolio-push-offer";
 
 const ENTITY_LABELS: Record<MergeDiffItem["entityType"], string> = {
   experience: "EXPERIENCE",
@@ -23,12 +24,25 @@ const ENTITY_LABELS: Record<MergeDiffItem["entityType"], string> = {
 export function ProfileMergeReview({
   items,
   onDone,
+  offerPortfolioPush,
 }: {
   items: MergeDiffItem[];
   onDone?: () => void;
+  // Offers pushing a brand-new project to the portfolio as a PR right
+  // after it's added. Defaults to false — deliberately NOT enabled for the
+  // portfolio-sync pull review itself (app/portfolio-sync-box.tsx), which
+  // would otherwise offer to push a project right back to where it just
+  // came from. Only ProfileEnrichBox (enrich-from-text) turns this on.
+  offerPortfolioPush?: boolean;
 }) {
   const [resolved, setResolved] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
+  const [pushable, setPushable] = useState<Record<string, CandidateProject>>({});
+  // Once any push offer has been shown, this review stays mounted (never
+  // auto-closes via onDone) so the user has a chance to act on it — the
+  // offer itself has no "I'm fully done" signal back to this component,
+  // only its own internal idle/pushing/done/declined state.
+  const [keepOpenForPush, setKeepOpenForPush] = useState(false);
 
   const pending = items.filter(i => !resolved.has(i.id));
 
@@ -41,9 +55,14 @@ export function ProfileMergeReview({
       const ok = await saveProfile(next);
       if (!ok) return; // saveProfile already surfaced a toast
       showToast(`Added: ${item.summary}`, "ok");
+      const showsPushOffer = !!offerPortfolioPush && item.entityType === "project" && item.action === "add";
+      if (showsPushOffer) {
+        setPushable(prev => ({ ...prev, [item.id]: item.payload as CandidateProject }));
+        setKeepOpenForPush(true);
+      }
       const nextResolved = new Set(resolved).add(item.id);
       setResolved(nextResolved);
-      if (items.every(i => nextResolved.has(i.id))) onDone?.();
+      if (items.every(i => nextResolved.has(i.id)) && !showsPushOffer) onDone?.();
     } finally {
       setBusy(null);
     }
@@ -52,13 +71,21 @@ export function ProfileMergeReview({
   const skip = (item: MergeDiffItem) => {
     const nextResolved = new Set(resolved).add(item.id);
     setResolved(nextResolved);
-    if (items.every(i => nextResolved.has(i.id))) onDone?.();
+    if (items.every(i => nextResolved.has(i.id)) && !keepOpenForPush) onDone?.();
   };
 
-  if (pending.length === 0) return null;
+  const pushableEntries = Object.entries(pushable);
+  if (pending.length === 0 && pushableEntries.length === 0) return null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+      {pushableEntries.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {pushableEntries.map(([id, project]) => (
+            <PortfolioPushOffer key={id} project={project} />
+          ))}
+        </div>
+      )}
       {pending.map(item => (
         <div key={item.id} style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "12px 14px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>

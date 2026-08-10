@@ -6,8 +6,10 @@ import { generateResumeGapQuestions, answerResumeGapQuestion, appendGapAnswerToP
 import { injectGapAnswerIntoResume } from "../lib/resume-gap-fill";
 import { ResumeGapQuestion } from "../lib/schemas";
 import { ResumeContent } from "../lib/resume-schema";
+import { namesMatch } from "../lib/profile-merge";
 import type { Application } from "../lib/store";
 import { showToast } from "../lib/toast";
+import { PortfolioPushOffer, PushableProject } from "./portfolio-push-offer";
 
 type GapState = {
   q: ResumeGapQuestion;
@@ -15,6 +17,10 @@ type GapState = {
   submitting: boolean;
   resolved: boolean;
   confirmation: string | null; // what happened, shown after the answer is processed
+  // Set only when the answer enriched a PROJECT (never experience/battles —
+  // the portfolio's push shape is Build-only, see lib/portfolio-sync.ts) —
+  // offers pushing the updated project to the portfolio as a PR.
+  pushableProject: PushableProject | null;
 };
 
 /**
@@ -54,7 +60,7 @@ export function ResumeGapFillBox({
         setError("No gaps found — your profile already evidences what this role values.");
         setItems([]);
       } else {
-        setItems(questions.map(q => ({ q, answer: "", submitting: false, resolved: false, confirmation: null })));
+        setItems(questions.map(q => ({ q, answer: "", submitting: false, resolved: false, confirmation: null, pushableProject: null })));
       }
       setStarted(true);
     } catch (e: any) {
@@ -116,7 +122,18 @@ export function ResumeGapFillBox({
             : `Added here, but saving this resume failed — ${summary}`)
         : `Could not place this on the resume (no matching entry). ${summary}`;
 
-      setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false, resolved: true, confirmation } : it)));
+      // Only PROJECT-targeted answers have a portfolio counterpart (the
+      // portfolio's push shape is Build-only) — offer to push the
+      // project's now-updated content, never for an experience/battles bullet.
+      const pushableProject: PushableProject | null =
+        appliedToProfile && item.q.targetType === "project"
+          ? (() => {
+              const p = nextProfile.projects.find(pr => namesMatch(pr.name, item.q.targetId));
+              return p ? { name: p.name, description: p.description, outcomes: p.outcomes, stack: p.stack, repoUrl: p.repoUrl } : null;
+            })()
+          : null;
+
+      setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false, resolved: true, confirmation, pushableProject } : it)));
     } catch (e: any) {
       showToast(e.message || "Couldn't process that answer.", "error");
       setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false } : it)));
@@ -183,8 +200,11 @@ export function ResumeGapFillBox({
       {confirmedItems.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 12 }}>
           {confirmedItems.map(item => (
-            <div key={item.q.id} style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", color: "var(--success)" }}>
-              ✓ {item.confirmation}
+            <div key={item.q.id}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", color: "var(--success)" }}>
+                ✓ {item.confirmation}
+              </div>
+              {item.pushableProject && <PortfolioPushOffer project={item.pushableProject} />}
             </div>
           ))}
         </div>

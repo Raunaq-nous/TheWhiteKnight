@@ -23,6 +23,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "resend": "^6.12.4",
+    "typescript": "^5.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -33,7 +34,6 @@
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^4.1.8",
     "tsx": "^4.22.4",
-    "typescript": "^5.7.0",
     "vitest": "^4.1.8"
   }
 }

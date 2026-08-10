@@ -55,7 +55,7 @@ export function ProfileEnrichBox() {
         <div style={{ marginTop: 8, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.6875rem" }}>{error}</div>
       )}
       {items && items.length > 0 && (
-        <ProfileMergeReview items={items} onDone={() => { setItems(null); setText(""); }} />
+        <ProfileMergeReview items={items} offerPortfolioPush onDone={() => { setItems(null); setText(""); }} />
       )}
     </div>
   );
