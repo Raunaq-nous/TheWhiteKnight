@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const prompt = nlUpdatePrompt(text, app);
     const result = await chatJSON<NLUpdateResult>(
       [{ role: "user", content: prompt }],
-      { temperature: 0.1, maxTokens: 1000 },
+      { temperature: 0.1, maxTokens: 1000, task: "profile_extraction" },
       providerSettings,
       NLUpdateResultSchema
     );

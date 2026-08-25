@@ -59,6 +59,10 @@ export type AutomationRunLog = {
   jobsStaged: number; // good-fit jobs: drafted + queued for approval
   jobsSourced: number; // total new applications created (staged + not-good-fit)
   jobsSkippedDuplicate: number;
+  // AI scoring failed for this job (e.g. the reasoning-model token-budget
+  // exhaustion class of failure) but the job was still saved to the ledger,
+  // marked unscored, rather than silently dropped and crashing the run.
+  jobsUnscored?: number;
   errors: string[];
 };
 

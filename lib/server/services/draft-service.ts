@@ -49,7 +49,7 @@ export async function generateDraft(input: DraftInput): Promise<unknown> {
     const archetype = detectResumeArchetype(profile, app);
     const data = await chatJSON<ResumeContent>(
       [{ role: "user", content: resumePrompt(profile, app, archetype) }],
-      { temperature: 0.6, maxTokens: 4000 },
+      { temperature: 0.6, maxTokens: 4000, task: "resume_selection" },
       providerSettings,
       ResumeContentSchema,
     );

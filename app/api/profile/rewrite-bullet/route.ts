@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<{ rewrittenText: string }>(
       [{ role: "user", content: bulletRewritePrompt(profile, targetLabel, currentText, question, answer.trim()) }],
-      { temperature: 0.3, maxTokens: 400 },
+      { temperature: 0.3, maxTokens: 400, task: "gap_analysis" },
       providerSettings,
       BulletRewriteResultSchema,
     );

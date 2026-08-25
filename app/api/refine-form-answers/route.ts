@@ -66,7 +66,7 @@ Output JSON only — same structure as input:
 
     const data = await chatJSON<{ qa: QA[] }>(
       [{ role: "user", content: prompt }],
-      { temperature: 0.3, maxTokens: 4000 },
+      { temperature: 0.3, maxTokens: 4000, task: "form_answers" },
       providerSettings,
       FormQAResultSchema
     );
