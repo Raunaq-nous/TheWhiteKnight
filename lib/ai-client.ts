@@ -15,6 +15,64 @@ const DEFAULT_MODEL = "deepseek-ai/DeepSeek-V4-Pro";
 // never applies the 5x reasoning token multiplier to it either.
 export const CHEAP_MODEL = "meta-llama/Llama-3.3-70B-Instruct-Turbo";
 const DEFAULT_VISION_MODEL = "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8";
+
+// ---------------------------------------------------------------------------
+// Per-task model selection (root-cause fix for the reasoning-token scoring
+// failure): a single global AI_MODEL forced every call — including plain
+// schema-constrained classification/extraction work — through DEFAULT_MODEL,
+// a reasoning model. On a reasoning-heavy JD, DeepSeek-V4-Pro spends the
+// ENTIRE token budget on internal chain-of-thought, content comes back
+// empty, and scoring dies. A reasoning model is a poor fit for
+// schema-constrained output under a token cap regardless of JD density —
+// its "thinking" doesn't improve a classification task the way it improves
+// open-ended drafting, it just competes with the budget the actual answer
+// needs. Structured-JSON tasks get a non-reasoning instruct model instead;
+// genuine drafting/pitch work (where the reasoning earns its cost) keeps
+// the reasoning model. Each task's model is independently overridable via
+// its own env var, with AI_MODEL preserved as the "drafting" tier's var for
+// backward compatibility.
+export type AiTask =
+  | "scoring"            // AF scoring — lib/server/services/scoring-service.ts
+  | "jd_extraction"      // app/api/parse-jd
+  | "requirement_map"    // app/api/resume/requirement-map
+  | "resume_selection"   // app/api/generate ("resume"/"refine" actions — the selection architecture)
+  | "profile_extraction" // app/api/profile/extract, app/api/nl-update
+  | "gap_analysis"       // app/api/resume/gap-questions, gap-answer, profile/questions, profile/rewrite-bullet
+  | "form_answers"       // app/api/generate-form-answers, refine-form-answers
+  | "company_discovery"  // app/api/companies/discover
+  | "audit"              // app/api/resume/audit (already ran on CHEAP_MODEL; folded into this registry)
+  | "drafting";          // resume/cover-letter/pitch/outreach generation, portfolio build voice drafting, skill-builder
+
+const TASK_ENV_VARS: Record<AiTask, string> = {
+  scoring: "AI_MODEL_SCORING",
+  jd_extraction: "AI_MODEL_JD_EXTRACTION",
+  requirement_map: "AI_MODEL_REQUIREMENT_MAP",
+  resume_selection: "AI_MODEL_RESUME_SELECTION",
+  profile_extraction: "AI_MODEL_PROFILE_EXTRACTION",
+  gap_analysis: "AI_MODEL_GAP_ANALYSIS",
+  form_answers: "AI_MODEL_FORM_ANSWERS",
+  company_discovery: "AI_MODEL_COMPANY_DISCOVERY",
+  audit: "AI_MODEL_AUDIT",
+  drafting: "AI_MODEL", // the pre-existing global var — preserved for the one tier that still defaults to it
+};
+
+const TASK_DEFAULT_MODEL: Record<AiTask, string> = {
+  scoring: CHEAP_MODEL,
+  jd_extraction: CHEAP_MODEL,
+  requirement_map: CHEAP_MODEL,
+  resume_selection: CHEAP_MODEL,
+  profile_extraction: CHEAP_MODEL,
+  gap_analysis: CHEAP_MODEL,
+  form_answers: CHEAP_MODEL,
+  company_discovery: CHEAP_MODEL,
+  audit: CHEAP_MODEL,
+  drafting: DEFAULT_MODEL,
+};
+
+/** Resolves a task's model: its own env var override, else the task's default (non-reasoning for every structured task, DEFAULT_MODEL only for "drafting"). */
+export function getModelForTask(task: AiTask): string {
+  return process.env[TASK_ENV_VARS[task]] ?? TASK_DEFAULT_MODEL[task];
+}
 // Fallback vision models tried in order when the primary returns 5xx
 const FALLBACK_VISION_MODELS = [
   "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo",
@@ -49,6 +107,10 @@ export type ChatOptions = {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
+  // Resolves a per-task default model (see getModelForTask above) when no
+  // explicit `model` is given. Only meaningful on the Together path — a
+  // user's own configured Anthropic/OpenAI model always wins regardless.
+  task?: AiTask;
 };
 
 export type ProviderSettings = {
@@ -84,14 +146,30 @@ async function fetchWithRetry(url: string, init: RequestInit, providerName: stri
   throw lastErr ?? new Error(`${providerName} request failed after ${maxAttempts} attempts`);
 }
 
-async function chatTogether(messages: ChatMessage[], opts: ChatOptions): Promise<string> {
-  const model = opts.model ?? process.env.AI_MODEL ?? DEFAULT_MODEL;
+// Together's usage payload reports reasoning tokens under
+// completion_tokens_details.reasoning_tokens (some responses instead put a
+// top-level reasoning_tokens); either shape is handled the same way.
+function extractTokenUsage(result: any): { completionTokens: number; reasoningTokens: number; contentTokens: number } {
+  const usage = result.usage ?? {};
+  const completionTokens = usage.completion_tokens ?? 0;
+  const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens ?? usage.reasoning_tokens ?? 0;
+  return { completionTokens, reasoningTokens, contentTokens: Math.max(0, completionTokens - reasoningTokens) };
+}
+
+/**
+ * @param overrideMaxTokens Internal — set only by this function's own retry
+ * call (see the reasoning-exhaustion branch below). Bypasses the normal
+ * requestedTokens*5 reasoning multiplier so a retry's budget is exactly
+ * what was computed for it, not multiplied again.
+ */
+async function chatTogether(messages: ChatMessage[], opts: ChatOptions, overrideMaxTokens?: number): Promise<string> {
+  const model = opts.model ?? (opts.task ? getModelForTask(opts.task) : undefined) ?? process.env.AI_MODEL ?? DEFAULT_MODEL;
   const reasoning = isReasoningModel(model);
   // Reasoning models burn thousands of tokens on chain-of-thought before the final answer.
   // For DeepSeek-V4-Pro a typical resume needs ~600 output tokens but ~8-15K reasoning tokens.
   // Give reasoning models 5x the requested budget with a 12K floor so output is never starved.
   const requestedTokens = opts.maxTokens ?? 2000;
-  const maxTokens = reasoning ? Math.max(requestedTokens * 5, 12000) : requestedTokens;
+  const maxTokens = overrideMaxTokens ?? (reasoning ? Math.max(requestedTokens * 5, 12000) : requestedTokens);
 
   const body: any = {
     model,
@@ -109,20 +187,62 @@ async function chatTogether(messages: ChatMessage[], opts: ChatOptions): Promise
   const result = await response.json();
   const choice = result.choices?.[0];
   let content = choice?.message?.content ?? "";
+  const finishReason = choice?.finish_reason ?? "unknown";
+  const { completionTokens, reasoningTokens, contentTokens } = extractTokenUsage(result);
 
-  // Some reasoning models return content separately as `reasoning_content` plus `content`.
-  // If `content` is empty but `reasoning_content` exists, the model finished thinking but never
-  // emitted a final answer (usually because max_tokens was hit during reasoning).
+  // Log the reasoning/content token split on EVERY call — this is what
+  // makes the "reasoning ate the whole budget" failure class visible
+  // instead of silently surfacing as a downstream JSON-parse error.
+  console.log(
+    `[CareerOS AI] model=${model} task=${opts.task ?? "(none)"} finish_reason=${finishReason} ` +
+    `max_tokens=${maxTokens} completion_tokens=${completionTokens} reasoning_tokens=${reasoningTokens} content_tokens=${contentTokens}`
+  );
+
+  // Explicit detection of the root-cause failure: content came back empty,
+  // finish_reason is "length" (truncated, not a refusal/error), and
+  // reasoning consumed tokens (or the model reported reasoning_content
+  // separately) — the model spent the ENTIRE budget thinking and never got
+  // to an answer. This is a recoverable token-budget problem, not a parse
+  // error: retry ONCE with a substantially larger budget before giving up.
+  // overrideMaxTokens is only set on that retry call, so this can only ever
+  // fire once per top-level request.
+  const reasoningExhaustedBudget = !content && finishReason === "length" && (reasoningTokens > 0 || !!choice?.message?.reasoning_content);
+  if (reasoningExhaustedBudget && overrideMaxTokens === undefined) {
+    const retryTokens = Math.max(maxTokens * 3, reasoningTokens * 2, 24000);
+    console.warn(
+      `[CareerOS AI] ${model} exhausted its ${maxTokens}-token budget entirely on reasoning ` +
+      `(reasoning_tokens=${reasoningTokens}), content came back empty. Retrying once with max_tokens=${retryTokens}.`
+    );
+    return chatTogether(messages, opts, retryTokens);
+  }
+
+  // Reached only when the retry itself (overrideMaxTokens set) STILL shows
+  // the same reasoning-exhaustion pattern — give the retry-aware message
+  // regardless of whether this response happens to carry a separate
+  // reasoning_content field; usage.reasoning_tokens alone is enough to
+  // know what happened (that's exactly the real reported shape: all
+  // completion tokens spent as reasoning_tokens, no reasoning_content field).
+  if (reasoningExhaustedBudget && overrideMaxTokens !== undefined) {
+    const reasoningPreview = choice?.message?.reasoning_content
+      ? ` Reasoning ended with: "...${String(choice.message.reasoning_content).slice(-1500)}".`
+      : "";
+    throw new Error(
+      `${model} hit the ${maxTokens}-token budget while reasoning and never produced a final answer, even after retrying with a larger budget.${reasoningPreview}`
+    );
+  }
+
+  // Some reasoning models return content separately as `reasoning_content` plus `content`,
+  // with finish_reason NOT "length" (so the retry branch above never applied) — the model
+  // finished thinking but never emitted a final answer for some other reason.
   if (!content && choice?.message?.reasoning_content) {
     const reasoningPreview = String(choice.message.reasoning_content).slice(-1500);
     throw new Error(
       `${model} hit the ${maxTokens}-token budget while reasoning and never produced a final answer. ` +
-      `Reasoning ended with: "...${reasoningPreview}". Try shortening the input or retry — token budget has already been raised to its safe maximum.`
+      `Reasoning ended with: "...${reasoningPreview}".`
     );
   }
 
   if (!content) {
-    const finishReason = choice?.finish_reason ?? "unknown";
     const errMsg = result.error?.message ?? result.error ?? JSON.stringify(result).slice(0, 400);
     throw new Error(
       `${model} returned empty content. finish_reason="${finishReason}", max_tokens=${maxTokens}. Raw response: ${errMsg}`
@@ -182,17 +302,6 @@ async function chatOpenAI(messages: ChatMessage[], opts: ChatOptions, apiKey: st
   }, "OpenAI");
   const result = await response.json();
   return result.choices?.[0]?.message?.content?.trim() ?? "";
-}
-
-// Opts to force CHEAP_MODEL for a call, WITHOUT ever overriding a model the
-// user explicitly configured on a non-Together provider — chatAnthropic/
-// chatOpenAI resolve `opts.model ?? provider.model`, so setting opts.model
-// unconditionally would clobber a user's own Anthropic/OpenAI model choice
-// with a Together-only model id. Only forces the override on the Together
-// path (the default, and the only path CHEAP_MODEL is actually valid for).
-export function cheapModelOpts(provider?: ProviderSettings): Partial<ChatOptions> {
-  if (provider && provider.provider !== "together") return {};
-  return { model: CHEAP_MODEL };
 }
 
 export async function chat(messages: ChatMessage[], opts: ChatOptions = {}, provider?: ProviderSettings): Promise<string> {

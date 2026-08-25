@@ -65,7 +65,7 @@ Output JSON only:
 
     const data = await chatJSON<{ suggestions: ProfileSuggestion[] }>(
       [{ role: "user", content: prompt }],
-      { temperature: 0, maxTokens: 600 },
+      { temperature: 0, maxTokens: 600, task: "profile_extraction" },
       providerSettings,
       ProfileSuggestionResultSchema
     );

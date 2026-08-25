@@ -333,8 +333,38 @@ describe("runAutomation happy path", () => {
 
     expect(run.status).toBe("ok");
     expect(run.jobsScored).toBe(1);
-    expect(run.jobsSourced).toBe(1);
     expect(run.errors.some(e => e.includes("LLM exploded"))).toBe(true);
+  });
+
+  it("keeps a job whose scoring throws — saved as unscored, not silently dropped (the aravindpranav/job-agent pattern)", async () => {
+    enableAutomation();
+    profileRepo.save(USER, makeProfile());
+
+    const okJob = job({ url: "https://boards.greenhouse.io/acme/jobs/ok" });
+    const badJob = job({ url: "https://boards.greenhouse.io/acme/jobs/bad", title: "Bad Job" });
+    scanJobsMock.mockResolvedValue({ jobs: [okJob, badJob], counts: { total: 2, beforeFiltering: 2, ats: 2, adzuna: 0, exa: 0 } });
+    scoreJobMock
+      .mockResolvedValueOnce(scoreResult("apply"))
+      .mockRejectedValueOnce(new Error("deepseek-ai/DeepSeek-V4-Pro returned empty content"));
+    generateDraftMock.mockResolvedValue({ text: "Draft" });
+
+    const run = await runOnce(USER, NOW);
+
+    // Both jobs are sourced (saved to the ledger) — the bad one unscored,
+    // never staged, but still visible for manual review, not lost.
+    expect(run.jobsSourced).toBe(2);
+    expect(run.jobsUnscored).toBe(1);
+    expect(run.jobsScored).toBe(1);
+    expect(run.jobsStaged).toBe(1); // only the successfully-scored, good-fit job gets staged
+
+    const saved = applicationRepo.list(USER);
+    expect(saved).toHaveLength(2);
+    const unscored = saved.find(a => a.role === "Bad Job")!;
+    expect(unscored.score).toBe(0);
+    expect(unscored.bucket).toBe("unscored");
+    expect(unscored.afScore).toBeUndefined();
+    expect(unscored.jdRaw).toBeTruthy(); // JD text was still resolved and kept
+    expect(unscored.nextAction).toContain("review");
   });
 });
 

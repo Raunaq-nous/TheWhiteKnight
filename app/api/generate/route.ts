@@ -70,7 +70,11 @@ export async function POST(req: NextRequest) {
       const archetype = detectResumeArchetype(profile, app, resumeArchetype);
       const data = await chatJSON<ResumeContent>(
         [{ role: "user", content: resumePrompt(profile, app, archetype) }],
-        { temperature: 0.6, maxTokens: 4000 },
+        // "resume_selection": non-reasoning by default — the model only
+        // ever SELECTS bullet ids under this schema (see
+        // resolveResumeSelections below), a classification-shaped task a
+        // reasoning model brings no benefit to and a token-budget risk for.
+        { temperature: 0.6, maxTokens: 4000, task: "resume_selection" },
         providerSettings,
         ResumeContentSchema,
       );
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest) {
       }
       const data = await chatJSON<ResumeContent>(
         [{ role: "user", content: resumeRefinePrompt(profile, app, archetype, parsedCurrent, instruction) }],
-        { temperature: 0.5, maxTokens: 4000 },
+        { temperature: 0.5, maxTokens: 4000, task: "resume_selection" },
         providerSettings,
         ResumeContentSchema,
       );

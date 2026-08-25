@@ -288,14 +288,31 @@ export async function runAutomation(
   let jobsScored = 0;
   let jobsStaged = 0;
   let jobsSourced = 0;
+  let jobsUnscored = 0;
 
   for (let i = 0; i < toProcess.length; i++) {
     const job = toProcess[i];
     if (i > 0) await sleep(interJobDelayMs);
 
+    // Resolving the JD text is a hard prerequisite — with no JD there is
+    // nothing meaningful to save, so this failure still skips the job.
+    let jdText: string;
     try {
-      const jdText = await resolveJdText(job, integration.exaApiKey);
-      const scoreResult = await scoreJob({
+      jdText = await resolveJdText(job, integration.exaApiKey);
+    } catch (e: any) {
+      errors.push(`Could not fetch JD for ${job.company ?? "unknown"} - ${job.title}: ${e.message}`);
+      continue;
+    }
+
+    // Scoring failure (e.g. a reasoning model exhausting its token budget on
+    // a dense JD — see lib/ai-client.ts) is NOT treated the same way: the
+    // job is still saved, marked unscored, so it stays visible in the
+    // pipeline for manual review instead of silently vanishing and crashing
+    // the run (the aravindpranav/job-agent pattern). scoreResult stays null
+    // on failure; the save block below branches on that.
+    let scoreResult: ScoreJobOutput | null = null;
+    try {
+      scoreResult = await scoreJob({
         jdText,
         company: job.company ?? "Unknown",
         role: job.title,
@@ -308,9 +325,14 @@ export async function runAutomation(
         providerSettings,
       });
       jobsScored++;
+    } catch (e: any) {
+      errors.push(`Scoring failed for ${job.company ?? "unknown"} - ${job.title}: ${e.message}. Job kept, marked unscored.`);
+      jobsUnscored++;
+    }
 
+    try {
       const nowIso = new Date().toISOString();
-      const newApp: Application = {
+      const newApp: Application = scoreResult ? {
         id: randomUUID(),
         slug: slugify(job.company ?? "unknown", job.title),
         company: job.company ?? "Unknown",
@@ -343,6 +365,34 @@ export async function runAutomation(
         emailEvents: [],
         createdAt: nowIso,
         updatedAt: nowIso,
+      } : {
+        // Unscored fallback: no afScore, no bucket confidence — kept in the
+        // pipeline at the bottom of the queue (score 0) rather than lost.
+        id: randomUUID(),
+        slug: slugify(job.company ?? "unknown", job.title),
+        company: job.company ?? "Unknown",
+        role: job.title,
+        location: job.location ?? "",
+        remote: /remote/i.test(job.location ?? ""),
+        status: "sourced",
+        score: 0,
+        bucket: "unscored",
+        bucketName: "Unscored (AI scoring failed)",
+        sector: "",
+        seniority: "senior",
+        sourceUrl: job.url,
+        capturedAt: nowIso.split("T")[0],
+        jdRaw: jdText,
+        jdParsed: null,
+        nextAction: "AI scoring failed — review and score manually",
+        contacts: [],
+        interviews: [],
+        reminders: [],
+        resumeVersions: [],
+        notes: "Auto-discovered by the scheduled automation job, but AI scoring failed. Kept for manual review instead of being dropped.",
+        emailEvents: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
 
       // Save to the ledger FIRST — even if drafting/staging fails below, this
@@ -351,11 +401,13 @@ export async function runAutomation(
       jobsSourced++;
       existingApps.push(newApp); // keeps this run's own in-memory ledger view current
 
-      const staged = await autopilotStage(userEmail, newApp, scoreResult, profile, providerSettings);
-      if (staged.staged) jobsStaged++;
-      if (staged.error) errors.push(staged.error);
+      if (scoreResult) {
+        const staged = await autopilotStage(userEmail, newApp, scoreResult, profile, providerSettings);
+        if (staged.staged) jobsStaged++;
+        if (staged.error) errors.push(staged.error);
+      }
     } catch (e: any) {
-      errors.push(`Scoring failed for ${job.company ?? "unknown"} - ${job.title}: ${e.message}`);
+      errors.push(`Failed to save ${job.company ?? "unknown"} - ${job.title}: ${e.message}`);
     }
   }
 
@@ -369,6 +421,7 @@ export async function runAutomation(
     jobsStaged,
     jobsSourced,
     jobsSkippedDuplicate,
+    jobsUnscored,
     errors,
   };
 

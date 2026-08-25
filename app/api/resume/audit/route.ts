@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../../lib/rate-limit";
-import { chatJSON, cheapModelOpts, ProviderSettings } from "../../../../lib/ai-client";
+import { chatJSON, ProviderSettings } from "../../../../lib/ai-client";
 import { ResumeAuditResultSchema, ResumeAuditResult } from "../../../../lib/schemas";
 import { resumeAuditPrompt } from "../../../../lib/prompts";
 import { resumeContentToMarkdown, ResumeContent } from "../../../../lib/resume-schema";
@@ -17,8 +17,9 @@ export const maxDuration = 60;
 // back check standing in for "run it through a real ATS parser and see what
 // survives" (there's no headless-render pipeline here to literally screenshot
 // the printed PDF through /api/extract-resume's OCR step). Step 2 is the
-// model call, deliberately on the cheap model (cheapModelOpts) since this is
-// high-volume structured scoring, not open-ended writing.
+// model call, deliberately on the "audit" task's non-reasoning model (see
+// lib/ai-client.ts's per-task model registry) since this is high-volume
+// structured scoring, not open-ended writing.
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") ?? "local";
   const rl = checkRateLimit(`resume-audit:${ip}`, 20, 60_000);
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<ResumeAuditResult>(
       [{ role: "user", content: resumeAuditPrompt(markdown, app, atsResult.issues.map(i => i.detail)) }],
-      { temperature: 0.3, maxTokens: 2000, ...cheapModelOpts(providerSettings) },
+      { temperature: 0.3, maxTokens: 2000, task: "audit" },
       providerSettings,
       ResumeAuditResultSchema,
     );

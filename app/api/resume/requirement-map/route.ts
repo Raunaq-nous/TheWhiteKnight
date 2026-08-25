@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<ResumeRequirementMap>(
       [{ role: "user", content: requirementMapPrompt(profile, app) }],
-      { temperature: 0.3, maxTokens: 2000 },
+      { temperature: 0.3, maxTokens: 2000, task: "requirement_map" },
       providerSettings,
       ResumeRequirementMapSchema,
     );

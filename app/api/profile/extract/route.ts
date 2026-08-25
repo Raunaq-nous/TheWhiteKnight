@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<ExtractedProfileData>(
       [{ role: "user", content: profileExtractionPrompt(text, profile, diffAgainstText) }],
-      { temperature: 0.2, maxTokens: 3000 },
+      { temperature: 0.2, maxTokens: 3000, task: "profile_extraction" },
       providerSettings,
       ProfileExtractionResultSchema,
     );

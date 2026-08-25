@@ -44,7 +44,7 @@ Return this exact JSON structure (all fields required, use empty string if unkno
 
     const fields = await chatJSON<ParsedJDFields>(
       [{ role: "user", content: prompt }],
-      { temperature: 0.1, maxTokens: 800 },
+      { temperature: 0.1, maxTokens: 800, task: "jd_extraction" },
       providerSettings,
       ParsedJDFieldsSchema
     );

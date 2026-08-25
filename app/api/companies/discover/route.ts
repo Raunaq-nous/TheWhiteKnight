@@ -77,7 +77,7 @@ Output JSON only, no explanation:
 
     const data = await chatJSON<{ companies: DiscoveredCompany[] }>(
       [{ role: "user", content: prompt }],
-      { temperature: 0.5, maxTokens: 4000 },
+      { temperature: 0.5, maxTokens: 4000, task: "company_discovery" },
       providerSettings,
       DiscoveredCompaniesResultSchema
     );

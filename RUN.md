@@ -35,7 +35,7 @@ Open `.env.local` and fill in every value:
 | Variable | Where to get it |
 |---|---|
 | `TOGETHER_API_KEY` | [api.together.ai](https://api.together.ai) → API Keys |
-| `AI_MODEL` | Leave as `deepseek-ai/DeepSeek-V4-Pro` or pick another Together model |
+| `AI_MODEL` | Leave as `deepseek-ai/DeepSeek-V4-Pro` or pick another Together model — this is the "drafting" tier only (resume/cover-letter/pitch prose); every other task (scoring, extraction, selection) defaults to a non-reasoning model and has its own optional override, see the env vars reference below |
 | `AI_VISION_MODEL` | Leave as-is, or pick any multimodal Together model |
 | `UPSTASH_REDIS_REST_URL` | Upstash console → your database → REST API URL |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash console → your database → REST API Token |
@@ -175,7 +175,16 @@ If you prefer containers, see the `Dockerfile` and `docker-compose.yml` at the r
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `TOGETHER_API_KEY` | Yes | — | AI generation (resume, cover letter, scoring) |
-| `AI_MODEL` | No | `deepseek-ai/DeepSeek-V4-Pro` | Primary LLM |
+| `AI_MODEL` | No | `deepseek-ai/DeepSeek-V4-Pro` | Model for the "drafting" tier only (resume/cover-letter/pitch/outreach prose) |
+| `AI_MODEL_SCORING` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | AF job scoring |
+| `AI_MODEL_JD_EXTRACTION` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Parsing a pasted JD's structured fields |
+| `AI_MODEL_REQUIREMENT_MAP` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Interactive resume builder's JD requirement map |
+| `AI_MODEL_RESUME_SELECTION` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Resume generation/refine (bullet-id selection, not prose) |
+| `AI_MODEL_PROFILE_EXTRACTION` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Extracting profile facts from pasted text/notes |
+| `AI_MODEL_GAP_ANALYSIS` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Gap-fill questions/answers, bullet rewrites |
+| `AI_MODEL_FORM_ANSWERS` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Application form Q&A generation |
+| `AI_MODEL_COMPANY_DISCOVERY` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | AI company discovery |
+| `AI_MODEL_AUDIT` | No | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Adversarial resume audit scoring |
 | `AI_VISION_MODEL` | No | `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` | Vision/image extraction |
 | `UPSTASH_REDIS_REST_URL` | Yes | — | Auth (users, sessions) |
 | `UPSTASH_REDIS_REST_TOKEN` | Yes | — | Auth token |

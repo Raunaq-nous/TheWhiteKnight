@@ -31,7 +31,13 @@ export async function scoreJob(input: ScoreJobInput): Promise<ScoreJobOutput> {
 
   const result = await chatJSON<AFScoreResult>(
     [{ role: "user", content: afScoringPrompt(profile, jdText, { company, role, location, seniority, sector, remote }, buckets) }],
-    { temperature: 0.2, maxTokens: 3000 },
+    // "scoring" task: a non-reasoning instruct model by default — the root
+    // fix for the reasoning-token failure class (see lib/ai-client.ts).
+    // A reasoning model spending its whole token budget "thinking" about a
+    // dense JD before ever emitting the scored JSON is exactly the bug this
+    // resolves; a schema-constrained classification task doesn't need that
+    // depth in the first place.
+    { temperature: 0.2, maxTokens: 3000, task: "scoring" },
     providerSettings,
     AFScoreResultSchema,
   );

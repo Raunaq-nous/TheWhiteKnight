@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<{ newBulletText: string }>(
       [{ role: "user", content: resumeGapAnswerPrompt(profile, targetLabel, priority ?? "", question, answer.trim()) }],
-      { temperature: 0.3, maxTokens: 300 },
+      { temperature: 0.3, maxTokens: 300, task: "gap_analysis" },
       providerSettings,
       ResumeGapAnswerResultSchema,
     );

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     const data = await chatJSON<{ questions: ProfileQuestion[] }>(
       [{ role: "user", content: profileQuestionsPrompt(profile, candidates, excludeQuestionTexts ?? []) }],
-      { temperature: 0.4, maxTokens: 1200 },
+      { temperature: 0.4, maxTokens: 1200, task: "gap_analysis" },
       providerSettings,
       ProfileQuestionsResultSchema,
     );
