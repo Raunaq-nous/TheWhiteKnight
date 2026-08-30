@@ -6,10 +6,10 @@ import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../.
 import { detectResumeArchetype, withArchetypeSequence, ResumeArchetype } from "../../../lib/resume-archetype";
 import { clampToOnePageBudget } from "../../../lib/resume-budget";
 import { resolveResumeSelections } from "../../../lib/resume-selection";
+import { generateResumeContent } from "../../../lib/server/services/resume-generation-service";
 import {
   GenerationAction,
   ContactProfile,
-  resumePrompt,
   resumeRefinePrompt,
   coverLetterPrompt,
   executiveSummaryPrompt,
@@ -67,26 +67,12 @@ export async function POST(req: NextRequest) {
     // plain text — the render layer needs real data to rank/trim/lay out,
     // not a markdown string to re-parse.
     if (action === "resume") {
-      const archetype = detectResumeArchetype(profile, app, resumeArchetype);
-      const data = await chatJSON<ResumeContent>(
-        [{ role: "user", content: resumePrompt(profile, app, archetype) }],
-        // "resume_selection": non-reasoning by default — the model only
-        // ever SELECTS bullet ids under this schema (see
-        // resolveResumeSelections below), a classification-shaped task a
-        // reasoning model brings no benefit to and a token-budget risk for.
-        { temperature: 0.6, maxTokens: 4000, task: "resume_selection" },
-        providerSettings,
-        ResumeContentSchema,
-      );
-      // The model only ever SELECTS bullet ids (see lib/resume-selection.ts)
-      // — resolveResumeSelections turns those ids into real profile text
-      // (or a compressed, outcome-preserving variant) before anything else
-      // touches this content, so nothing downstream ever sees model-authored
-      // experience/project/key-win prose. Section order is then stamped
-      // deterministically from the archetype spec, and the one-page content
-      // budget is clamped deterministically — neither is trusted to the model.
-      const resolved = resolveResumeSelections(data, profile);
-      return NextResponse.json({ data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype), archetype), archetype });
+      // The ONE resume-generation pipeline (lib/server/services/resume-
+      // generation-service.ts) — shared with the automation autopilot's
+      // draft-service.ts, so there is exactly one way a resume gets built
+      // and resolveResumeSelections can never be forgotten on one path.
+      const { data, archetype, formatGate } = await generateResumeContent(profile, app, providerSettings, resumeArchetype);
+      return NextResponse.json({ data, archetype, formatGate });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
