@@ -1,13 +1,10 @@
 import "server-only";
 import { chat, chatJSON, ProviderSettings } from "../../ai-client";
 import { SkillGapResultSchema } from "../../schemas";
-import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../resume-schema";
-import { detectResumeArchetype, withArchetypeSequence } from "../../resume-archetype";
-import { clampToOnePageBudget } from "../../resume-budget";
+import { generateResumeContent } from "./resume-generation-service";
 import {
   GenerationAction,
   ContactProfile,
-  resumePrompt,
   coverLetterPrompt,
   executiveSummaryPrompt,
   problemSolverPrompt,
@@ -46,14 +43,21 @@ export async function generateDraft(input: DraftInput): Promise<unknown> {
   }
 
   if (action === "resume") {
-    const archetype = detectResumeArchetype(profile, app);
-    const data = await chatJSON<ResumeContent>(
-      [{ role: "user", content: resumePrompt(profile, app, archetype) }],
-      { temperature: 0.6, maxTokens: 4000, task: "resume_selection" },
-      providerSettings,
-      ResumeContentSchema,
-    );
-    return { data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(data), archetype), archetype), archetype };
+    // The ONE resume-generation pipeline (./resume-generation-service.ts)
+    // — shared with the interactive /api/generate route, so this
+    // automation-triggered path can never again drift out of sync and
+    // skip resolveResumeSelections the way it once did.
+    const { data, archetype, formatGate } = await generateResumeContent(profile, app, providerSettings);
+    if (formatGate.blocked) {
+      // Unattended path: no one is here to react to a hard failure, so log
+      // it loudly rather than silently staging a broken resume — the
+      // caller (automation-service.ts) still gets a usable draft back.
+      console.warn(
+        `[CareerOS] Auto-drafted resume for ${app?.company ?? "unknown"} failed the format gate: ` +
+        formatGate.hardFailures.map(v => `${v.location}: ${v.reason}`).join("; "),
+      );
+    }
+    return { data, archetype };
   }
 
   let prompt = "";
