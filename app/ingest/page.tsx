@@ -79,7 +79,9 @@ async function parseJDFields(text: string, providerSettings?: any) {
   return response.json().catch(() => null);
 }
 
-async function fetchUrlContent(url: string, exaApiKey?: string): Promise<string> {
+type FetchedUrlContent = { text: string; company?: string; role?: string; location?: string };
+
+async function fetchUrlContent(url: string, exaApiKey?: string): Promise<FetchedUrlContent> {
   const response = await fetch("/api/fetch-url", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -89,8 +91,7 @@ async function fetchUrlContent(url: string, exaApiKey?: string): Promise<string>
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || `URL fetch failed: ${response.status}`);
   }
-  const { text } = await response.json();
-  return text;
+  return response.json();
 }
 
 function readFileAsText(file: File): Promise<string> {
@@ -153,16 +154,23 @@ export default function IngestPage() {
     });
   };
 
-  const autoPopulateFields = async (text: string) => {
+  // `alreadyKnown` is set when a deterministic parse (JSON-LD, or the
+  // LinkedIn text-metadata fallback — lib/jd-fetch.ts) already populated
+  // company/role/location for this fetch. That source is preferred over
+  // the LLM's own guess, so those specific fields are never overwritten
+  // here — only fields the deterministic parse couldn't find (and
+  // sector/seniority/remote, which it never attempts) get filled from the
+  // LLM extraction.
+  const autoPopulateFields = async (text: string, alreadyKnown: { company?: string; role?: string; location?: string } = {}) => {
     setIsParsing(true);
     try {
       const modelSettings = getModelSettings();
       const providerSettings = modelSettings?.provider ? { provider: modelSettings.provider, model: modelSettings.model, apiKey: modelSettings.apiKey } : undefined;
       const fields = await parseJDFields(text, providerSettings);
       if (fields) {
-        if (fields.company) setCompany(fields.company);
-        if (fields.role) setRole(fields.role);
-        if (fields.location) setLocation(fields.location);
+        if (fields.company && !alreadyKnown.company) setCompany(fields.company);
+        if (fields.role && !alreadyKnown.role) setRole(fields.role);
+        if (fields.location && !alreadyKnown.location) setLocation(fields.location);
         if (fields.sector) setSector(fields.sector);
         if (fields.seniority) setSeniority(fields.seniority);
         if (typeof fields.remote === "boolean") setRemote(fields.remote);
@@ -274,9 +282,17 @@ export default function IngestPage() {
     setErrorMsg("");
     try {
       const integrationSettings = getIntegrationSettings();
-      const text = await fetchUrlContent(sourceUrl.trim(), integrationSettings.exaApiKey);
-      setJdText(text);
-      await autoPopulateFields(text);
+      const fetched = await fetchUrlContent(sourceUrl.trim(), integrationSettings.exaApiKey);
+      setJdText(fetched.text);
+      // Deterministic fields (JSON-LD, or the LinkedIn text-metadata
+      // fallback) are the preferred source — set them immediately and mark
+      // them "already known" so the LLM auto-populate pass below never
+      // overwrites them with its own guess.
+      const alreadyKnown: { company?: string; role?: string; location?: string } = {};
+      if (fetched.company) { setCompany(fetched.company); alreadyKnown.company = fetched.company; }
+      if (fetched.role) { setRole(fetched.role); alreadyKnown.role = fetched.role; }
+      if (fetched.location) { setLocation(fetched.location); alreadyKnown.location = fetched.location; }
+      await autoPopulateFields(fetched.text, alreadyKnown);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to fetch URL.");
     } finally {
@@ -314,7 +330,15 @@ export default function IngestPage() {
       const profile = getProfile() ?? getSeedProfile();
       const bucketsForScoring = MOCK_BUCKETS.map(b => ({ id: b.id, name: b.name, description: b.description }));
       const result = await scoreJobWithAI(jdText, company, role, location, seniority, sector, remote, bucketsForScoring, profile);
-      setScoreResult(result);
+      if (result?.unscored) {
+        // Keep-but-mark-unscored: still lets you save this job to the
+        // pipeline (unscored, reviewable, re-scorable later) instead of
+        // scoring failure blocking ingest entirely.
+        setScoreResult({ unscored: true });
+        setErrorMsg(`AI scoring failed: ${result.error || "unknown error"}. You can still save this job unscored and score it again later.`);
+      } else {
+        setScoreResult(result);
+      }
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to score job.");
     } finally {
@@ -324,6 +348,7 @@ export default function IngestPage() {
 
   const handleSave = () => {
     if (!scoreResult) return;
+    const unscored = !!scoreResult.unscored;
 
     const newApp = {
       id: generateId(),
@@ -333,23 +358,26 @@ export default function IngestPage() {
       location,
       remote,
       status: "sourced" as const,
-      score: scoreResult.totalScore,
-      bucket: scoreResult.bucket,
-      bucketName: scoreResult.bucketName,
+      score: unscored ? 0 : scoreResult.totalScore,
+      bucket: unscored ? "unscored" : scoreResult.bucket,
+      bucketName: unscored ? "Unscored (AI scoring failed)" : scoreResult.bucketName,
       sector,
       seniority,
       sourceUrl,
       capturedAt: new Date().toISOString().split("T")[0],
       jdRaw: jdText,
-      jdParsed: scoreResult.parsed,
-      afScore: {
-        archetype: scoreResult.archetype,
-        scores: scoreResult.scores,
-        global: scoreResult.global,
-        recommendation: scoreResult.recommendation,
-        legitimacy: scoreResult.legitimacy,
-      },
-      nextAction: scoreResult.recommendation === "apply_immediately" ? "Apply now" :
+      jdParsed: unscored ? null : scoreResult.parsed,
+      ...(unscored ? {} : {
+        afScore: {
+          archetype: scoreResult.archetype,
+          scores: scoreResult.scores,
+          global: scoreResult.global,
+          recommendation: scoreResult.recommendation,
+          legitimacy: scoreResult.legitimacy,
+        },
+      }),
+      nextAction: unscored ? "AI scoring failed - review and score manually" :
+                  scoreResult.recommendation === "apply_immediately" ? "Apply now" :
                   scoreResult.recommendation === "apply" ? "Tailor and apply" :
                   scoreResult.recommendation === "review_manually" ? "Review JD, decide" : "Likely skip",
       contacts: [],
@@ -547,7 +575,18 @@ export default function IngestPage() {
             </button>
           </div>
 
-          {scoreResult && (
+          {scoreResult && scoreResult.unscored && (
+            <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
+              <div style={{ background: "rgba(255,180,50,0.1)", border: "1px solid var(--accent)", padding: 16, borderRadius: "var(--radius)", marginBottom: 16, fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--accent)" }}>
+                AI scoring failed for this job. You can still add it to your pipeline unscored, and try scoring it again later.
+              </div>
+              <button className="btn" onClick={handleSave} style={{ width: "100%", padding: 12, justifyContent: "center", borderColor: "var(--accent)", color: "var(--accent)" }}>
+                ADD TO PIPELINE (UNSCORED)
+              </button>
+            </div>
+          )}
+
+          {scoreResult && !scoreResult.unscored && (
             <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 24 }}>
               <div className="section-title" style={{ marginBottom: 16 }}>A-F EVALUATION</div>
 

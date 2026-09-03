@@ -1,5 +1,5 @@
 import "server-only";
-import { htmlToText, extractJobPostingFromLdJson } from "../../jd-fetch";
+import { htmlToText, extractJobPostingFromLdJson, extractLinkedInMetadataFromText } from "../../jd-fetch";
 
 // Extracted from the former app/api/fetch-url/route.ts body so both the
 // manual URL-ingest UI (via the route, now a thin wrapper) and the scheduled
@@ -7,7 +7,7 @@ import { htmlToText, extractJobPostingFromLdJson } from "../../jd-fetch";
 // hop for the latter.
 
 export type FetchJdResult =
-  | { ok: true; text: string; source: "exa" | "direct" }
+  | { ok: true; text: string; source: "exa" | "direct"; company?: string; role?: string; location?: string }
   | { ok: false; status: number; error: string };
 
 export async function fetchJdText(rawUrl: string, exaApiKey?: string): Promise<FetchJdResult> {
@@ -30,7 +30,20 @@ export async function fetchJdText(rawUrl: string, exaApiKey?: string): Promise<F
       if (exaRes.ok) {
         const exaData = await exaRes.json();
         const exaText: string = exaData?.results?.[0]?.text ?? "";
-        if (exaText.trim()) return { ok: true, text: exaText.trim(), source: "exa" };
+        if (exaText.trim()) {
+          // Exa's "text: true" mode returns already-rendered PAGE TEXT, not
+          // raw HTML — extractJobPostingFromLdJson never runs on this path
+          // (there's no HTML to scan a <script type="application/ld+json">
+          // block out of), so structured company/role/location would
+          // otherwise be lost entirely for every Exa-fetched LinkedIn page.
+          // This is the deterministic text-metadata fallback for exactly
+          // that case.
+          const fields = isLinkedIn ? extractLinkedInMetadataFromText(exaText) : null;
+          return {
+            ok: true, text: exaText.trim(), source: "exa",
+            ...(fields ? { company: fields.company, role: fields.role, location: fields.location } : {}),
+          };
+        }
       }
     } catch {
       // fall through to direct fetch
@@ -62,7 +75,17 @@ export async function fetchJdText(rawUrl: string, exaApiKey?: string): Promise<F
 
   if (isLinkedIn) {
     const extracted = extractJobPostingFromLdJson(html);
-    if (extracted) return { ok: true, text: extracted.text, source: "direct" };
+    if (extracted) {
+      // The JSON-LD block WAS present and parsed correctly — forward its
+      // title/company/location instead of discarding them (the pre-existing
+      // bug: this path already had structured fields and threw them away).
+      return {
+        ok: true, text: extracted.text, source: "direct",
+        ...(extracted.company || extracted.title || extracted.location
+          ? { company: extracted.company, role: extracted.title, location: extracted.location }
+          : {}),
+      };
+    }
   }
 
   const text = htmlToText(html);
@@ -76,5 +99,12 @@ export async function fetchJdText(rawUrl: string, exaApiKey?: string): Promise<F
     };
   }
 
-  return { ok: true, text: text.slice(0, 8000), source: "direct" };
+  // JSON-LD was either absent or (rare) present without a description —
+  // try the same deterministic text-metadata fallback used on the Exa path.
+  const fallbackFields = isLinkedIn ? extractLinkedInMetadataFromText(text) : null;
+
+  return {
+    ok: true, text: text.slice(0, 8000), source: "direct",
+    ...(fallbackFields ? { company: fallbackFields.company, role: fallbackFields.role, location: fallbackFields.location } : {}),
+  };
 }

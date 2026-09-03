@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    return NextResponse.json({ text: result.text, source: result.source });
+    return NextResponse.json({ text: result.text, source: result.source, company: result.company, role: result.role, location: result.location });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "URL fetch failed" }, { status: 500 });
   }
