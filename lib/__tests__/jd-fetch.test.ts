@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { htmlToText, extractJobPostingFromLdJson } from "../jd-fetch";
+import { htmlToText, extractJobPostingFromLdJson, extractLinkedInMetadataFromText } from "../jd-fetch";
 
 describe("htmlToText", () => {
   it("strips tags and collapses whitespace while preserving line breaks", () => {
@@ -110,5 +110,78 @@ describe("extractJobPostingFromLdJson — BUG: title/company/location missing fr
     expect(result!.text).toContain("Own the roadmap");
     expect(result!.text).toContain("Ship features");
     expect(result!.text).not.toContain("<li>");
+  });
+});
+
+// BUG: LinkedIn ingest fetches JD text successfully (via Exa's "text: true"
+// mode, which returns rendered page text, never raw HTML) but auto-populate
+// left company/role/location empty, because extractJobPostingFromLdJson
+// only ever runs against raw HTML — it never gets a chance to fire on this
+// path at all, regardless of whether LinkedIn's JobPosting ld+json block
+// still exists. This is the deterministic text-metadata fallback for
+// exactly that case.
+describe("extractLinkedInMetadataFromText — text fallback when JSON-LD never had a chance to run", () => {
+  // The exact real reported case.
+  const REAL_TITLE_LINE =
+    "Accenture in India hiring S&C GN - TS&T –Enterprise AI Value Strategy - Manager in Pune Division, Maharashtra, India | LinkedIn";
+
+  it("parses the exact reported LinkedIn title line, preserving the en-dash inside the role untouched", () => {
+    const result = extractLinkedInMetadataFromText(REAL_TITLE_LINE);
+    expect(result).toEqual({
+      company: "Accenture in India",
+      role: "S&C GN - TS&T –Enterprise AI Value Strategy - Manager",
+      location: "Pune Division, Maharashtra, India",
+    });
+    // The en-dash must survive character-for-character, not get stripped
+    // or treated as a field delimiter.
+    expect(result!.role).toContain("–Enterprise");
+  });
+
+  it("works when the title line is preceded by other lines (freshness label, etc.) — checks the first several lines, not just line 1", () => {
+    const text = `1 day ago\n${REAL_TITLE_LINE}\n\nFull job description follows...`;
+    const result = extractLinkedInMetadataFromText(text);
+    expect(result).toEqual({
+      company: "Accenture in India",
+      role: "S&C GN - TS&T –Enterprise AI Value Strategy - Manager",
+      location: "Pune Division, Maharashtra, India",
+    });
+  });
+
+  it("handles a company name that does NOT contain \" in \" (the common case)", () => {
+    const result = extractLinkedInMetadataFromText("Anthropic hiring Product Manager in San Francisco, CA | LinkedIn");
+    expect(result).toEqual({ company: "Anthropic", role: "Product Manager", location: "San Francisco, CA" });
+  });
+
+  it("falls back to the heading-block pattern when the title line isn't present", () => {
+    const text = [
+      "# Senior Product Manager",
+      "Acme Corp",
+      "San Francisco, CA, United States",
+      "3 days ago · 200 applicants",
+      "",
+      "About the role...",
+    ].join("\n");
+    const result = extractLinkedInMetadataFromText(text);
+    expect(result).toEqual({ role: "Senior Product Manager", company: "Acme Corp", location: "San Francisco, CA, United States" });
+  });
+
+  it("heading-block fallback also handles a single combined \"Company · Location\" line", () => {
+    const text = ["# Staff Engineer", "Acme Corp · Remote", "Posted 1 week ago"].join("\n");
+    const result = extractLinkedInMetadataFromText(text);
+    expect(result).toEqual({ role: "Staff Engineer", company: "Acme Corp", location: "Remote" });
+  });
+
+  it("heading-block fallback skips relative-timestamp and applicant-count noise lines", () => {
+    const text = ["# Data Analyst", "2 days ago", "50 applicants", "Beta Inc", "Austin, TX"].join("\n");
+    const result = extractLinkedInMetadataFromText(text);
+    expect(result).toEqual({ role: "Data Analyst", company: "Beta Inc", location: "Austin, TX" });
+  });
+
+  it("returns null when neither pattern matches", () => {
+    expect(extractLinkedInMetadataFromText("Just some ordinary paragraph text with no structure at all.")).toBeNull();
+  });
+
+  it("returns null for empty text", () => {
+    expect(extractLinkedInMetadataFromText("")).toBeNull();
   });
 });

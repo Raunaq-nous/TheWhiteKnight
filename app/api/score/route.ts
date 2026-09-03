@@ -36,8 +36,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing target archetypes (buckets)" }, { status: 400 });
     }
 
-    const result = await scoreJob({ jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings });
-    return NextResponse.json(result);
+    try {
+      const result = await scoreJob({ jdText, company, role, location, seniority, sector, remote, buckets, profile, providerSettings });
+      return NextResponse.json(result);
+    } catch (e: any) {
+      // Keep-but-mark-unscored (same pattern as the automation scan loop,
+      // lib/server/services/automation-service.ts): a 200 with unscored:true
+      // rather than a 500, so the caller can still let the user save this
+      // job — unscored, reviewable, and re-scorable later — instead of the
+      // whole ingest attempt failing outright. ai-client.ts already logs the
+      // reasoning/content token split for every call, so whether this was
+      // empty content, a schema error, or something else is visible in logs
+      // regardless of which branch this falls into.
+      return NextResponse.json({ unscored: true, error: e.message ?? "Scoring failed" });
+    }
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Scoring failed" }, { status: 500 });
   }
