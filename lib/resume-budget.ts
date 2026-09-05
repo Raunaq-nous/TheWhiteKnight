@@ -41,6 +41,45 @@ export const ONE_PAGE_BUDGET = {
   educationMaxEntries: 2,
 } as const;
 
+// Applies only when archetype.maxPages allows 2 pages AND the candidate is
+// actually eligible for one (see resolveMaxPages in lib/resume-archetype.ts
+// — years-of-experience and MBB-vs-general are already resolved by the
+// time maxPages reaches this module). The extra room goes to MORE of the
+// same already-ranked, quantified content — more roles shown, more bullets
+// per role, a fuller Key Projects & Impact band — never to filler; the
+// impact-density ranking (lib/resume-bullet-relevance.ts) still decides
+// what fills the extra space, this just raises how much of it survives.
+export const TWO_PAGE_BUDGET = {
+  ...ONE_PAGE_BUDGET,
+  keyImpactMaxItems: 5,
+  bulletsPerRoleMax: 4,
+  experienceMaxRoles: 6,
+  totalExperienceBulletsMax: 18,
+  skillsMaxCategories: 4,
+  skillsMaxItemsPerCategory: 8,
+  educationMaxEntries: 2,
+} as const;
+
+type ResumeBudget = {
+  readonly summaryMaxChars: number;
+  readonly keyImpactMaxItems: number;
+  readonly keyImpactItemMaxChars: number;
+  readonly bulletsPerRoleMax: number;
+  readonly experienceMinBulletsPerRole: number;
+  readonly topBandMaxPerCompany: number;
+  readonly experienceMaxRoles: number;
+  readonly totalExperienceBulletsMax: number;
+  readonly bulletMaxChars: number;
+  readonly skillsMaxCategories: number;
+  readonly skillsMaxItemsPerCategory: number;
+  readonly educationMaxEntries: number;
+};
+
+/** Selects the right budget for the resolved page ceiling — never a third tier, 3+ pages are never allowed. */
+export function budgetForMaxPages(maxPages: number): ResumeBudget {
+  return maxPages >= 2 ? TWO_PAGE_BUDGET : ONE_PAGE_BUDGET;
+}
+
 /**
  * Cuts text to at most maxChars: prefers breaking at the end of the last
  * full sentence that fits, falls back to the last word boundary. Never cuts
@@ -207,10 +246,10 @@ export function clampBulletPreservingOutcome(text: string, maxChars: number): st
   return candidate.length <= maxChars ? candidate : outcomeFinal;
 }
 
-function topBulletsByPriority(bullets: ResumeBullet[], max: number): ResumeBullet[] {
+function topBulletsByPriority(bullets: ResumeBullet[], max: number, bulletMaxChars: number): ResumeBullet[] {
   const candidates = [...bullets].sort((a, b) => a.priority - b.priority).slice(0, max);
   const clamped = candidates
-    .map(b => ({ ...b, text: clampBulletPreservingOutcome(b.text, ONE_PAGE_BUDGET.bulletMaxChars) }))
+    .map(b => ({ ...b, text: clampBulletPreservingOutcome(b.text, bulletMaxChars) }))
     .filter((b): b is ResumeBullet => b.text !== null);
 
   // Never leave an entry with zero bullets just because every candidate
@@ -218,7 +257,7 @@ function topBulletsByPriority(bullets: ResumeBullet[], max: number): ResumeBulle
   // priority number) candidate, plain-clamped, rather than show nothing.
   if (clamped.length === 0 && candidates.length > 0) {
     const best = candidates[0];
-    return [{ ...best, text: clampText(best.text, ONE_PAGE_BUDGET.bulletMaxChars) }];
+    return [{ ...best, text: clampText(best.text, bulletMaxChars) }];
   }
   return clamped;
 }
@@ -276,9 +315,55 @@ function trimToGlobalBulletBudget(
   return entries;
 }
 
+// Detail only the last 10-15 years of experience in full — older roles
+// compress to a single line (title/company/dates only, no bullets), which
+// is the same convention a two-page-eligible resume already leans on
+// elsewhere in this codebase (e.g. finance_ib's MD/Director norm). 15
+// years is the outer edge of "recent enough to detail"; a role that ended
+// longer ago than that reads as background, not current capability.
+const OLDER_ROLE_CUTOFF_YEARS = 15;
+
 /**
- * Deterministically enforces the one-page content budget on generated resume
- * content, and nulls out any section this archetype's layout doesn't render.
+ * Best-effort end year for a tenure string like "2020 - Present" or
+ * "2015 - 2019" — "Present"/"Current" resolve to this year (never old).
+ * Returns null when no 4-digit year can be found at all, in which case the
+ * role is left untouched rather than guessed at.
+ */
+function tenureEndYear(tenure: string): number | null {
+  if (/present|current/i.test(tenure)) return new Date().getFullYear();
+  const years = [...tenure.matchAll(/\b(19|20)\d{2}\b/g)].map(m => parseInt(m[0], 10));
+  return years.length > 0 ? Math.max(...years) : null;
+}
+
+/**
+ * Compresses any role that ended more than `cutoffYears` ago down to a
+ * single line — keeps the entry (company/role/tenure still render) but
+ * drops every bullet except the single strongest (lowest-priority) one, so
+ * it reads as one line rather than a fully detailed role. A role with no
+ * parseable end year, or one within the cutoff, is left untouched. Runs
+ * BEFORE per-role bullet capping, on both the one-page and two-page paths —
+ * this is a recency rule, not a page-count one.
+ */
+export function compressOlderRoles(
+  experience: ResumeContent["experience"],
+  cutoffYears: number = OLDER_ROLE_CUTOFF_YEARS,
+): ResumeContent["experience"] {
+  const currentYear = new Date().getFullYear();
+  return experience.map(e => {
+    const endYear = tenureEndYear(e.tenure);
+    if (endYear === null || currentYear - endYear <= cutoffYears) return e;
+    if (e.bullets.length <= 1) return e;
+    const strongest = [...e.bullets].sort((a, b) => a.priority - b.priority)[0];
+    return { ...e, bullets: [strongest] };
+  });
+}
+
+/**
+ * Deterministically enforces the page content budget on generated resume
+ * content (1 page by default, or up to `maxPages` when the caller has
+ * resolved a higher ceiling for this archetype/candidate — see
+ * resolveMaxPages in lib/resume-archetype.ts), and nulls out any section
+ * this archetype's layout doesn't render.
  * The null-out step is what guarantees a section like "education" renders
  * LAST even though resolveSectionSequence's forgotten-content-bearing-key
  * safety net would otherwise re-append a stray section (e.g. leadership)
@@ -288,25 +373,27 @@ function trimToGlobalBulletBudget(
  * Pure and idempotent — no DOM, no measurement. This is the structural
  * guarantee; it never needs to run more than once.
  */
-export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeArchetype): ResumeContent {
+export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeArchetype, maxPages: number = 1): ResumeContent {
   const seq = RESUME_SPECS[archetype].sectionSequence;
   const usesSelectedImpact = seq.includes("selectedImpact");
+  const budget = budgetForMaxPages(maxPages);
 
-  const roleCapped = capRolesByRelevance(content.experience, ONE_PAGE_BUDGET.experienceMaxRoles);
+  const olderCompressed = compressOlderRoles(content.experience);
+  const roleCapped = capRolesByRelevance(olderCompressed, budget.experienceMaxRoles);
   const perEntryCapped = roleCapped.map(e => ({
     ...e,
-    bullets: topBulletsByPriority(e.bullets, ONE_PAGE_BUDGET.bulletsPerRoleMax),
+    bullets: topBulletsByPriority(e.bullets, budget.bulletsPerRoleMax, budget.bulletMaxChars),
   }));
 
   const clamped: ResumeContent = {
     ...content,
-    summary: content.summary ? clampText(content.summary, ONE_PAGE_BUDGET.summaryMaxChars) : content.summary,
-    experience: trimToGlobalBulletBudget(perEntryCapped, ONE_PAGE_BUDGET.totalExperienceBulletsMax),
+    summary: content.summary ? clampText(content.summary, budget.summaryMaxChars) : content.summary,
+    experience: trimToGlobalBulletBudget(perEntryCapped, budget.totalExperienceBulletsMax),
     skills: content.skills
-      .slice(0, ONE_PAGE_BUDGET.skillsMaxCategories)
-      .map(g => ({ ...g, items: g.items.slice(0, ONE_PAGE_BUDGET.skillsMaxItemsPerCategory) })),
+      .slice(0, budget.skillsMaxCategories)
+      .map(g => ({ ...g, items: g.items.slice(0, budget.skillsMaxItemsPerCategory) })),
     education: content.education
-      .slice(0, ONE_PAGE_BUDGET.educationMaxEntries)
+      .slice(0, budget.educationMaxEntries)
       .map(ed => ({ ...ed, achievements: null })),
     // BUG A: certifications are never rendered, for any archetype,
     // regardless of what the model returned or what's stored — a blanket
@@ -319,7 +406,7 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   // Same, for a project's description — the whole project entry is dropped
   // if its description can't be trimmed grammatically.
   const clampProject = (p: NonNullable<ResumeContent["projects"]>[number]) => {
-    const description = clampBulletText(p.description, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+    const description = clampBulletText(p.description, budget.keyImpactItemMaxChars);
     return description ? { ...p, description } : null;
   };
 
@@ -336,7 +423,7 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
     const keptWins: string[] = [];
     const keptIds: string[] = [];
     wins.forEach((w, i) => {
-      const clamped = clampBulletText(w, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+      const clamped = clampBulletText(w, budget.keyImpactItemMaxChars);
       if (clamped !== null) { keptWins.push(clamped); keptIds.push(ids[i] ?? ""); }
     });
     return { keyWins: keptWins, keyWinIds: keptIds };
@@ -345,15 +432,15 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   if (usesSelectedImpact) {
     // Combined Key Projects & Impact band — the total item count across both
     // arrays is what's capped, since they render together as one list.
-    const { keyWins, keyWinIds } = clampKeyWins(ONE_PAGE_BUDGET.keyImpactMaxItems);
-    const remaining = ONE_PAGE_BUDGET.keyImpactMaxItems - keyWins.length;
+    const { keyWins, keyWinIds } = clampKeyWins(budget.keyImpactMaxItems);
+    const remaining = budget.keyImpactMaxItems - keyWins.length;
     const keptProjects = remaining > 0 ? (content.projects ?? []).slice(0, remaining) : [];
     clamped.keyWins = keyWins;
     clamped.keyWinIds = keyWinIds;
     clamped.projects = keptProjects.map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null);
   } else {
     if (seq.includes("keyWins")) {
-      const { keyWins, keyWinIds } = clampKeyWins(ONE_PAGE_BUDGET.keyImpactMaxItems);
+      const { keyWins, keyWinIds } = clampKeyWins(budget.keyImpactMaxItems);
       clamped.keyWins = keyWins;
       clamped.keyWinIds = keyWinIds;
     } else {
@@ -361,7 +448,7 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
       clamped.keyWinIds = null;
     }
     clamped.projects = seq.includes("projects")
-      ? (content.projects ?? []).slice(0, ONE_PAGE_BUDGET.keyImpactMaxItems).map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null)
+      ? (content.projects ?? []).slice(0, budget.keyImpactMaxItems).map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null)
       : null;
   }
 
@@ -369,8 +456,8 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   // draws from across employers rather than concentrating on one — both
   // run BEFORE dedupe, since they change what got PROMOTED to the top band
   // in the first place, not just what survives after the fact.
-  const diversified = capTopBandPerCompany(clamped, ONE_PAGE_BUDGET.topBandMaxPerCompany);
-  const floored = enforceMinBulletsPerRole(diversified, ONE_PAGE_BUDGET.experienceMinBulletsPerRole);
+  const diversified = capTopBandPerCompany(clamped, budget.topBandMaxPerCompany);
+  const floored = enforceMinBulletsPerRole(diversified, budget.experienceMinBulletsPerRole);
 
   // BUG C: semantic dedupe — drop any experience bullet that describes the
   // same underlying engagement as an already-selected top-band item. Runs

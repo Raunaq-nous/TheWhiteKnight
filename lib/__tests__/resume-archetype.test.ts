@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { Profile } from "../profile";
 import type { Application } from "../store";
-import { detectResumeArchetype, withArchetypeSequence, RESUME_SPECS, RESUME_ARCHETYPE_LABELS, ResumeArchetype } from "../resume-archetype";
+import {
+  detectResumeArchetype, withArchetypeSequence, RESUME_SPECS, RESUME_ARCHETYPE_LABELS, ResumeArchetype,
+  isMbbConsulting, parseYearsOfExperience, resolveMaxPages,
+} from "../resume-archetype";
 import type { ResumeContent } from "../resume-schema";
 
 function baseProfile(overrides: Partial<Profile> = {}): Profile {
@@ -244,5 +247,93 @@ describe("detectResumeArchetype", () => {
     const profile = baseProfile({ roleType: "creative" });
     const app = baseApp({ role: "Something Unrelated", company: "Some Company" });
     expect(detectResumeArchetype(profile, app)).toBe("general");
+  });
+});
+
+describe("maxPages on RESUME_SPECS", () => {
+  it("every archetype declares a maxPages of 1 or 2, never more", () => {
+    for (const key of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      expect([1, 2]).toContain(RESUME_SPECS[key].maxPages);
+    }
+  });
+
+  it("consulting's base spec defaults to 2 (general consulting) — MBB narrows it via resolveMaxPages", () => {
+    expect(RESUME_SPECS.consulting.maxPages).toBe(2);
+  });
+
+  it("product, ai_ml_engineering, and finance_ib allow 2 pages; vc_investing and general stay at 1", () => {
+    expect(RESUME_SPECS.product.maxPages).toBe(2);
+    expect(RESUME_SPECS.ai_ml_engineering.maxPages).toBe(2);
+    expect(RESUME_SPECS.finance_ib.maxPages).toBe(2);
+    expect(RESUME_SPECS.vc_investing.maxPages).toBe(1);
+    expect(RESUME_SPECS.general.maxPages).toBe(1);
+  });
+});
+
+describe("isMbbConsulting", () => {
+  it("detects McKinsey, Bain, and BCG by company name", () => {
+    expect(isMbbConsulting(baseApp({ company: "McKinsey & Company" }))).toBe(true);
+    expect(isMbbConsulting(baseApp({ company: "Bain & Company" }))).toBe(true);
+    expect(isMbbConsulting(baseApp({ company: "BCG" }))).toBe(true);
+    expect(isMbbConsulting(baseApp({ company: "Boston Consulting Group" }))).toBe(true);
+  });
+
+  it("does not flag general/Big-4/MNC advisory consulting as MBB", () => {
+    expect(isMbbConsulting(baseApp({ company: "Accenture", role: "Management Consultant" }))).toBe(false);
+    expect(isMbbConsulting(baseApp({ company: "Deloitte", role: "Strategy Consultant" }))).toBe(false);
+    expect(isMbbConsulting(baseApp({ company: "Acme Advisory" }))).toBe(false);
+  });
+});
+
+describe("parseYearsOfExperience", () => {
+  it("parses the digits out of free-text values (same convention as automation-service.ts elsewhere in this codebase)", () => {
+    expect(parseYearsOfExperience(baseProfile({ yearsOfExperience: "7+" }))).toBe(7);
+    expect(parseYearsOfExperience(baseProfile({ yearsOfExperience: "12" }))).toBe(12);
+    expect(parseYearsOfExperience(baseProfile({ yearsOfExperience: "9 years" }))).toBe(9);
+  });
+
+  it("defaults to 0 when blank or unparseable", () => {
+    expect(parseYearsOfExperience(baseProfile({ yearsOfExperience: "" }))).toBe(0);
+    expect(parseYearsOfExperience(baseProfile({ yearsOfExperience: "several" }))).toBe(0);
+  });
+});
+
+describe("resolveMaxPages", () => {
+  it("forces 1 page under 5 years of experience, regardless of archetype", () => {
+    const profile = baseProfile({ yearsOfExperience: "3" });
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "product")).toBe(1);
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "finance_ib")).toBe(1);
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "ai_ml_engineering")).toBe(1);
+  });
+
+  it("allows 2 pages at 5+ years for product, ai_ml_engineering, and finance_ib", () => {
+    const profile = baseProfile({ yearsOfExperience: "8" });
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "product")).toBe(2);
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "ai_ml_engineering")).toBe(2);
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "finance_ib")).toBe(2);
+  });
+
+  it("keeps vc_investing and general at 1 page even at 5+ years", () => {
+    const profile = baseProfile({ yearsOfExperience: "10" });
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "vc_investing")).toBe(1);
+    expect(resolveMaxPages(profile, baseApp({ company: "Acme" }), "general")).toBe(1);
+  });
+
+  it("caps MBB consulting at 1 page even at 15+ years", () => {
+    const profile = baseProfile({ yearsOfExperience: "15" });
+    const app = baseApp({ company: "McKinsey & Company" });
+    expect(resolveMaxPages(profile, app, "consulting")).toBe(1);
+  });
+
+  it("allows 2 pages for general consulting at 5+ years — consulting defaults to general, not MBB", () => {
+    const profile = baseProfile({ yearsOfExperience: "10" });
+    const app = baseApp({ company: "Accenture", role: "Management Consultant" });
+    expect(resolveMaxPages(profile, app, "consulting")).toBe(2);
+  });
+
+  it("defaults an ambiguous consulting target (no named firm) to general, i.e. 2 pages at 5+ years", () => {
+    const profile = baseProfile({ yearsOfExperience: "9", roleType: "strategy-consulting" });
+    const app = baseApp({ role: "Generalist Consultant", company: "Some Boutique" });
+    expect(resolveMaxPages(profile, app, "consulting")).toBe(2);
   });
 });

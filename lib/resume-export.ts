@@ -10,18 +10,25 @@ export type ResumeExportResult = {
   docxBase64: string;
   pdfBase64: string;
   pageCount: number;
+  // How full page two is (0-100), only meaningful when pageCount === 2 —
+  // null otherwise or when it couldn't be measured. See
+  // lib/resume-pdf-extract-gate.ts.
+  pageTwoFillPercent: number | null;
   // WARN-level format gate issues — export already succeeded; these are
   // shown, never blocking. outcomeWarnings is the subset routable into the
   // gap-fill/bullet-rewrite flow (app/resume-document.tsx).
   warnings: FormatGateViolation[];
   outcomeWarnings: OutcomeWarning[];
 };
-export type ResumeExportGateFailure = { error: string; gate: "format" | "pdf_extraction"; violations: unknown[]; pageCount?: number };
+export type ResumeExportGateFailure = {
+  error: string; gate: "format" | "pdf_extraction"; violations: unknown[]; pageCount?: number; pageTwoFillPercent?: number | null;
+};
 
 export class ResumeExportError extends Error {
   gate?: "format" | "pdf_extraction";
   violations: unknown[];
   pageCount?: number;
+  pageTwoFillPercent?: number | null;
   constructor(payload: ResumeExportGateFailure | { error: string }) {
     super(payload.error);
     this.name = "ResumeExportError";
@@ -29,17 +36,22 @@ export class ResumeExportError extends Error {
       this.gate = payload.gate;
       this.violations = payload.violations;
       this.pageCount = payload.pageCount;
+      this.pageTwoFillPercent = payload.pageTwoFillPercent;
     } else {
       this.violations = [];
     }
   }
 }
 
-export async function exportResumeDocxAndPdf(resumeContent: ResumeContent, archetype?: ResumeArchetype | null): Promise<ResumeExportResult> {
+export async function exportResumeDocxAndPdf(
+  resumeContent: ResumeContent,
+  archetype?: ResumeArchetype | null,
+  maxPages?: number,
+): Promise<ResumeExportResult> {
   const res = await fetch("/api/resume/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resumeContent, archetype }),
+    body: JSON.stringify({ resumeContent, archetype, maxPages }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ResumeExportError(data);

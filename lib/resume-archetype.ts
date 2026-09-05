@@ -52,6 +52,18 @@ export type ResumeSpec = {
   mandatorySections: ResumeSectionKey[];
   /** Sections this archetype should never include, regardless of profile data. Validated against sectionSequence in tests. */
   omittedSections: ResumeSectionKey[];
+  /**
+   * Baseline page ceiling for this archetype, BEFORE the MBB-vs-general
+   * consulting split and the under-5-years override (see resolveMaxPages
+   * below, which is what callers should actually use — this field alone is
+   * not the final answer for "consulting"). Research basis: two-page
+   * resumes get 2.3x more callbacks for 10+ years of experience (ResumeGo,
+   * 7,712 resumes), 68.6% of recruiters prefer two pages, and no major ATS
+   * (Workday, Greenhouse, Lever, iCIMS, Taleo) parses or penalizes page
+   * count. consulting here reflects the GENERAL-consulting default (2) —
+   * resolveMaxPages narrows it to 1 when the target is specifically MBB.
+   */
+  maxPages: number;
 };
 
 export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
@@ -68,7 +80,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     emphasize: "A single combined Key Projects & Impact band, positioned right after the summary — the 3-4 biggest quantified, cross-role achievements plus the most relevant projects, together, up top. Quantified business impact, structured/MECE thinking, executive communication.",
     omit: "Deep technical jargon. Certifications (screened almost entirely on pedigree/deal experience here, not credentials). Leadership/activities sections (not part of this layout's fixed one-page budget).",
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
-    lengthNorm: "Strict one page, even for 15+ years of experience — by design (fixed content budget), not by post-hoc trimming.",
+    lengthNorm: "One page for MBB (McKinsey, Bain, BCG) — that convention is real and rigid, regardless of years of experience. Two pages for general/Big-4/MNC advisory consulting once the candidate has 5+ years of experience (two-page resumes get 2.3x more callbacks at that seniority, and no major ATS penalizes page count).",
     includeKeyWins: true,
     // Fixed one-page layout, in this exact order: summary, the combined
     // "selectedImpact" band (Key Projects & Impact — keyWins + projects
@@ -82,6 +94,11 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     languageConventions: "Precise, structured, action-first, no first person. Consulting-toolkit vocabulary (hypothesis-driven, stakeholder alignment) used sparingly and only when true — never as filler.",
     mandatorySections: ["experience", "education", "skills"],
     omittedSections: ["certifications", "leadership"],
+    // Baseline for GENERAL consulting (Accenture, Big 4, MNC advisory) —
+    // the default when the target isn't specifically MBB. resolveMaxPages
+    // narrows this to 1 for McKinsey/Bain/BCG, where the one-page
+    // convention is real and rigid.
+    maxPages: 2,
   },
   vc_investing: {
     label: RESUME_ARCHETYPE_LABELS.vc_investing,
@@ -100,6 +117,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     languageConventions: "Confident, thesis-driven language (identified, underwrote, led diligence on). Name real companies/deals instead of generic sector language wherever truthfully possible.",
     mandatorySections: ["education", "experience", "skills"],
     omittedSections: ["summary", "certifications"],
+    maxPages: 1,
   },
   product: {
     label: RESUME_ARCHETYPE_LABELS.product,
@@ -110,7 +128,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     emphasize: "Cross-functional leadership (eng/design/data/GTM), product sense, measurable shipped outcomes. Senior PMs lead with strategy/scope owned; early-career PMs lead with shipped impact.",
     omit: "\"Managed the roadmap\" or similar scope statements with no attached metric.",
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
-    lengthNorm: "Strict one page.",
+    lengthNorm: "One page under 5 years of experience. Two pages acceptable at 5+ years, once there's enough real scope/impact to fill it — never padded to reach the second page.",
     includeKeyWins: false,
     sectionSequence: ["summary", "experience", "projects", "skills", "education"],
     whatScreenersWant: "End-to-end ownership (0-to-1 or scaling), cross-functional leadership, and business-metric fluency. Screeners want to see the candidate speak in outcomes (retention, revenue, engagement), not a list of features shipped.",
@@ -118,6 +136,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     languageConventions: "Outcome-first phrasing: 'grew X by Y% by doing Z' rather than 'responsible for X.' Just enough technical fluency to signal credibility — never overclaim engineering depth.",
     mandatorySections: ["experience", "skills"],
     omittedSections: ["certifications"],
+    maxPages: 2,
   },
   ai_ml_engineering: {
     label: RESUME_ARCHETYPE_LABELS.ai_ml_engineering,
@@ -128,7 +147,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     emphasize: "System design depth, quantified technical impact, named tools/languages/architectures, GitHub/open-source links.",
     omit: "Generic 'built an AI system' phrasing. Consulting-style 'leadership' sections are optional here, not load-bearing.",
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
-    lengthNorm: "Strict one page for IC roles.",
+    lengthNorm: "One page for IC roles under 5 years. Two pages acceptable at 5+ years of experience with real system-scale evidence to show.",
     includeKeyWins: false,
     sectionSequence: ["summary", "experience", "projects", "skills", "education"],
     whatScreenersWant: "Concrete system-scale evidence and named technologies — often screened by an engineer, not just a recruiter. A generic 'built AI features' bullet reads as an inability to communicate technical depth.",
@@ -136,6 +155,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     languageConventions: "Name the stack explicitly (frameworks, languages, infra). Precise engineering verbs (shipped, architected, optimized, scaled) over soft-skill verbs.",
     mandatorySections: ["experience", "projects", "skills"],
     omittedSections: ["certifications"],
+    maxPages: 2,
   },
   finance_ib: {
     label: RESUME_ARCHETYPE_LABELS.finance_ib,
@@ -146,7 +166,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     emphasize: "Deal experience with named transaction size, technical modeling skill, pedigree/GPA signaling.",
     omit: "Anything stylistically unconventional — no creative formatting, no summary.",
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
-    lengthNorm: "Strict one page for analyst/associate. Two pages acceptable only at MD/Director level with an extensive deal sheet.",
+    lengthNorm: "Strict one page for analyst/associate (under 5 years). Two pages acceptable at 5+ years — VP and above — with an extensive deal sheet to justify the second page.",
     includeKeyWins: false,
     sectionSequence: ["education", "experience", "skills"],
     whatScreenersWant: "Extremely conservative screeners scanning pedigree signals (school, GPA) and deal reps within ~10 seconds. Any formatting deviation itself reads as a negative signal, since attention to detail is a core IB competency.",
@@ -154,6 +174,10 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     languageConventions: "Formulaic, information-dense, specifics-then-result. No creative verbs, no color — uniformity is the convention, not a limitation to work around.",
     mandatorySections: ["education", "experience", "skills"],
     omittedSections: ["summary", "projects", "leadership", "certifications"],
+    // Two pages is acceptable only at MD/Director level with an extensive
+    // deal sheet — analyst/associate seniority is handled by the <5-years
+    // override in resolveMaxPages, which forces 1 regardless of this base.
+    maxPages: 2,
   },
   general: {
     label: RESUME_ARCHETYPE_LABELS.general,
@@ -172,6 +196,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     languageConventions: "Plain, professional, JD-mirrored vocabulary.",
     mandatorySections: ["experience", "education", "skills"],
     omittedSections: ["certifications"],
+    maxPages: 1,
   },
 };
 
@@ -228,4 +253,60 @@ export function detectResumeArchetype(
   }
 
   return roleTypeToArchetype(profile.roleType);
+}
+
+// Named-firm match ONLY — deliberately narrower than the "consulting"
+// KEYWORD_RULES entry above (which also matches generic "strategy consult"/
+// "management consult" phrasing). Those generic phrases describe general
+// consulting (Accenture, Big 4, MNC advisory), not MBB specifically, and
+// per the research basis for this page-count rule, consulting defaults to
+// general — only an actual McKinsey/Bain/BCG match should invoke the
+// MBB one-page convention.
+const MBB_PATTERN = /\b(mckinsey|bain(?:\s*&\s*company)?|bcg|boston consulting)\b/i;
+
+/** Is this application's target specifically an MBB firm (McKinsey/Bain/BCG)? */
+export function isMbbConsulting(app: Application): boolean {
+  const haystack = [
+    app.role ?? "",
+    app.company ?? "",
+    app.sector ?? "",
+    ...(app.jdParsed?.keyRequirements ?? []),
+  ].join(" ");
+  return MBB_PATTERN.test(haystack);
+}
+
+/**
+ * Parses Profile.yearsOfExperience (free text, e.g. "7+", "5-8 years", "")
+ * into a comparable number — the leading digit run, or 0 when unparseable/
+ * blank. Same convention already used elsewhere in this codebase (see
+ * lib/server/services/automation-service.ts) for consistency; an unknown
+ * years-of-experience value is treated as "not yet 5+", which keeps the
+ * one-page default rather than assuming seniority that isn't confirmed.
+ */
+export function parseYearsOfExperience(profile: Profile): number {
+  return parseInt((profile.yearsOfExperience || "0").replace(/[^0-9]/g, ""), 10) || 0;
+}
+
+// Under-5-years experience threshold for the maxPages override — below
+// this, a second page reads as padding regardless of archetype, so the
+// resume stays one page no matter what the target company/JD implies.
+const MIN_YEARS_FOR_SECOND_PAGE = 5;
+
+/**
+ * The actual page ceiling to enforce for THIS application — the one
+ * callers should use, not RESUME_SPECS[archetype].maxPages directly.
+ * Precedence:
+ *   1. Under ~5 years of experience -> 1 page, regardless of archetype.
+ *   2. "consulting" specifically -> 1 for MBB (McKinsey/Bain/BCG), 2 for
+ *      general consulting (the default when the target isn't named MBB).
+ *   3. Otherwise, the archetype's own base maxPages.
+ */
+export function resolveMaxPages(profile: Profile, app: Application, archetype: ResumeArchetype): number {
+  if (parseYearsOfExperience(profile) < MIN_YEARS_FOR_SECOND_PAGE) return 1;
+
+  if (archetype === "consulting") {
+    return isMbbConsulting(app) ? 1 : RESUME_SPECS.consulting.maxPages;
+  }
+
+  return RESUME_SPECS[archetype].maxPages;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildDocxPlan, generateResumeDocxBuffer } from "../resume-docx";
+import { buildDocxPlan, generateResumeDocxBuffer, TYPOGRAPHY_FLOOR } from "../resume-docx";
 import type { ResumeContent } from "../resume-schema";
 
 function baseContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
@@ -115,5 +115,12 @@ describe("generateResumeDocxBuffer", () => {
     // .docx files are ZIP containers — the "PK" magic bytes are the strongest
     // cheap sanity check available without a full docx/zip parser dependency.
     expect(buffer.subarray(0, 2).toString("ascii")).toBe("PK");
+  });
+});
+
+describe("typography floor — never render below 10pt body / 0.4in margins", () => {
+  it("declares a floor of exactly 10pt body size (20 half-points) and 0.4in margins (576 twips)", () => {
+    expect(TYPOGRAPHY_FLOOR.bodySize).toBe(20);
+    expect(TYPOGRAPHY_FLOOR.marginTwips).toBe(576);
   });
 });

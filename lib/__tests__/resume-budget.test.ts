@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { clampToOnePageBudget, clampText, clampBulletText, clampBulletPreservingOutcome, estimateResumeLineCount, MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET, enforceMinBulletsPerRole, capTopBandPerCompany } from "../resume-budget";
+import {
+  clampToOnePageBudget, clampText, clampBulletText, clampBulletPreservingOutcome, estimateResumeLineCount,
+  MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET, TWO_PAGE_BUDGET, budgetForMaxPages, compressOlderRoles,
+  enforceMinBulletsPerRole, capTopBandPerCompany,
+} from "../resume-budget";
 import type { ResumeContent } from "../resume-schema";
 
 // A rendered bullet must never end in a comma, a dangling conjunction/
@@ -640,5 +644,116 @@ describe("estimateResumeLineCount / MAX_LINES_PER_PAGE — verifying the one-pag
     const worstCase = richConsultingContent();
     const lines = estimateResumeLineCount(worstCase, "consulting");
     expect(lines).toBeGreaterThan(MAX_LINES_PER_PAGE);
+  });
+});
+
+describe("budgetForMaxPages", () => {
+  it("returns ONE_PAGE_BUDGET for maxPages 1 (or omitted)", () => {
+    expect(budgetForMaxPages(1)).toEqual(ONE_PAGE_BUDGET);
+  });
+
+  it("returns TWO_PAGE_BUDGET for maxPages 2", () => {
+    expect(budgetForMaxPages(2)).toEqual(TWO_PAGE_BUDGET);
+  });
+
+  it("TWO_PAGE_BUDGET expands roles, bullets-per-role, and the key-impact band beyond ONE_PAGE_BUDGET, never shrinks them", () => {
+    expect(TWO_PAGE_BUDGET.experienceMaxRoles).toBeGreaterThan(ONE_PAGE_BUDGET.experienceMaxRoles);
+    expect(TWO_PAGE_BUDGET.bulletsPerRoleMax).toBeGreaterThan(ONE_PAGE_BUDGET.bulletsPerRoleMax);
+    expect(TWO_PAGE_BUDGET.totalExperienceBulletsMax).toBeGreaterThan(ONE_PAGE_BUDGET.totalExperienceBulletsMax);
+    expect(TWO_PAGE_BUDGET.keyImpactMaxItems).toBeGreaterThan(ONE_PAGE_BUDGET.keyImpactMaxItems);
+  });
+});
+
+describe("clampToOnePageBudget with maxPages: 2 — expanded content budget", () => {
+  it("keeps more roles, more bullets per role, and a fuller Key Projects & Impact band than the 1-page pass", () => {
+    const content = richConsultingContent();
+    const onePage = clampToOnePageBudget(content, "consulting", 1);
+    const twoPage = clampToOnePageBudget(content, "consulting", 2);
+
+    expect(twoPage.experience.length).toBeGreaterThanOrEqual(onePage.experience.length);
+    const onePageBullets = onePage.experience.reduce((n, e) => n + e.bullets.length, 0);
+    const twoPageBullets = twoPage.experience.reduce((n, e) => n + e.bullets.length, 0);
+    expect(twoPageBullets).toBeGreaterThan(onePageBullets);
+
+    const onePageImpact = (onePage.keyWins?.length ?? 0) + (onePage.projects?.length ?? 0);
+    const twoPageImpact = (twoPage.keyWins?.length ?? 0) + (twoPage.projects?.length ?? 0);
+    expect(twoPageImpact).toBeGreaterThan(onePageImpact);
+  });
+
+  it("never exceeds TWO_PAGE_BUDGET's caps even at maxPages 2", () => {
+    const clamped = clampToOnePageBudget(richConsultingContent(), "consulting", 2);
+    expect(clamped.experience.length).toBeLessThanOrEqual(TWO_PAGE_BUDGET.experienceMaxRoles);
+    for (const e of clamped.experience) {
+      expect(e.bullets.length).toBeLessThanOrEqual(TWO_PAGE_BUDGET.bulletsPerRoleMax);
+    }
+  });
+
+  it("defaults to the 1-page budget when maxPages is omitted (back-compat)", () => {
+    const content = richConsultingContent();
+    const implicit = clampToOnePageBudget(content, "consulting");
+    const explicit = clampToOnePageBudget(content, "consulting", 1);
+    expect(implicit).toEqual(explicit);
+  });
+});
+
+describe("compressOlderRoles — detail only the last 10-15 years, compress older roles to a single line", () => {
+  const currentYear = new Date().getFullYear();
+
+  function roleEndingYearsAgo(yearsAgo: number, bulletCount = 3) {
+    const endYear = currentYear - yearsAgo;
+    return {
+      company: `Company ${yearsAgo}y ago`,
+      role: "Consultant",
+      tenure: yearsAgo === 0 ? "2015 - Present" : `${endYear - 3} - ${endYear}`,
+      location: "",
+      bullets: Array.from({ length: bulletCount }, (_, i) => ({ text: `Bullet ${i}.`, priority: i + 1 })),
+    };
+  }
+
+  it("leaves a current role (Present) fully detailed", () => {
+    const compressed = compressOlderRoles([roleEndingYearsAgo(0)]);
+    expect(compressed[0].bullets.length).toBe(3);
+  });
+
+  it("leaves a role that ended within the last 10-15 years fully detailed", () => {
+    const compressed = compressOlderRoles([roleEndingYearsAgo(8)]);
+    expect(compressed[0].bullets.length).toBe(3);
+  });
+
+  it("compresses a role that ended more than 15 years ago to a single bullet", () => {
+    const compressed = compressOlderRoles([roleEndingYearsAgo(20)]);
+    expect(compressed[0].bullets.length).toBe(1);
+  });
+
+  it("keeps the strongest (lowest-priority) bullet when compressing", () => {
+    const old = roleEndingYearsAgo(20);
+    old.bullets = [
+      { text: "Weaker bullet.", priority: 5 },
+      { text: "Strongest bullet.", priority: 1 },
+    ];
+    const compressed = compressOlderRoles([old]);
+    expect(compressed[0].bullets).toEqual([{ text: "Strongest bullet.", priority: 1 }]);
+  });
+
+  it("leaves a role with an unparseable tenure untouched", () => {
+    const weird = roleEndingYearsAgo(20);
+    weird.tenure = "Ask me about it";
+    const compressed = compressOlderRoles([weird]);
+    expect(compressed[0].bullets.length).toBe(3);
+  });
+
+  it("integrates with a full clampToOnePageBudget pass: an old role reads as one line even when otherwise eligible for more", () => {
+    const content = richConsultingContent({
+      experience: [
+        { company: "Recent Co", role: "Consultant", tenure: "2022 - Present", location: "", bullets: [
+          { text: "Recent bullet 1.", priority: 1 }, { text: "Recent bullet 2.", priority: 2 },
+        ] },
+        roleEndingYearsAgo(20, 4),
+      ],
+    });
+    const clamped = clampToOnePageBudget(content, "consulting", 2);
+    const old = clamped.experience.find(e => e.company.includes("20y ago"));
+    expect(old).toBeDefined();
+    expect(old!.bullets.length).toBe(1);
   });
 });

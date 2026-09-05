@@ -23,27 +23,41 @@ import {
 import { ResumeContent, resolveSectionSequence, ResumeSectionKey, formatDegreeLine } from "./resume-schema";
 import { ResumeArchetype } from "./resume-archetype";
 
-// Calibri 10-11pt per spec, tightened toward the smaller end (~15-20% more
-// content per page target — real content quality should never be traded
-// for page-fit again; typography is the room-maker instead, see
-// clampBulletText in lib/resume-budget.ts for the compression-quality fix
-// this pairs with).
+// Calibri 10.5pt / 0.5in margins is the DEFAULT — restored now that
+// two-page resumes are allowed for archetypes/candidates that qualify (see
+// resolveMaxPages in lib/resume-archetype.ts). Content quality is never
+// traded for page-fit by shrinking typography: the content BUDGET
+// (lib/resume-budget.ts) is what changes with maxPages, not the font. A
+// 10pt/0.4in FLOOR still exists (TYPOGRAPHY_FLOOR below) for content that
+// can't fit maxPages even at the default size — the rule is to expand to
+// the next allowed page rather than shrink past the floor, so this module
+// deliberately has no dynamic below-floor sizing path at all.
 const FONT = "Calibri";
-const BODY_SIZE = 20; // half-points -> 10pt (was 10.5pt)
+const BODY_SIZE = 21; // half-points -> 10.5pt (default)
 const NAME_SIZE = 32; // 16pt
 const HEADING_SIZE = 22; // 11pt
-const CONTACT_SIZE = 18; // 9pt (was 9.5pt)
+const CONTACT_SIZE = 19; // 9.5pt (default)
+
+// Never render below these — a typography floor, not a target. There is no
+// code path in this module that steps below it; if content can't fit
+// maxPages at the DEFAULT sizes above, the fix is the content budget
+// (fewer/shorter bullets, or the next allowed page), never a smaller font
+// or tighter margin than this floor.
+export const TYPOGRAPHY_FLOOR = {
+  bodySize: 20, // 10pt
+  marginTwips: 576, // 0.4in
+} as const;
 
 // Tight, near-single line spacing (240 twips/line = exactly single) — set
 // explicitly on every paragraph rather than left to the docx library's
 // implicit default, so it can't silently drift.
 const LINE_SPACING = 228;
 
-// 0.4in margins (was 0.5in), in twips (1440 twips/inch).
-const MARGIN_TWIPS = 576;
-// Page content width at 8.5in page - 2*0.4in margin = 7.7in = 11088 twips —
+// 0.5in margins (default), in twips (1440 twips/inch).
+const MARGIN_TWIPS = 720;
+// Page content width at 8.5in page - 2*0.5in margin = 7.5in = 10800 twips —
 // used as the right tab-stop position for right-aligned dates/years.
-const RIGHT_TAB_POSITION = 11088;
+const RIGHT_TAB_POSITION = 10800;
 
 const SECTION_LABELS: Partial<Record<ResumeSectionKey, string>> = {
   summary: "SUMMARY",
