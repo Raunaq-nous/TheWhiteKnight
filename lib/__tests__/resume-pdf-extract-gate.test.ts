@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { assertSectionsInOrder, expectedSectionHeadings, runPdfExtractionGate, pdfExtractionFailureMessage } from "../resume-pdf-extract-gate";
+import {
+  assertSectionsInOrder, expectedSectionHeadings, runPdfExtractionGate, pdfExtractionFailureMessage,
+  estimatePageTwoFillPercent, PAGE_TWO_MIN_FILL_PERCENT,
+} from "../resume-pdf-extract-gate";
 import type { ResumeContent } from "../resume-schema";
 
 function baseContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
@@ -68,7 +71,7 @@ describe("runPdfExtractionGate", () => {
     expect(result.errors.some(e => /not selectable/.test(e))).toBe(true);
   });
 
-  it("fails when the page count is not exactly 1", () => {
+  it("fails when the page count exceeds the (default, unspecified) 1-page limit", () => {
     const text = "SUMMARY\nEXPERIENCE\nEDUCATION\nSKILLS";
     const result = runPdfExtractionGate({ text, numpages: 2 }, baseContent());
     expect(result.ok).toBe(false);
@@ -95,5 +98,102 @@ describe("pdfExtractionFailureMessage", () => {
     const msg = pdfExtractionFailureMessage(result);
     expect(msg).toContain("PDF EXTRACTION GATE FAILED");
     expect(msg).toContain("page count: 2");
+  });
+});
+
+describe("runPdfExtractionGate with maxPages — archetype-driven, density-checked page limits", () => {
+  const fullPageText = "x".repeat(3000);
+  const halfFullText = "x".repeat(1500);
+  const thinText = "x".repeat(300);
+
+  function sectionsText() {
+    return "SUMMARY\ntext\n\nEXPERIENCE\ntext\n\nEDUCATION\ntext\n\nSKILLS\ntext";
+  }
+
+  it("passes a 2-page PDF when maxPages allows it and page two is at least 50% full", () => {
+    const result = runPdfExtractionGate(
+      { text: sectionsText(), numpages: 2, pageTexts: [fullPageText, halfFullText] },
+      baseContent(),
+      undefined,
+      2,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.pageCount).toBe(2);
+    expect(result.pageTwoFillPercent).toBeGreaterThanOrEqual(PAGE_TWO_MIN_FILL_PERCENT);
+  });
+
+  it("hard-fails a 2-page PDF when maxPages allows it but page two is a nearly-empty trailing page", () => {
+    const result = runPdfExtractionGate(
+      { text: sectionsText(), numpages: 2, pageTexts: [fullPageText, thinText] },
+      baseContent(),
+      undefined,
+      2,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.pageTwoFillPercent).toBeLessThan(PAGE_TWO_MIN_FILL_PERCENT);
+    expect(result.errors.some(e => /page two/i.test(e) && /full/i.test(e))).toBe(true);
+  });
+
+  it("hard-fails a 2-page PDF when maxPages is only 1, regardless of how full page two is", () => {
+    const result = runPdfExtractionGate(
+      { text: sectionsText(), numpages: 2, pageTexts: [fullPageText, fullPageText] },
+      baseContent(),
+      undefined,
+      1,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => /exceeding the 1-page limit/.test(e))).toBe(true);
+  });
+
+  it("never allows 3 or more pages, even when maxPages is set to something looser", () => {
+    const result = runPdfExtractionGate(
+      { text: sectionsText(), numpages: 3, pageTexts: [fullPageText, fullPageText, fullPageText] },
+      baseContent(),
+      undefined,
+      2,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => /3 or more pages/.test(e))).toBe(true);
+  });
+
+  it("does not check page-two fill when there's only 1 page", () => {
+    const result = runPdfExtractionGate({ text: sectionsText(), numpages: 1 }, baseContent(), undefined, 2);
+    expect(result.ok).toBe(true);
+    expect(result.pageTwoFillPercent).toBeNull();
+  });
+
+  it("doesn't hard-fail on fill percentage when per-page text wasn't captured (older caller, no pageTexts)", () => {
+    const result = runPdfExtractionGate({ text: sectionsText(), numpages: 2 }, baseContent(), undefined, 2);
+    expect(result.pageTwoFillPercent).toBeNull();
+    expect(result.errors.some(e => /full/i.test(e))).toBe(false);
+  });
+});
+
+describe("estimatePageTwoFillPercent", () => {
+  it("returns null when fewer than 2 pages of text are available", () => {
+    expect(estimatePageTwoFillPercent(undefined)).toBeNull();
+    expect(estimatePageTwoFillPercent(["only one page"])).toBeNull();
+  });
+
+  it("returns null when page one has no text to compare against", () => {
+    expect(estimatePageTwoFillPercent(["", "some text"])).toBeNull();
+  });
+
+  it("returns ~100 when page two is roughly as full as page one", () => {
+    const page = "word ".repeat(200);
+    expect(estimatePageTwoFillPercent([page, page])).toBeGreaterThanOrEqual(95);
+  });
+
+  it("returns a low percentage when page two is much shorter than page one", () => {
+    const full = "word ".repeat(200);
+    const thin = "word ".repeat(20);
+    const percent = estimatePageTwoFillPercent([full, thin]);
+    expect(percent).toBeLessThan(PAGE_TWO_MIN_FILL_PERCENT);
+  });
+
+  it("caps at 100 even if page two somehow has more text than page one", () => {
+    const short = "word ".repeat(10);
+    const long = "word ".repeat(50);
+    expect(estimatePageTwoFillPercent([short, long])).toBe(100);
   });
 });

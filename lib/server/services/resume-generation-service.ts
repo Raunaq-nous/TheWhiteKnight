@@ -19,7 +19,7 @@ import "server-only";
 import { chatJSON, ProviderSettings } from "../../ai-client";
 import { resumePrompt } from "../../prompts";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../resume-schema";
-import { detectResumeArchetype, withArchetypeSequence, ResumeArchetype } from "../../resume-archetype";
+import { detectResumeArchetype, withArchetypeSequence, resolveMaxPages, ResumeArchetype } from "../../resume-archetype";
 import { clampToOnePageBudget } from "../../resume-budget";
 import { resolveResumeSelections } from "../../resume-selection";
 import { runFormatGate, FormatGateResult } from "../../resume-format-gate";
@@ -29,6 +29,13 @@ import type { Application } from "../../store";
 export type GenerateResumeContentResult = {
   data: ResumeContent;
   archetype: ResumeArchetype;
+  // The resolved page ceiling for this archetype/candidate (see
+  // resolveMaxPages in lib/resume-archetype.ts — 1 by default, up to 2 for
+  // general consulting/product/ai_ml/finance_ib once the candidate has 5+
+  // years, never 2 for MBB or under-5-years). Callers pass this straight
+  // through to the export flow so the extraction gate checks against the
+  // SAME ceiling the content was actually budgeted for.
+  maxPages: number;
   // Computed here so EVERY resume-producing path gets this signal, not
   // just the export flow (app/api/resume/export/route.ts) — that route
   // still runs its own gate against the final, possibly checkbox-edited
@@ -45,6 +52,7 @@ export async function generateResumeContent(
   resumeArchetype?: ResumeArchetype,
 ): Promise<GenerateResumeContentResult> {
   const archetype = detectResumeArchetype(profile, app, resumeArchetype);
+  const maxPages = resolveMaxPages(profile, app, archetype);
 
   const data = await chatJSON<ResumeContent>(
     [{ role: "user", content: resumePrompt(profile, app, archetype) }],
@@ -65,8 +73,8 @@ export async function generateResumeContent(
   // deterministically from the archetype spec, and the one-page content
   // budget is clamped deterministically — neither is trusted to the model.
   const resolved = resolveResumeSelections(data, profile);
-  const finalContent = withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype), archetype);
+  const finalContent = withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype, maxPages), archetype);
   const formatGate = runFormatGate(finalContent);
 
-  return { data: finalContent, archetype, formatGate };
+  return { data: finalContent, archetype, maxPages, formatGate };
 }

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence, formatDegreeLine } from "../lib/resume-schema";
-import { ResumeArchetype } from "../lib/resume-archetype";
+import { ResumeArchetype, resolveMaxPages } from "../lib/resume-archetype";
 import type { FormatGateViolation, OutcomeWarning } from "../lib/resume-format-gate";
+import type { Application } from "../lib/store";
 import { getProfile, saveProfile } from "../lib/profile";
 import { rewriteBulletFromAnswer, replaceBulletInProfile } from "../lib/profile-enrichment";
 import { showToast } from "../lib/toast";
@@ -282,16 +283,22 @@ function ResumePage({
 export function ResumeExportView({
   content,
   archetype,
+  app,
   onClose,
 }: {
   content: ResumeContent;
   archetype?: ResumeArchetype | null;
+  // Optional: needed only to resolve the page ceiling (MBB vs general
+  // consulting, years-of-experience) via resolveMaxPages. Without it, the
+  // export falls back to the archetype's own base maxPages server-side.
+  app?: Application | null;
   onClose: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const [exportError, setExportError] = useState("");
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [pageTwoFillPercent, setPageTwoFillPercent] = useState<number | null>(null);
   const [warnings, setWarnings] = useState<FormatGateViolation[]>([]);
   const [outcomeWarnings, setOutcomeWarnings] = useState<OutcomeWarning[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -307,10 +314,13 @@ export function ResumeExportView({
     setExportError("");
     try {
       const { exportResumeDocxAndPdf, downloadResumeExport } = await import("../lib/resume-export");
-      const result = await exportResumeDocxAndPdf(content, archetype);
+      const profile = getProfile();
+      const maxPages = profile && app && archetype ? resolveMaxPages(profile, app, archetype) : undefined;
+      const result = await exportResumeDocxAndPdf(content, archetype, maxPages);
       const filename = (content.name || "resume").toLowerCase().replace(/\s+/g, "-");
       downloadResumeExport(result, filename);
       setPageCount(result.pageCount);
+      setPageTwoFillPercent(result.pageTwoFillPercent);
       setWarnings(result.warnings);
       setOutcomeWarnings(result.outcomeWarnings);
       setExportState("done");
@@ -364,6 +374,7 @@ export function ResumeExportView({
         {exportState === "done" && pageCount !== null && (
           <span style={{ color: "#8fd19e", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center" }}>
             MEASURED: {pageCount} PAGE{pageCount === 1 ? "" : "S"}
+            {pageCount === 2 && pageTwoFillPercent !== null && ` — PAGE 2 ~${pageTwoFillPercent}% FULL`}
           </span>
         )}
         {exportState === "error" && (

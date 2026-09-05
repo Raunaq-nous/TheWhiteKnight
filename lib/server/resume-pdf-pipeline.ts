@@ -59,12 +59,27 @@ export async function convertDocxToPdf(docxBuffer: Buffer): Promise<Buffer> {
   });
 }
 
-export async function extractPdfText(pdfBuffer: Buffer): Promise<{ text: string; numpages: number }> {
+export async function extractPdfText(pdfBuffer: Buffer): Promise<{ text: string; numpages: number; pageTexts: string[] }> {
   // require(), not import — same reason app/api/extract-pdf/route.ts uses
   // require(): pdf-parse must stay out of the webpack bundle
   // (serverExternalPackages), a static import would pull it in.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const pdfParse = require("pdf-parse");
-  const data = await pdfParse(pdfBuffer);
-  return { text: (data.text ?? "").trim(), numpages: data.numpages ?? 0 };
+
+  // Custom pagerender: captures each page's own text into pageTexts (in
+  // page order — pdf-parse renders pages sequentially) IN ADDITION TO
+  // returning it for pdf-parse's own concatenated `data.text`, so the
+  // extraction gate can measure page-two fill percentage (see
+  // lib/resume-pdf-extract-gate.ts) without a second parse pass. Mirrors
+  // pdf-parse's own default renderer (join each text item's string).
+  const pageTexts: string[] = [];
+  const pagerender = (pageData: any) =>
+    pageData.getTextContent().then((textContent: any) => {
+      const pageText = textContent.items.map((item: any) => item.str).join(" ");
+      pageTexts.push(pageText);
+      return pageText;
+    });
+
+  const data = await pdfParse(pdfBuffer, { pagerender });
+  return { text: (data.text ?? "").trim(), numpages: data.numpages ?? 0, pageTexts };
 }

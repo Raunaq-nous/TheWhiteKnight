@@ -1406,7 +1406,7 @@ window.addEventListener('load', function() {
       </div>
     </main>
     {showResumeExport && resumeContent && (
-      <ResumeExportView content={resumeContent} archetype={resumeArchetypeUsed} onClose={() => setShowResumeExport(false)} />
+      <ResumeExportView content={resumeContent} archetype={resumeArchetypeUsed} app={app} onClose={() => setShowResumeExport(false)} />
     )}
     {showResumeBuilder && app && (
       <ResumeBuilder

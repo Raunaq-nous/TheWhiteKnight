@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "../../../../lib/rate-limit";
 import { ResumeContent } from "../../../../lib/resume-schema";
-import { ResumeArchetype } from "../../../../lib/resume-archetype";
+import { ResumeArchetype, RESUME_SPECS } from "../../../../lib/resume-archetype";
 import { runFormatGate, formatGateFailureMessage } from "../../../../lib/resume-format-gate";
 import { generateResumeDocxBuffer } from "../../../../lib/resume-docx";
 import { runPdfExtractionGate, pdfExtractionFailureMessage } from "../../../../lib/resume-pdf-extract-gate";
@@ -28,14 +28,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { resumeContent, archetype } = await req.json() as {
+    const { resumeContent, archetype, maxPages: requestedMaxPages } = await req.json() as {
       resumeContent: ResumeContent;
       archetype?: ResumeArchetype | null;
+      // Resolved at generation time (see resolveMaxPages in
+      // lib/resume-archetype.ts) and passed straight through by the
+      // client, so the extraction gate checks against the SAME ceiling the
+      // content was actually budgeted for. Falls back to the archetype's
+      // own base maxPages (or 1) for older clients that don't send it.
+      maxPages?: number;
     };
 
     if (!resumeContent) {
       return NextResponse.json({ error: "Missing resumeContent" }, { status: 400 });
     }
+
+    const maxPages = requestedMaxPages ?? (archetype ? RESUME_SPECS[archetype].maxPages : 1);
 
     // Only a HARD failure blocks export — WARN-level issues (weak/missing
     // outcome, over caps) are reported alongside a successful export, not
@@ -53,12 +61,13 @@ export async function POST(req: NextRequest) {
     const pdfBuffer = await convertDocxToPdf(docxBuffer);
     const extracted = await extractPdfText(pdfBuffer);
 
-    const extractionGate = runPdfExtractionGate(extracted, resumeContent, archetype ?? undefined);
+    const extractionGate = runPdfExtractionGate(extracted, resumeContent, archetype ?? undefined, maxPages);
     if (!extractionGate.ok) {
       return NextResponse.json({
         error: pdfExtractionFailureMessage(extractionGate),
         gate: "pdf_extraction",
         pageCount: extractionGate.pageCount,
+        pageTwoFillPercent: extractionGate.pageTwoFillPercent,
         violations: extractionGate.errors,
       }, { status: 422 });
     }
@@ -67,6 +76,7 @@ export async function POST(req: NextRequest) {
       docxBase64: docxBuffer.toString("base64"),
       pdfBase64: pdfBuffer.toString("base64"),
       pageCount: extractionGate.pageCount,
+      pageTwoFillPercent: extractionGate.pageTwoFillPercent,
       warnings: formatGate.warnings,
       outcomeWarnings: formatGate.outcomeWarnings,
     });
