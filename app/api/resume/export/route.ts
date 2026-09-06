@@ -6,17 +6,26 @@ import { runFormatGate, formatGateFailureMessage } from "../../../../lib/resume-
 import { generateResumeDocxBuffer } from "../../../../lib/resume-docx";
 import { runPdfExtractionGate, pdfExtractionFailureMessage } from "../../../../lib/resume-pdf-extract-gate";
 import { convertDocxToPdf, extractPdfText } from "../../../../lib/server/resume-pdf-pipeline";
+import {
+  enforceEmployerLocations, repairEmDashesInDocx, extractDocxText,
+  runConfidentialityGate, confidentialityGateFailureMessage,
+} from "../../../../lib/resume-confidentiality";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 // DOCX-first export pipeline: FORMAT GATE (reject before anything is
-// written) -> generate .docx (source of truth) -> LibreOffice headless
-// conversion to .pdf (so the two can never drift apart) -> PDF EXTRACTION
-// GATE (the .pdf is read back and must prove itself: selectable text, every
-// expected section present in order, exactly one page). Either gate failing
-// is a rejected build (4xx with every reason listed), never a best-effort
-// file handed back with a warning.
+// written) -> CONFIDENTIALITY substitutions + employer-location overrides
+// (docs/MASTER-PROFILE-SPEC.md Part 1/2) -> generate .docx (source of
+// truth) -> em-dash repair sweep on the packed XML -> CONFIDENTIALITY GATE
+// on the repaired docx text -> LibreOffice headless conversion to .pdf (so
+// the two can never drift apart) -> PDF EXTRACTION GATE (selectable text,
+// every expected section present in order, within the resolved page
+// ceiling) -> CONFIDENTIALITY GATE again on the extracted PDF text, as a
+// second independent check (spec: "Run as a HARD gate on the final DOCX
+// text AND the extracted PDF text"). Any gate failing is a rejected build
+// (4xx with every reason listed), never a best-effort file handed back
+// with a warning.
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for") ?? "local";
   const rl = checkRateLimit(`resume-export:${ip}`, 10, 60_000);
@@ -57,11 +66,48 @@ export async function POST(req: NextRequest) {
       }, { status: 422 });
     }
 
-    const docxBuffer = await generateResumeDocxBuffer(resumeContent, archetype ?? undefined);
+    // Canonical employer locations override whatever the profile/content
+    // says (spec Part 2) — Aranca is always Mumbai, regardless of source.
+    const contentForRender: ResumeContent = {
+      ...resumeContent,
+      experience: enforceEmployerLocations(resumeContent.experience),
+    };
+
+    const rawDocxBuffer = await generateResumeDocxBuffer(contentForRender, archetype ?? undefined);
+    // Em-dash REPAIR sweep (spec Part 10 step 2) — detection alone is not
+    // enough; autocorrect and model output both reintroduce em dashes, so
+    // the packed XML is rewritten before anything downstream ever sees it.
+    const docxBuffer = await repairEmDashesInDocx(rawDocxBuffer);
+
+    // CONFIDENTIALITY GATE, pass 1: the final .docx text, pre-conversion —
+    // fails fast, before paying for a LibreOffice conversion.
+    const docxText = await extractDocxText(docxBuffer);
+    const docxConfidentialityGate = runConfidentialityGate(docxText, undefined, archetype ?? undefined);
+    if (!docxConfidentialityGate.ok) {
+      return NextResponse.json({
+        error: confidentialityGateFailureMessage(docxConfidentialityGate),
+        gate: "confidentiality",
+        violations: docxConfidentialityGate.blockedTerms,
+      }, { status: 422 });
+    }
+
     const pdfBuffer = await convertDocxToPdf(docxBuffer);
     const extracted = await extractPdfText(pdfBuffer);
 
-    const extractionGate = runPdfExtractionGate(extracted, resumeContent, archetype ?? undefined, maxPages);
+    // CONFIDENTIALITY GATE, pass 2: the extracted PDF text — an
+    // independent second check against what a human would actually
+    // receive, in case the docx->pdf conversion introduced anything (e.g.
+    // a field code re-expanding, or a re-encoded em dash).
+    const pdfConfidentialityGate = runConfidentialityGate(extracted.text, undefined, archetype ?? undefined);
+    if (!pdfConfidentialityGate.ok) {
+      return NextResponse.json({
+        error: confidentialityGateFailureMessage(pdfConfidentialityGate),
+        gate: "confidentiality",
+        violations: pdfConfidentialityGate.blockedTerms,
+      }, { status: 422 });
+    }
+
+    const extractionGate = runPdfExtractionGate(extracted, contentForRender, archetype ?? undefined, maxPages);
     if (!extractionGate.ok) {
       return NextResponse.json({
         error: pdfExtractionFailureMessage(extractionGate),

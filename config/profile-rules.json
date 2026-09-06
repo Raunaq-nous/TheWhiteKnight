@@ -1,0 +1,53 @@
+{
+  "forbiddenTerms": [
+    { "match": "nuclear utility", "replace": "green energy entity", "severity": "block" },
+    { "match": "10 GW", "replace": null, "severity": "block" },
+    { "match": "$10.45B", "replace": "$10 billion", "severity": "block" },
+    { "match": "CAP Ops", "replace": null, "severity": "block" },
+    { "match": "BCN", "replace": null, "severity": "block" },
+    { "match": "knowledge graph-linked", "replace": "AI-based", "severity": "block", "scope": "consulting" },
+    { "match": "—", "replace": ", ", "severity": "block" }
+  ],
+  "neverCite": [
+    "5,232-activity", "$3.8 billion validation", "release count", "dev environment URL"
+  ],
+  "employerLocations": {
+    "Bain and Company": "Gurgaon",
+    "Aranca": "Mumbai",
+    "Evalueserve": "Gurgaon",
+    "Tecnova India": "Gurgaon",
+    "Delbomblr Inc": "Delhi",
+    "Madcue": "Bangalore"
+  },
+  "yearsByArchetype": {
+    "consulting_senior": "10+",
+    "consulting_mbb": "10+",
+    "ai_product": "8",
+    "startup": "8",
+    "vc_investing": "10+",
+    "chief_of_staff": "10+"
+  },
+  "pagesByArchetype": {
+    "consulting_senior": 2,
+    "consulting_mbb": 1,
+    "ai_product": 1,
+    "startup": 1,
+    "vc_investing": 1
+  },
+  "sideBuildsAllowed": ["ai_product", "startup", "vc_investing"],
+  "toolPlacement": {
+    "Workflow and Workforce Modernization Studio": "Bain and Company",
+    "Portfolio and project intelligence cockpit": "Bain and Company",
+    "Generative scheduling platform": "Bain and Company",
+    "Schedule, Cost and Risk Diagnostic AI-enabled toolkit": "Bain and Company",
+    "Capital Projects Intelligence Toolkit": "Bain and Company",
+    "Internal AI strategy team lead": "Aranca",
+    "Project economics and cost modelling engine": "Aranca",
+    "AI survey intelligence platform": "Aranca",
+    "Document intelligence engine": "Aranca"
+  },
+  "bannedPhrases": [
+    "excited to apply", "passionate about", "synergy", "cutting-edge",
+    "innovative solutions", "self-starter", "proven track record", "consumer-facing"
+  ]
+}
