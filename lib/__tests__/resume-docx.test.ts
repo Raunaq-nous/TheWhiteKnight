@@ -218,3 +218,20 @@ describe("experience sub-labels (consulting archetype only) — spec Part 8/9", 
     expect(plan.some(n => n.kind === "subLabel")).toBe(false);
   });
 });
+
+describe("selective bolding integration — generateResumeDocxBuffer", () => {
+  it("still produces a valid .docx when bullet text has real bold matches", async () => {
+    const content = baseContent({
+      experience: [{
+        company: "Bain and Company", role: "Project Leader", tenure: "2025 - Present", location: "",
+        bullets: [{
+          sourceBulletId: "b1",
+          text: "Led a concept selection study for a national oil and gas company, building the evaluation framework that unlocked a $10 million investment.",
+          priority: 1,
+        }],
+      }],
+    });
+    const buffer = await generateResumeDocxBuffer(content, "consulting", 2);
+    expect(buffer.subarray(0, 2).toString("ascii")).toBe("PK");
+  });
+});
