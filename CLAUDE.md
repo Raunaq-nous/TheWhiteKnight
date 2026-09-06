@@ -70,6 +70,22 @@ Current phase: Phase 4c complete, awaiting GATE.
 
 - **`.claude/skills/` deleted.** The directory contained three pre-rebuild CLI workflow skills (`career-os`, `ingest-jd`, `tailor-resume`) that referenced `persona/master-cv.md`, `applications/<slug>/jd.md`, and `config/profile.yml` — paths that do not exist in the rebuilt system. All scoring and generation now run through `/api/score` and `/api/generate` routes. Keeping stale skills that describe a dead workflow would contradict the current architecture.
 
+## VERIFICATION CONTRACT
+
+A task is complete only when ALL of these pass. Run them yourself — never ask the user to run
+them or report success without having run them in this session:
+
+1. `npm test` — full suite, zero failures.
+2. `npm run build` — clean, no errors.
+3. `tsc --noEmit` — no new errors (compare against the pre-existing baseline, don't demand a
+   fully clean slate if failures predate the change).
+4. For any resume change: generate a real export and confirm (a) the extraction gate reports a
+   page count within the archetype's allowance, and (b) the confidentiality gate passes on both
+   the generated DOCX text and the extracted PDF text.
+
+Commit once per completed backlog item with a descriptive message. Push at the end of the run.
+Never ask permission to commit — that authorization is standing, from this contract.
+
 ## How to work
 
 - Treat me as founder/PM. You are tech lead. Push back once on bad choices, then comply.

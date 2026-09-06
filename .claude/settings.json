@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "defaultMode": "acceptEdits"
+  },
+  "attribution": {
+    "commit": ""
+  },
   "hooks": {
     "SessionStart": [
       {
