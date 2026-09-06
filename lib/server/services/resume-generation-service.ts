@@ -23,6 +23,7 @@ import { detectResumeArchetype, withArchetypeSequence, resolveMaxPages, ResumeAr
 import { clampToOnePageBudget } from "../../resume-budget";
 import { resolveResumeSelections } from "../../resume-selection";
 import { runFormatGate, FormatGateResult } from "../../resume-format-gate";
+import { enforceEmployerLocations } from "../../resume-confidentiality";
 import type { Profile } from "../../profile";
 import type { Application } from "../../store";
 
@@ -73,7 +74,12 @@ export async function generateResumeContent(
   // deterministically from the archetype spec, and the one-page content
   // budget is clamped deterministically — neither is trusted to the model.
   const resolved = resolveResumeSelections(data, profile);
-  const finalContent = withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype, maxPages), archetype);
+  const normalized = normalizeResumeContent(resolved);
+  // Canonical employer locations override whatever the profile says, here
+  // too — not just at export — so a resume looks right the moment it's
+  // first generated, not only after the export-time gate corrects it.
+  const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
+  const finalContent = withArchetypeSequence(clampToOnePageBudget(withCanonicalLocations, archetype, maxPages), archetype);
   const formatGate = runFormatGate(finalContent);
 
   return { data: finalContent, archetype, maxPages, formatGate };
