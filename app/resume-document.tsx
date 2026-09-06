@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence, formatDegreeLine } from "../lib/resume-schema";
-import { ResumeArchetype, resolveMaxPages } from "../lib/resume-archetype";
+import { ResumeArchetype, resolveConfiguredMaxPages } from "../lib/resume-archetype";
 import type { FormatGateViolation, OutcomeWarning } from "../lib/resume-format-gate";
 import type { Application } from "../lib/store";
 import { getProfile, saveProfile } from "../lib/profile";
@@ -315,7 +315,7 @@ export function ResumeExportView({
     try {
       const { exportResumeDocxAndPdf, downloadResumeExport } = await import("../lib/resume-export");
       const profile = getProfile();
-      const maxPages = profile && app && archetype ? resolveMaxPages(profile, app, archetype) : undefined;
+      const maxPages = profile && app && archetype ? resolveConfiguredMaxPages(profile, app, archetype) : undefined;
       const result = await exportResumeDocxAndPdf(content, archetype, maxPages);
       const filename = (content.name || "resume").toLowerCase().replace(/\s+/g, "-");
       downloadResumeExport(result, filename);

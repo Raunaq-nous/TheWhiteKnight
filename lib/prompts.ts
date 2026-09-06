@@ -5,6 +5,7 @@ import { ResumeContent } from "./resume-schema";
 import { BulletCandidate } from "./profile-bullet-quality";
 import { computeBulletRelevanceHints, renderRelevanceHintsBlock, rankProfileForResume } from "./resume-bullet-relevance";
 import { renderAvailableBulletsBlock } from "./profile-bullets";
+import { budgetForMaxPages } from "./resume-budget";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -221,11 +222,13 @@ BULLET PRIORITY — every bullet needs a "priority" integer: 1 = most relevant t
 Output the JSON now. No preamble, no markdown code fence, no explanation.`;
 }
 
-export function resumePrompt(profile: Profile, app: Application, archetype: ResumeArchetype): string {
+export function resumePrompt(profile: Profile, app: Application, archetype: ResumeArchetype, maxPages: number = 1): string {
   const atsKeywords = app.jdParsed?.keywords?.join(", ") ?? "";
   const keyReqs = app.jdParsed?.keyRequirements?.join("; ") ?? "";
   const techSkills = app.jdParsed?.technicalSkills?.join(", ") ?? "";
   const spec = RESUME_SPECS[archetype];
+  const budget = budgetForMaxPages(maxPages);
+  const isTwoPage = maxPages >= 2;
   // Deterministic pre-ranking pass (BUG 1 fix): reorders every entry's bullets
   // and every project by relevance to this JD — never drops anything (except
   // entries explicitly flagged excludeFromResume), the FULL profile still
@@ -276,11 +279,11 @@ WHAT "QUANTIFIED IMPACT" MEANS HERE — prefer these units of proof over generic
 
 LANGUAGE CONVENTIONS FOR THIS FIELD: ${spec.languageConventions}
 
-ONE-PAGE CONTENT BUDGET — this resume is generated to fit ONE page from the start, not trimmed after the fact. Write within these limits directly; a server-side clamp enforces them afterward as a backstop, but writing over budget just means your best material gets cut arbitrarily instead of by your own judgment. This budget is TIGHTER on counts than before specifically because bullets are now allowed to run longer — fewer, richer bullets, not more, short ones:
-- Summary: EXACTLY 2 lines max, ~200 characters max.
-- Key Projects & Impact (if this archetype uses it): exactly 3 items, ONE line each.
-- Experience: show at most 4 roles — the ${expCount} entries in the profile are pre-ranked by relevance above; if there are more than 4, the weakest for THIS JD will be dropped entirely by the automatic clamp, so spend your effort on the top 4, not evenly across all of them. Each shown role gets 2-3 bullets (never 1, never more than 3), and EVERY bullet is ONE line, target ~200 characters, hard ceiling 240 — a crisp, compressed clause, never a paragraph. If a project needs more depth than that, that depth belongs in Key Projects & Impact, not stretched into a giant experience bullet. Roughly 10 bullets total across the whole Experience section.
-- Skills: max 3 categories, max 6 items each.
+${isTwoPage ? "TWO-PAGE CONTENT BUDGET" : "ONE-PAGE CONTENT BUDGET"} — this resume is generated to fit ${maxPages} page${maxPages === 1 ? "" : "s"} from the start, not trimmed after the fact. Write within these limits directly; a server-side clamp enforces them afterward as a backstop, but writing over budget just means your best material gets cut arbitrarily instead of by your own judgment.${isTwoPage ? " The density rule cuts both ways: fill the page — bottom white space on page two means the content is too thin, so surface MORE real, quantified material (more roles, more bullets per role, a fuller Key Projects & Impact band) rather than stretching spacing; but a second page must be at least half full, never a mostly-empty trailing page." : " This budget is TIGHTER on counts than before specifically because bullets are now allowed to run longer — fewer, richer bullets, not more, short ones:"}
+- Summary: ${spec.summaryAllowed ? (isTwoPage ? `a full paragraph, up to ~${budget.summaryMaxChars} characters (see PROFILE SUMMARY above for the exact four-part shape).` : `EXACTLY 2 lines max, ~${budget.summaryMaxChars} characters max.`) : "omitted for this archetype."}
+- Key Projects & Impact (if this archetype uses it): exactly ${budget.keyImpactMaxItems} items, ONE line each.
+- Experience: show at most ${budget.experienceMaxRoles} roles — the ${expCount} entries in the profile are pre-ranked by relevance above; if there are more than ${budget.experienceMaxRoles}, the weakest for THIS JD will be dropped entirely by the automatic clamp, so spend your effort on the top ${budget.experienceMaxRoles}, not evenly across all of them. Each shown role gets 2-${budget.bulletsPerRoleMax} bullets (never 1, never more than ${budget.bulletsPerRoleMax}), and EVERY bullet is ONE line, target ~200 characters, hard ceiling ${budget.bulletMaxChars} — a crisp, compressed clause, never a paragraph. If a project needs more depth than that, that depth belongs in Key Projects & Impact, not stretched into a giant experience bullet. Roughly ${budget.totalExperienceBulletsMax} bullets total across the whole Experience section. Detail only the most recent 10-15 years in full — older roles are automatically compressed to a single line, so do not spend selection effort trying to make an old role look fully detailed.
+- Skills: max ${budget.skillsMaxCategories} categories, max ${budget.skillsMaxItemsPerCategory} items each.
 - Education: one line per entry (institution/degree/years), no achievements bullets.
 
 THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES — read this literally, it is a common failure mode: a profile experience entry is a JOB, not a single project. Its bullet ids frequently describe MULTIPLE DISTINCT ENGAGEMENTS — separate clients, separate deals, separate initiatives done during that one role. When that's true:
@@ -306,9 +309,14 @@ CERTIFICATIONS: NEVER include a certifications section or field, regardless of w
 
 PROFILE SUMMARY — this is the ONLY field you write freely (see SELECTION, NOT WRITING above), and it is judged on two things: does it NAME the target role, and does it LEAD WITH a real number:
 - ${spec.summaryAllowed ? spec.summaryStyle : "Do NOT include a summary for this archetype — omit it (set \"summary\" to an empty string). " + spec.summaryStyle}
-- If a summary is written: EXACTLY 2 lines max (~200 characters), and it MUST follow this shape: [years/background] positioned for [the exact target role title] + the SINGLE strongest quantified proof point in the profile that is most relevant to THIS JD's target priorities (a real number, deal size, program scale, headcount — not a credential list, not a list of firm names with no figure attached).
-- A summary with no named target role and no number is a FAILED summary. Concrete example of this exact failure: "Strategy consultant and AI builder with 8+ years across MBB, growth advisory, and entrepreneurship." — no role named, no proof point, purely a background list. Do not write anything shaped like this.
-- NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
+${spec.summaryAllowed ? (isTwoPage ? `- This is a 2-page resume — write a FULL paragraph (4-5 sentences, up to ~${budget.summaryMaxChars} characters), following this exact four-part formula, in order:
+  1. Role + years of experience + breadth + current position (e.g. "Strategy consultant and AI builder with [years] across [breadth], currently a [current title] at [current employer]").
+  2. What is owned end-to-end — weave first-principles thinking in NATURALLY as part of describing the actual work, never as a standalone buzzword claim (e.g. "breaking complex enterprise workflows back to their fundamentals before redesigning them," not "approaches every engagement from first principles").
+  3. The build-and-deploy differentiator — concrete evidence of building and shipping real things, not just advising on them.
+  4. Geographies and sectors actually covered, woven in naturally, not as a bare list.
+  It must still NAME the target role and LEAD the first sentence with real specifics (years, current title, current employer) — not a vague background list with nothing concrete in it.` : `- EXACTLY 2 lines max (~${budget.summaryMaxChars} characters), and it MUST follow this shape: [years/background] positioned for [the exact target role title] + the SINGLE strongest quantified proof point in the profile that is most relevant to THIS JD's target priorities (a real number, deal size, program scale, headcount — not a credential list, not a list of firm names with no figure attached).
+- A summary with no named target role and no number is a FAILED summary. Concrete example of this exact failure: "Strategy consultant and AI builder with 8+ years across MBB, growth advisory, and entrepreneurship." — no role named, no proof point, purely a background list. Do not write anything shaped like this.`) : ""}
+- NEVER meta-commentary about how well past firms or experience "match" this role or "exactly what this role asks" — just state the positioning directly. NEVER filler like "approaches every engagement from first principles" or similar generic consultant-speak stated as a bare claim, and never "passionate about," "excited to apply," "synergy," "cutting-edge," or similar generic buzzword-speak. No filler adjectives, never generic, and never a fact already used in Key Projects & Impact.
 
 ARCHETYPE — ${spec.label}:
 - MANDATORY SECTIONS (include if the profile has any data for them): ${spec.mandatorySections.join(", ")}.

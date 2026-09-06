@@ -4,6 +4,7 @@ import type { Application } from "../store";
 import {
   detectResumeArchetype, withArchetypeSequence, RESUME_SPECS, RESUME_ARCHETYPE_LABELS, ResumeArchetype,
   isMbbConsulting, parseYearsOfExperience, resolveMaxPages,
+  resolveTargetArchetypeKey, resolveConfiguredYearsOfExperience, resolveConfiguredMaxPages,
 } from "../resume-archetype";
 import type { ResumeContent } from "../resume-schema";
 
@@ -335,5 +336,70 @@ describe("resolveMaxPages", () => {
     const profile = baseProfile({ yearsOfExperience: "9", roleType: "strategy-consulting" });
     const app = baseApp({ role: "Generalist Consultant", company: "Some Boutique" });
     expect(resolveMaxPages(profile, app, "consulting")).toBe(2);
+  });
+});
+
+describe("resolveTargetArchetypeKey — the spec's finer-grained target taxonomy", () => {
+  it("maps MBB consulting to consulting_mbb and general consulting to consulting_senior", () => {
+    expect(resolveTargetArchetypeKey(baseApp({ company: "Bain & Company" }), "consulting")).toBe("consulting_mbb");
+    expect(resolveTargetArchetypeKey(baseApp({ company: "Accenture" }), "consulting")).toBe("consulting_senior");
+  });
+
+  it("maps vc_investing directly", () => {
+    expect(resolveTargetArchetypeKey(baseApp({}), "vc_investing")).toBe("vc_investing");
+  });
+
+  it("maps product/ai_ml_engineering to ai_product by default", () => {
+    expect(resolveTargetArchetypeKey(baseApp({ role: "Product Manager" }), "product")).toBe("ai_product");
+    expect(resolveTargetArchetypeKey(baseApp({ role: "ML Engineer" }), "ai_ml_engineering")).toBe("ai_product");
+  });
+
+  it("detects a startup/founder signal and prefers it over ai_product", () => {
+    expect(resolveTargetArchetypeKey(baseApp({ role: "Founding Engineer at a startup" }), "product")).toBe("startup");
+  });
+
+  it("detects a chief-of-staff signal ahead of any other mapping", () => {
+    expect(resolveTargetArchetypeKey(baseApp({ role: "Chief of Staff" }), "general")).toBe("chief_of_staff");
+    expect(resolveTargetArchetypeKey(baseApp({ role: "Chief of Staff" }), "consulting")).toBe("chief_of_staff");
+  });
+
+  it("returns undefined for archetypes/situations the spec's taxonomy doesn't name", () => {
+    expect(resolveTargetArchetypeKey(baseApp({ role: "Investment Banking Analyst" }), "finance_ib")).toBeUndefined();
+    expect(resolveTargetArchetypeKey(baseApp({ role: "Something Unrelated" }), "general")).toBeUndefined();
+  });
+});
+
+describe("resolveConfiguredYearsOfExperience — years flex by target, not a fixed profile field", () => {
+  it("overrides the profile's own years for a mapped target archetype", () => {
+    const profile = baseProfile({ yearsOfExperience: "5" });
+    expect(resolveConfiguredYearsOfExperience(profile, baseApp({ company: "Bain & Company" }), "consulting")).toBe("10+");
+    expect(resolveConfiguredYearsOfExperience(profile, baseApp({ company: "Accenture" }), "consulting")).toBe("10+");
+    expect(resolveConfiguredYearsOfExperience(profile, baseApp({ role: "Product Manager" }), "product")).toBe("8");
+    expect(resolveConfiguredYearsOfExperience(profile, baseApp({}), "vc_investing")).toBe("10+");
+  });
+
+  it("falls back to the profile's own value when no target mapping applies", () => {
+    const profile = baseProfile({ yearsOfExperience: "5" });
+    expect(resolveConfiguredYearsOfExperience(profile, baseApp({ role: "IB Analyst" }), "finance_ib")).toBe("5");
+  });
+});
+
+describe("resolveConfiguredMaxPages — config wins over the generic engine default (spec Part 0)", () => {
+  it("uses the configured value for a mapped target archetype, regardless of years of experience", () => {
+    const profile = baseProfile({ yearsOfExperience: "15" });
+    // ai_product is configured to 1 page even at high seniority — this
+    // deliberately overrides the generic engine's product/5+-years=2 rule.
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Product Manager" }), "product")).toBe(1);
+  });
+
+  it("matches the generic engine default when the configured value agrees with it", () => {
+    const profile = baseProfile({ yearsOfExperience: "10" });
+    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "Bain & Company" }), "consulting")).toBe(1);
+    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "Accenture" }), "consulting")).toBe(2);
+  });
+
+  it("falls back to the generic engine when no target mapping applies", () => {
+    const profile = baseProfile({ yearsOfExperience: "3" });
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "IB Analyst" }), "finance_ib")).toBe(1);
   });
 });

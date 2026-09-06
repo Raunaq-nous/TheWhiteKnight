@@ -16,6 +16,14 @@
 //      Not meaningfully unit-testable beyond "it doesn't throw and
 //      produces a real .docx" — the FORMAT GATE (lib/resume-format-gate.ts)
 //      is what actually guarantees the content is safe to render.
+//
+// Typography is one of TWO fixed formats from docs/MASTER-PROFILE-SPEC.md
+// Part 9 — "two-page senior consulting" or "one-page dense" — selected by
+// the resolved page ceiling (see resolveConfiguredMaxPages in
+// lib/resume-archetype.ts). There is no dynamic font-scaling step: content
+// that can't fit at the selected format's numbers is a content-budget
+// problem (lib/resume-budget.ts) or a page-ceiling problem, never fixed by
+// inventing a third, smaller format.
 
 import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, LineRuleType, Packer, Paragraph, TabStopType, TextRun,
@@ -23,41 +31,88 @@ import {
 import { ResumeContent, resolveSectionSequence, ResumeSectionKey, formatDegreeLine } from "./resume-schema";
 import { ResumeArchetype } from "./resume-archetype";
 
-// Calibri 10.5pt / 0.5in margins is the DEFAULT — restored now that
-// two-page resumes are allowed for archetypes/candidates that qualify (see
-// resolveMaxPages in lib/resume-archetype.ts). Content quality is never
-// traded for page-fit by shrinking typography: the content BUDGET
-// (lib/resume-budget.ts) is what changes with maxPages, not the font. A
-// 10pt/0.4in FLOOR still exists (TYPOGRAPHY_FLOOR below) for content that
-// can't fit maxPages even at the default size — the rule is to expand to
-// the next allowed page rather than shrink past the floor, so this module
-// deliberately has no dynamic below-floor sizing path at all.
 const FONT = "Calibri";
-const BODY_SIZE = 21; // half-points -> 10.5pt (default)
-const NAME_SIZE = 32; // 16pt
-const HEADING_SIZE = 22; // 11pt
-const CONTACT_SIZE = 19; // 9.5pt (default)
 
-// Never render below these — a typography floor, not a target. There is no
-// code path in this module that steps below it; if content can't fit
-// maxPages at the DEFAULT sizes above, the fix is the content budget
-// (fewer/shorter bullets, or the next allowed page), never a smaller font
-// or tighter margin than this floor.
-export const TYPOGRAPHY_FLOOR = {
-  bodySize: 20, // 10pt
-  marginTwips: 576, // 0.4in
-} as const;
+// Letter page width in twips (8.5in * 1440 twips/in) — used to derive each
+// format's right tab-stop position from its own margins.
+const PAGE_WIDTH_TWIPS = 12240;
 
-// Tight, near-single line spacing (240 twips/line = exactly single) — set
-// explicitly on every paragraph rather than left to the docx library's
-// implicit default, so it can't silently drift.
-const LINE_SPACING = 228;
+export type DocxFormat = {
+  bodySize: number;
+  smallSize: number; // secondary text — the role/degree line, the contact line
+  companyHeaderSize: number;
+  sectionHeaderSize: number;
+  subLabelSize: number;
+  nameSize: number;
+  marginTwips: { top: number; right: number; bottom: number; left: number };
+  sectionSpacingBefore: number;
+  sectionSpacingAfter: number;
+  companySpacingBefore: number;
+  companySpacingAfter: number;
+  subLabelSpacingBefore: number;
+  subLabelSpacingAfter: number;
+  bulletSpacingAfter: number;
+  bulletLineSpacing: number;
+  bulletIndentLeft: number;
+  bulletIndentHanging: number;
+  sectionBorder: { style: typeof BorderStyle.SINGLE; size: number; color: string; space: number };
+  companyBorder: { style: typeof BorderStyle.DOTTED; size: number; color: string; space: number };
+  linkColor: string;
+  dateColor: string;
+  subLabelColor: string;
+};
 
-// 0.5in margins (default), in twips (1440 twips/inch).
-const MARGIN_TWIPS = 720;
-// Page content width at 8.5in page - 2*0.5in margin = 7.5in = 10800 twips —
-// used as the right tab-stop position for right-aligned dates/years.
-const RIGHT_TAB_POSITION = 10800;
+// TWO-PAGE SENIOR CONSULTING FORMAT — docs/MASTER-PROFILE-SPEC.md Part 9,
+// exact values, no rounding/approximation.
+export const TWO_PAGE_SENIOR_CONSULTING_FORMAT: DocxFormat = {
+  bodySize: 18, // 9pt
+  smallSize: 17,
+  companyHeaderSize: 21,
+  sectionHeaderSize: 22,
+  subLabelSize: 16,
+  nameSize: 34,
+  marginTwips: { top: 620, right: 800, bottom: 620, left: 800 },
+  sectionSpacingBefore: 70,
+  sectionSpacingAfter: 16,
+  companySpacingBefore: 44,
+  companySpacingAfter: 8,
+  subLabelSpacingBefore: 12,
+  subLabelSpacingAfter: 6,
+  bulletSpacingAfter: 12,
+  bulletLineSpacing: 250,
+  bulletIndentLeft: 220,
+  bulletIndentHanging: 140,
+  sectionBorder: { style: BorderStyle.SINGLE, size: 6, color: "111111", space: 2 },
+  companyBorder: { style: BorderStyle.DOTTED, size: 4, color: "999999", space: 6 },
+  linkColor: "1155CC",
+  dateColor: "555555",
+  subLabelColor: "666666",
+};
+
+// ONE-PAGE DENSE FORMAT — spec Part 9 gives only the numbers that most
+// affect page-fit (body/company-header/section-header sizes, margins,
+// bullet spacing/line height); everything else (name size, sub-label
+// size/spacing/color, section/company spacing-before, borders, link/date
+// colors, bullet indent) is unchanged from the two-page reference format —
+// same visual language, denser numbers, not a different design.
+export const ONE_PAGE_DENSE_FORMAT: DocxFormat = {
+  ...TWO_PAGE_SENIOR_CONSULTING_FORMAT,
+  bodySize: 16, // 8pt
+  companyHeaderSize: 19,
+  sectionHeaderSize: 18,
+  marginTwips: { top: 340, right: 580, bottom: 340, left: 580 },
+  bulletSpacingAfter: 8,
+  bulletLineSpacing: 200,
+};
+
+/** Selects the exact spec format for the resolved page ceiling — never a third, in-between format. */
+export function selectDocxFormat(maxPages: number): DocxFormat {
+  return maxPages >= 2 ? TWO_PAGE_SENIOR_CONSULTING_FORMAT : ONE_PAGE_DENSE_FORMAT;
+}
+
+function rightTabPosition(format: DocxFormat): number {
+  return PAGE_WIDTH_TWIPS - format.marginTwips.left - format.marginTwips.right;
+}
 
 const SECTION_LABELS: Partial<Record<ResumeSectionKey, string>> = {
   summary: "SUMMARY",
@@ -71,6 +126,25 @@ const SECTION_LABELS: Partial<Record<ResumeSectionKey, string>> = {
   // certifications intentionally has no label — never rendered, any archetype.
 };
 
+// Experience sub-labels (spec Part 8/9) — only the "consulting" archetype's
+// senior layout groups a role's bullets under these two bands; every other
+// archetype keeps a flat bullet list, unchanged.
+export const CONSULTING_ENGAGEMENTS_LABEL = "CONSULTING ENGAGEMENTS";
+export const AI_BUILDS_LABEL = "AI BUILDS AND PROCESS REINVENTION";
+
+// Deterministic, content-derived classification — never invents anything,
+// just reads the ALREADY-SELECTED bullet text (see lib/resume-selection.ts
+// — bullets are selected by id from the real profile, never authored) and
+// buckets it by vocabulary. A bullet naming a build/platform/tool reads as
+// an AI build; everything else (an engagement/study/program/deal) reads as
+// a client consulting engagement. This never changes WHICH bullets were
+// selected or their text — only which sub-label heading they render under.
+const AI_BUILD_PATTERN = /\b(ai|artificial intelligence|platform|toolkit|cockpit|studio|agent|agentic|algorithm|automat\w*|software|engine|dashboard|application|generative|machine learning|\bml\b|pipeline|knowledge graph)\b/i;
+
+export function classifyExperienceBulletLabel(text: string): typeof CONSULTING_ENGAGEMENTS_LABEL | typeof AI_BUILDS_LABEL {
+  return AI_BUILD_PATTERN.test(text) ? AI_BUILDS_LABEL : CONSULTING_ENGAGEMENTS_LABEL;
+}
+
 export type DocxPlanNode =
   | { kind: "header"; name: string; contactLine: string; links: { label: string; url: string }[] }
   | { kind: "sectionHeading"; heading: string }
@@ -80,7 +154,11 @@ export type DocxPlanNode =
   // tab stop — company+dates, or institution+years.
   | { kind: "entryHeader"; left: string; right: string }
   | { kind: "entryRole"; text: string }
-  | { kind: "skillsLine"; category: string; items: string };
+  | { kind: "skillsLine"; category: string; items: string }
+  // Small grey uppercase group label within an experience entry (spec
+  // Part 8/9) — CONSULTING ENGAGEMENTS / AI BUILDS AND PROCESS
+  // REINVENTION. Only emitted for the "consulting" archetype.
+  | { kind: "subLabel"; text: string };
 
 /**
  * Pure planning pass: ResumeContent -> ordered render instructions. Section
@@ -125,11 +203,31 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
     experience: () => {
       if (content.experience.length === 0) return;
       heading("experience");
+      // Sub-labeled grouping is specific to the "consulting" senior layout
+      // (spec Part 8's section-structure diagram) — every other archetype
+      // keeps the flat, priority-ordered bullet list unchanged.
+      const useSubLabels = archetype === "consulting";
       for (const e of content.experience) {
         plan.push({ kind: "entryHeader", left: e.company, right: e.tenure });
         plan.push({ kind: "entryRole", text: e.location ? `${e.role}, ${e.location}` : e.role });
-        for (const b of [...e.bullets].sort((a, b) => a.priority - b.priority)) {
-          plan.push({ kind: "bullet", text: b.text });
+        const sorted = [...e.bullets].sort((a, b) => a.priority - b.priority);
+        if (!useSubLabels) {
+          for (const b of sorted) plan.push({ kind: "bullet", text: b.text });
+          continue;
+        }
+        // CONSULTING ENGAGEMENTS always precedes AI BUILDS — matches the
+        // spec's fixed section-structure order — but each band only
+        // appears when the role actually has a bullet in it (a role with
+        // no AI-build bullets never gets an empty "AI BUILDS" heading).
+        const consultingBullets = sorted.filter(b => classifyExperienceBulletLabel(b.text) === CONSULTING_ENGAGEMENTS_LABEL);
+        const aiBullets = sorted.filter(b => classifyExperienceBulletLabel(b.text) === AI_BUILDS_LABEL);
+        if (consultingBullets.length > 0) {
+          plan.push({ kind: "subLabel", text: CONSULTING_ENGAGEMENTS_LABEL });
+          for (const b of consultingBullets) plan.push({ kind: "bullet", text: b.text });
+        }
+        if (aiBullets.length > 0) {
+          plan.push({ kind: "subLabel", text: AI_BUILDS_LABEL });
+          for (const b of aiBullets) plan.push({ kind: "bullet", text: b.text });
         }
       }
     },
@@ -164,92 +262,108 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
   return plan;
 }
 
-// Every paragraph gets the same explicit, tight line height — set once
-// here rather than repeated per case, so LINE_SPACING can't drift out of
-// sync between node kinds.
-const TIGHT_LINE = { line: LINE_SPACING, lineRule: LineRuleType.AUTO } as const;
+function docxParagraphsForNode(node: DocxPlanNode, format: DocxFormat): Paragraph[] {
+  const tightLine = { line: format.bulletLineSpacing, lineRule: LineRuleType.AUTO } as const;
 
-function docxParagraphsForNode(node: DocxPlanNode): Paragraph[] {
   switch (node.kind) {
     case "header": {
       const nameRun = new Paragraph({
-        children: [new TextRun({ text: node.name, bold: true, font: FONT, size: NAME_SIZE })],
-        spacing: { after: 30, ...TIGHT_LINE },
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: node.name.toUpperCase(), bold: true, font: FONT, size: format.nameSize })],
+        spacing: { after: 30, ...tightLine },
       });
       const contactChildren: (TextRun | ExternalHyperlink)[] = [
-        new TextRun({ text: node.contactLine, font: FONT, size: CONTACT_SIZE }),
+        new TextRun({ text: node.contactLine, font: FONT, size: format.smallSize }),
       ];
       for (const l of node.links) {
-        contactChildren.push(new TextRun({ text: "   ", font: FONT, size: CONTACT_SIZE }));
+        contactChildren.push(new TextRun({ text: "   ", font: FONT, size: format.smallSize }));
         contactChildren.push(new ExternalHyperlink({
           link: /^https?:\/\//i.test(l.url) ? l.url : `https://${l.url}`,
-          children: [new TextRun({ text: l.label, font: FONT, size: CONTACT_SIZE, color: "0563C1", underline: {} })],
+          children: [new TextRun({ text: l.label, font: FONT, size: format.smallSize, color: format.linkColor, underline: {} })],
         }));
       }
-      const contactRun = new Paragraph({ children: contactChildren, spacing: { after: 100, ...TIGHT_LINE } });
+      const contactRun = new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: contactChildren,
+        spacing: { after: 100, ...tightLine },
+      });
       return [nameRun, contactRun];
     }
     case "sectionHeading":
       return [new Paragraph({
-        children: [new TextRun({ text: node.heading, bold: true, font: FONT, size: HEADING_SIZE })],
-        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: "999999", space: 1 } },
-        spacing: { before: 100, after: 40, ...TIGHT_LINE },
+        children: [new TextRun({ text: node.heading, bold: true, font: FONT, size: format.sectionHeaderSize })],
+        border: { bottom: format.sectionBorder },
+        spacing: { before: format.sectionSpacingBefore, after: format.sectionSpacingAfter, ...tightLine },
       })];
     case "paragraph":
       return [new Paragraph({
-        children: [new TextRun({ text: node.text, font: FONT, size: BODY_SIZE })],
-        spacing: { after: 40, ...TIGHT_LINE },
+        children: [new TextRun({ text: node.text, font: FONT, size: format.bodySize })],
+        spacing: { after: 40, ...tightLine },
       })];
     case "bullet":
       return [new Paragraph({
-        children: [new TextRun({ text: node.text, font: FONT, size: BODY_SIZE })],
+        children: [new TextRun({ text: node.text, font: FONT, size: format.bodySize })],
         bullet: { level: 0 },
-        spacing: { after: 24, ...TIGHT_LINE },
+        indent: { left: format.bulletIndentLeft, hanging: format.bulletIndentHanging },
+        spacing: { after: format.bulletSpacingAfter, ...tightLine },
       })];
     case "entryHeader":
       return [new Paragraph({
-        tabStops: [{ type: TabStopType.RIGHT, position: RIGHT_TAB_POSITION }],
+        tabStops: [{ type: TabStopType.RIGHT, position: rightTabPosition(format) }],
+        border: { top: format.companyBorder },
         children: [
-          new TextRun({ text: node.left, bold: true, font: FONT, size: BODY_SIZE }),
-          new TextRun({ text: "\t", font: FONT, size: BODY_SIZE }),
-          new TextRun({ text: node.right, font: FONT, size: BODY_SIZE }),
+          new TextRun({ text: node.left, bold: true, font: FONT, size: format.companyHeaderSize }),
+          new TextRun({ text: "\t", font: FONT, size: format.companyHeaderSize }),
+          new TextRun({ text: node.right, font: FONT, size: format.smallSize, color: format.dateColor }),
         ],
-        spacing: { before: 70, ...TIGHT_LINE },
+        spacing: { before: format.companySpacingBefore, after: format.companySpacingAfter, ...tightLine },
       })];
     case "entryRole":
       return [new Paragraph({
-        children: [new TextRun({ text: node.text, italics: true, font: FONT, size: BODY_SIZE })],
-        spacing: { after: 24, ...TIGHT_LINE },
+        children: [new TextRun({ text: node.text, italics: true, font: FONT, size: format.smallSize })],
+        spacing: { after: 24, ...tightLine },
       })];
     case "skillsLine":
       return [new Paragraph({
         children: [
-          new TextRun({ text: `${node.category}: `, bold: true, font: FONT, size: BODY_SIZE }),
-          new TextRun({ text: node.items, font: FONT, size: BODY_SIZE }),
+          new TextRun({ text: `${node.category}: `, bold: true, font: FONT, size: format.bodySize }),
+          new TextRun({ text: node.items, font: FONT, size: format.bodySize }),
         ],
-        spacing: { after: 24, ...TIGHT_LINE },
+        spacing: { after: 24, ...tightLine },
+      })];
+    case "subLabel":
+      return [new Paragraph({
+        children: [new TextRun({
+          text: node.text, bold: true, font: FONT, size: format.subLabelSize, color: format.subLabelColor,
+        })],
+        spacing: { before: format.subLabelSpacingBefore, after: format.subLabelSpacingAfter, ...tightLine },
       })];
   }
 }
 
-export function renderDocxPlan(plan: DocxPlanNode[]): Document {
+export function renderDocxPlan(plan: DocxPlanNode[], format: DocxFormat): Document {
   return new Document({
     sections: [{
       properties: {
-        page: { margin: { top: MARGIN_TWIPS, bottom: MARGIN_TWIPS, left: MARGIN_TWIPS, right: MARGIN_TWIPS } },
+        page: { margin: format.marginTwips },
       },
-      children: plan.flatMap(docxParagraphsForNode),
+      children: plan.flatMap(node => docxParagraphsForNode(node, format)),
     }],
     styles: {
       default: {
-        document: { run: { font: FONT, size: BODY_SIZE } },
+        document: { run: { font: FONT, size: format.bodySize } },
       },
     },
   });
 }
 
-export async function generateResumeDocxBuffer(content: ResumeContent, archetype?: ResumeArchetype): Promise<Buffer> {
+export async function generateResumeDocxBuffer(
+  content: ResumeContent,
+  archetype?: ResumeArchetype,
+  maxPages: number = 1,
+): Promise<Buffer> {
   const plan = buildDocxPlan(content, archetype);
-  const doc = renderDocxPlan(plan);
+  const format = selectDocxFormat(maxPages);
+  const doc = renderDocxPlan(plan, format);
   return Packer.toBuffer(doc);
 }

@@ -51,6 +51,12 @@ export const ONE_PAGE_BUDGET = {
 // what fills the extra space, this just raises how much of it survives.
 export const TWO_PAGE_BUDGET = {
   ...ONE_PAGE_BUDGET,
+  // Part 8's profile-summary formula (docs/MASTER-PROFILE-SPEC.md) is a
+  // full paragraph — role+years+breadth+position, ownership woven with
+  // first principles, the build-and-deploy differentiator, geographies and
+  // sectors — which does not fit in the 1-page format's 2-line/~200-char
+  // summary. A 2-page resume has the room for it.
+  summaryMaxChars: 600,
   keyImpactMaxItems: 5,
   bulletsPerRoleMax: 4,
   experienceMaxRoles: 6,

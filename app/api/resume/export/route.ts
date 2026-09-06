@@ -10,6 +10,7 @@ import {
   enforceEmployerLocations, repairEmDashesInDocx, extractDocxText,
   runConfidentialityGate, confidentialityGateFailureMessage,
 } from "../../../../lib/resume-confidentiality";
+import { runToolPlacementGate, toolPlacementGateFailureMessage } from "../../../../lib/resume-tool-placement";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,11 +41,12 @@ export async function POST(req: NextRequest) {
     const { resumeContent, archetype, maxPages: requestedMaxPages } = await req.json() as {
       resumeContent: ResumeContent;
       archetype?: ResumeArchetype | null;
-      // Resolved at generation time (see resolveMaxPages in
-      // lib/resume-archetype.ts) and passed straight through by the
-      // client, so the extraction gate checks against the SAME ceiling the
-      // content was actually budgeted for. Falls back to the archetype's
-      // own base maxPages (or 1) for older clients that don't send it.
+      // Resolved at generation time (see resolveConfiguredMaxPages in
+      // lib/resume-archetype.ts, config-first per docs/MASTER-PROFILE-
+      // SPEC.md) and passed straight through by the client, so the
+      // extraction gate checks against the SAME ceiling the content was
+      // actually budgeted for. Falls back to the archetype's own base
+      // maxPages (or 1) for older clients that don't send it.
       maxPages?: number;
     };
 
@@ -73,7 +75,19 @@ export async function POST(req: NextRequest) {
       experience: enforceEmployerLocations(resumeContent.experience),
     };
 
-    const rawDocxBuffer = await generateResumeDocxBuffer(contentForRender, archetype ?? undefined);
+    // TOOL PLACEMENT GATE (spec Part 8) — a named build found under the
+    // wrong employer is a fabrication risk, not a style issue; block
+    // before spending anything on rendering.
+    const toolPlacementGate = runToolPlacementGate(contentForRender);
+    if (!toolPlacementGate.ok) {
+      return NextResponse.json({
+        error: toolPlacementGateFailureMessage(toolPlacementGate),
+        gate: "tool_placement",
+        violations: toolPlacementGate.violations,
+      }, { status: 422 });
+    }
+
+    const rawDocxBuffer = await generateResumeDocxBuffer(contentForRender, archetype ?? undefined, maxPages);
     // Em-dash REPAIR sweep (spec Part 10 step 2) — detection alone is not
     // enough; autocorrect and model output both reintroduce em dashes, so
     // the packed XML is rewritten before anything downstream ever sees it.
