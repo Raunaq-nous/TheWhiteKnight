@@ -49,5 +49,30 @@
   "bannedPhrases": [
     "excited to apply", "passionate about", "synergy", "cutting-edge",
     "innovative solutions", "self-starter", "proven track record", "consumer-facing"
+  ],
+  "boldingMethodologyTerms": [
+    "evaluation framework", "C-suite decision document", "decision document",
+    "CapEx and OpEx optimisation levers", "CapEx and OpEx optimization levers",
+    "stage-gate governance", "governance framework", "governance model",
+    "Monte Carlo", "value bridge", "taxonomy", "investment case", "investment committee",
+    "concept selection study", "performance improvement", "capital program readiness",
+    "risk-analysis module", "schedule quality scoring", "go-to-market strategy",
+    "financial model", "financial business case", "business case", "M&A roadmap",
+    "market sizing", "bid advisory", "pricing model", "solution portfolio architecture",
+    "market attractiveness analysis", "long-range business plan", "cost modelling engine",
+    "project economics", "survey intelligence platform", "document intelligence engine",
+    "knowledge management system", "workforce modernization studio",
+    "current-state diagnosis", "future-state design", "EBITDA value bridge",
+    "delivery readiness", "partnership and ecosystem design", "stage-gate reviewer",
+    "early-warning alerts", "critical paths", "resource levelling", "channel architecture",
+    "unit economics", "voice of customer", "turnaround strategy", "spend taxonomy",
+    "product positioning"
+  ],
+  "boldingEntityNouns": [
+    "company", "entity", "asset", "marketplace", "operator", "firm", "manufacturer",
+    "provider", "conglomerate", "bank", "utility", "retailer", "brand", "developer",
+    "institution", "association", "agency", "corporation", "group", "enterprise",
+    "network", "platform", "service", "fund", "exchange", "startup",
+    "telecom", "carrier"
   ]
 }

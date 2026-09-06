@@ -30,6 +30,7 @@ import {
 } from "docx";
 import { ResumeContent, resolveSectionSequence, ResumeSectionKey, formatDegreeLine } from "./resume-schema";
 import { ResumeArchetype } from "./resume-archetype";
+import { computeBoldSpans, splitTextByBoldSpans } from "./resume-bolding";
 
 const FONT = "Calibri";
 
@@ -300,13 +301,21 @@ function docxParagraphsForNode(node: DocxPlanNode, format: DocxFormat): Paragrap
         children: [new TextRun({ text: node.text, font: FONT, size: format.bodySize })],
         spacing: { after: 40, ...tightLine },
       })];
-    case "bullet":
+    case "bullet": {
+      // Selective bolding (spec Part 8) — a deterministic pass over this
+      // EXACT final string (lib/resume-bolding.ts), never a model call and
+      // never a text edit: computeBoldSpans only returns offsets, and
+      // splitTextByBoldSpans turns them into alternating plain/bold runs
+      // that reconstruct node.text exactly when concatenated.
+      const spans = computeBoldSpans(node.text);
+      const segments = splitTextByBoldSpans(node.text, spans);
       return [new Paragraph({
-        children: [new TextRun({ text: node.text, font: FONT, size: format.bodySize })],
+        children: segments.map(seg => new TextRun({ text: seg.text, bold: seg.bold, font: FONT, size: format.bodySize })),
         bullet: { level: 0 },
         indent: { left: format.bulletIndentLeft, hanging: format.bulletIndentHanging },
         spacing: { after: format.bulletSpacingAfter, ...tightLine },
       })];
+    }
     case "entryHeader":
       return [new Paragraph({
         tabStops: [{ type: TabStopType.RIGHT, position: rightTabPosition(format) }],
