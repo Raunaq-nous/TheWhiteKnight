@@ -3,9 +3,13 @@ import { checkRateLimit } from "../../../lib/rate-limit";
 import { chat, chatJSON, ProviderSettings } from "../../../lib/ai-client";
 import { SkillGapResultSchema } from "../../../lib/schemas";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../../lib/resume-schema";
-import { detectResumeArchetype, withArchetypeSequence, resolveMaxPages, ResumeArchetype } from "../../../lib/resume-archetype";
+import {
+  detectResumeArchetype, withArchetypeSequence, resolveConfiguredMaxPages, resolveTargetArchetypeKey, ResumeArchetype,
+} from "../../../lib/resume-archetype";
 import { clampToOnePageBudget } from "../../../lib/resume-budget";
 import { resolveResumeSelections } from "../../../lib/resume-selection";
+import { enforceEmployerLocations } from "../../../lib/resume-confidentiality";
+import { suppressSideBuilds } from "../../../lib/resume-tool-placement";
 import { generateResumeContent } from "../../../lib/server/services/resume-generation-service";
 import {
   GenerationAction,
@@ -71,8 +75,8 @@ export async function POST(req: NextRequest) {
       // generation-service.ts) — shared with the automation autopilot's
       // draft-service.ts, so there is exactly one way a resume gets built
       // and resolveResumeSelections can never be forgotten on one path.
-      const { data, archetype, maxPages, formatGate } = await generateResumeContent(profile, app, providerSettings, resumeArchetype);
-      return NextResponse.json({ data, archetype, maxPages, formatGate });
+      const { data, archetype, maxPages, formatGate, toolPlacementGate } = await generateResumeContent(profile, app, providerSettings, resumeArchetype);
+      return NextResponse.json({ data, archetype, maxPages, formatGate, toolPlacementGate });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
@@ -92,9 +96,13 @@ export async function POST(req: NextRequest) {
         ResumeContentSchema,
       );
       const resolved = resolveResumeSelections(data, profile);
-      const maxPages = resolveMaxPages(profile, app, archetype);
+      const normalized = normalizeResumeContent(resolved);
+      const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
+      const targetKey = resolveTargetArchetypeKey(app, archetype);
+      const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
+      const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
       return NextResponse.json({
-        data: withArchetypeSequence(clampToOnePageBudget(normalizeResumeContent(resolved), archetype, maxPages), archetype),
+        data: withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype),
         archetype,
         maxPages,
       });

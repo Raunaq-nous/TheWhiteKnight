@@ -10,6 +10,17 @@
 import { Profile, RoleType } from "./profile";
 import type { Application } from "./store";
 import type { ResumeContent, ResumeSectionKey } from "./resume-schema";
+// A plain data import (resolveJsonModule) — client-safe, no fs, no
+// server-only. This lets resolveConfiguredYearsOfExperience/
+// resolveConfiguredMaxPages below live here rather than behind a
+// server-only wall, since the years/pages values also need to be
+// available client-side (e.g. app/resume-document.tsx resolves maxPages
+// before calling the export API). Nothing in this file reads
+// forbiddenTerms/neverCite/employerLocations from it — those stay behind
+// lib/resume-confidentiality.ts's server-only fs loader, which also owns
+// the actual hard gates. A config edit here requires a rebuild to take
+// effect client-side, same as any other statically-imported data.
+import profileRulesConfig from "../config/profile-rules.json";
 
 export type ResumeArchetype =
   | "consulting"
@@ -309,4 +320,80 @@ export function resolveMaxPages(profile: Profile, app: Application, archetype: R
   }
 
   return RESUME_SPECS[archetype].maxPages;
+}
+
+// ---------------------------------------------------------------------
+// docs/MASTER-PROFILE-SPEC.md target-archetype mapping (Part 3 / Appendix
+// yearsByArchetype + pagesByArchetype). This is a DIFFERENT, finer-grained
+// taxonomy than ResumeArchetype above — e.g. "consulting" splits into
+// consulting_mbb vs consulting_senior here, and "startup"/"chief_of_staff"
+// have no ResumeArchetype equivalent at all. Kept separate rather than
+// folded into ResumeArchetype itself, which stays the stable key every
+// RESUME_SPECS/section-sequence/format-gate lookup in this codebase
+// already indexes by.
+// ---------------------------------------------------------------------
+
+export type TargetArchetypeKey =
+  | "consulting_mbb"
+  | "consulting_senior"
+  | "ai_product"
+  | "startup"
+  | "vc_investing"
+  | "chief_of_staff";
+
+const CHIEF_OF_STAFF_PATTERN = /\bchief[\s-]of[\s-]staff\b/i;
+const STARTUP_PATTERN = /\bstartup\b|\bfounder\b|\bfounding\b|\bco-founder\b/i;
+
+/**
+ * Maps this application's target onto one of the spec's named target
+ * archetypes. Returns undefined when nothing in the spec's list applies
+ * (e.g. finance_ib or general with no startup/chief-of-staff signal) —
+ * callers fall back to the generic, ResumeArchetype-only defaults.
+ */
+export function resolveTargetArchetypeKey(app: Application, archetype: ResumeArchetype): TargetArchetypeKey | undefined {
+  const haystack = [
+    app.role ?? "",
+    app.company ?? "",
+    app.sector ?? "",
+    ...(app.jdParsed?.keyRequirements ?? []),
+  ].join(" ");
+
+  if (CHIEF_OF_STAFF_PATTERN.test(haystack)) return "chief_of_staff";
+  if (archetype === "consulting") return isMbbConsulting(app) ? "consulting_mbb" : "consulting_senior";
+  if (archetype === "vc_investing") return "vc_investing";
+  if (STARTUP_PATTERN.test(haystack)) return "startup";
+  if (archetype === "product" || archetype === "ai_ml_engineering") return "ai_product";
+  return undefined;
+}
+
+type ProfileRulesConfigShape = {
+  yearsByArchetype?: Record<string, string>;
+  pagesByArchetype?: Record<string, number>;
+};
+const CONFIG = profileRulesConfig as ProfileRulesConfigShape;
+
+/**
+ * Years of experience flexes by TARGET, per docs/MASTER-PROFILE-SPEC.md
+ * Part 3 — it is NOT a fixed profile field. When the resolved target key
+ * has a configured value in config/profile-rules.json, that value is what
+ * reaches the resume (overriding profile.yearsOfExperience entirely).
+ * Falls back to the profile's own value when no mapping applies.
+ */
+export function resolveConfiguredYearsOfExperience(profile: Profile, app: Application, archetype: ResumeArchetype): string {
+  const key = resolveTargetArchetypeKey(app, archetype);
+  const configured = key ? CONFIG.yearsByArchetype?.[key] : undefined;
+  return configured ?? profile.yearsOfExperience;
+}
+
+/**
+ * Page ceiling, config-first: "when spec and code disagree, the spec
+ * wins" (docs/MASTER-PROFILE-SPEC.md Part 0) — a configured
+ * pagesByArchetype value for the resolved target key overrides the
+ * generic engine default. Falls back to resolveMaxPages (archetype base +
+ * years-of-experience threshold) when no mapping applies.
+ */
+export function resolveConfiguredMaxPages(profile: Profile, app: Application, archetype: ResumeArchetype): number {
+  const key = resolveTargetArchetypeKey(app, archetype);
+  const configured = key ? CONFIG.pagesByArchetype?.[key] : undefined;
+  return configured ?? resolveMaxPages(profile, app, archetype);
 }

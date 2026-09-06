@@ -19,23 +19,29 @@ import "server-only";
 import { chatJSON, ProviderSettings } from "../../ai-client";
 import { resumePrompt } from "../../prompts";
 import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../resume-schema";
-import { detectResumeArchetype, withArchetypeSequence, resolveMaxPages, ResumeArchetype } from "../../resume-archetype";
+import {
+  detectResumeArchetype, withArchetypeSequence, resolveConfiguredMaxPages, resolveConfiguredYearsOfExperience,
+  resolveTargetArchetypeKey, ResumeArchetype,
+} from "../../resume-archetype";
 import { clampToOnePageBudget } from "../../resume-budget";
 import { resolveResumeSelections } from "../../resume-selection";
 import { runFormatGate, FormatGateResult } from "../../resume-format-gate";
 import { enforceEmployerLocations } from "../../resume-confidentiality";
+import { suppressSideBuilds, runToolPlacementGate, ToolPlacementGateResult } from "../../resume-tool-placement";
 import type { Profile } from "../../profile";
 import type { Application } from "../../store";
 
 export type GenerateResumeContentResult = {
   data: ResumeContent;
   archetype: ResumeArchetype;
-  // The resolved page ceiling for this archetype/candidate (see
-  // resolveMaxPages in lib/resume-archetype.ts — 1 by default, up to 2 for
-  // general consulting/product/ai_ml/finance_ib once the candidate has 5+
-  // years, never 2 for MBB or under-5-years). Callers pass this straight
-  // through to the export flow so the extraction gate checks against the
-  // SAME ceiling the content was actually budgeted for.
+  // The resolved page ceiling for this archetype/candidate — config-first
+  // (config/profile-rules.json's pagesByArchetype, keyed by the spec's
+  // target-archetype taxonomy; see resolveTargetArchetypeKey /
+  // resolveConfiguredMaxPages in lib/resume-archetype.ts), falling back to
+  // the generic archetype base + years-of-experience threshold when no
+  // configured mapping applies. Callers pass this straight through to the
+  // export flow so the extraction gate checks against the SAME ceiling the
+  // content was actually budgeted for.
   maxPages: number;
   // Computed here so EVERY resume-producing path gets this signal, not
   // just the export flow (app/api/resume/export/route.ts) — that route
@@ -44,6 +50,10 @@ export type GenerateResumeContentResult = {
   // visibility as early as generation itself. Never throws on a hard
   // failure — callers decide what (if anything) to do with it.
   formatGate: FormatGateResult;
+  // Same visibility pattern as formatGate — see lib/resume-tool-placement.ts.
+  // The export route is what actually blocks on this; here it's surfaced
+  // as early as generation.
+  toolPlacementGate: ToolPlacementGateResult;
 };
 
 export async function generateResumeContent(
@@ -53,10 +63,14 @@ export async function generateResumeContent(
   resumeArchetype?: ResumeArchetype,
 ): Promise<GenerateResumeContentResult> {
   const archetype = detectResumeArchetype(profile, app, resumeArchetype);
-  const maxPages = resolveMaxPages(profile, app, archetype);
+  const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
+  // Years of experience flexes by TARGET, not a fixed profile field (spec
+  // Part 3) — an "effective" profile carries the configured value into the
+  // prompt without ever touching the real, stored profile.
+  const effectiveProfile: Profile = { ...profile, yearsOfExperience: resolveConfiguredYearsOfExperience(profile, app, archetype) };
 
   const data = await chatJSON<ResumeContent>(
-    [{ role: "user", content: resumePrompt(profile, app, archetype) }],
+    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages) }],
     // "resume_selection": non-reasoning by default — the model only ever
     // SELECTS bullet ids under this schema (see resolveResumeSelections
     // below), a classification-shaped task a reasoning model brings no
@@ -71,16 +85,19 @@ export async function generateResumeContent(
   // compressed, outcome-preserving variant) before anything else touches
   // this content, so nothing downstream ever sees model-authored
   // experience/project/key-win prose. Section order is then stamped
-  // deterministically from the archetype spec, and the one-page content
-  // budget is clamped deterministically — neither is trusted to the model.
-  const resolved = resolveResumeSelections(data, profile);
+  // deterministically from the archetype spec, and the content budget is
+  // clamped deterministically — neither is trusted to the model.
+  const resolved = resolveResumeSelections(data, effectiveProfile);
   const normalized = normalizeResumeContent(resolved);
   // Canonical employer locations override whatever the profile says, here
   // too — not just at export — so a resume looks right the moment it's
   // first generated, not only after the export-time gate corrects it.
   const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
-  const finalContent = withArchetypeSequence(clampToOnePageBudget(withCanonicalLocations, archetype, maxPages), archetype);
+  const targetKey = resolveTargetArchetypeKey(app, archetype);
+  const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
+  const finalContent = withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype);
   const formatGate = runFormatGate(finalContent);
+  const toolPlacementGate = runToolPlacementGate(finalContent);
 
-  return { data: finalContent, archetype, maxPages, formatGate };
+  return { data: finalContent, archetype, maxPages, formatGate, toolPlacementGate };
 }
