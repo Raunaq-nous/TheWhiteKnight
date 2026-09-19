@@ -1,7 +1,14 @@
-// Default target archetypes (buckets). Eventually loaded from config/target-roles.yml,
-// but for now duplicated here so all callers share the same list.
+// Target role buckets — ONE persisted source of truth, editable at /config,
+// consumed by both the ingest flow (app/ingest/page.tsx) and batch scan
+// (app/batch/page.tsx via lib/batch-runner.ts), plus the scheduled
+// automation service server-side. DEFAULT_BUCKETS below is only the seed
+// data a brand-new install starts from — get/save go through the same
+// write-through cache + server-persisted settings pattern already used for
+// company targets (lib/company-targets.ts), never a second hardcoded copy.
 
 import { TargetBucket } from "./store";
+import { getCache, updateCacheBuckets, wt_saveSettings } from "./data-cache";
+import { showToast } from "./toast";
 
 export const DEFAULT_BUCKETS: TargetBucket[] = [
   {
@@ -61,3 +68,25 @@ export const DEFAULT_BUCKETS: TargetBucket[] = [
     weight: 0.2,
   },
 ];
+
+/** Falls back to DEFAULT_BUCKETS only when nothing has ever been saved (fresh install) — same convention as getCompanyTargets(). */
+export function getBuckets(): TargetBucket[] {
+  const cached = getCache().buckets;
+  return cached.length > 0 ? cached : DEFAULT_BUCKETS;
+}
+
+export async function saveBuckets(buckets: TargetBucket[]): Promise<boolean> {
+  updateCacheBuckets(buckets);
+  try {
+    await wt_saveSettings("buckets", buckets);
+    return true;
+  } catch (e: any) {
+    console.error("[CareerOS] saveBuckets failed:", e);
+    showToast(e?.message ?? "Failed to save target buckets", "error");
+    return false;
+  }
+}
+
+export function resetBuckets(): Promise<boolean> {
+  return saveBuckets(DEFAULT_BUCKETS);
+}

@@ -331,6 +331,25 @@ describe("runAutomation happy path", () => {
     ]);
   });
 
+  it("passes the persisted, UI-editable buckets to scoreJob — not a hardcoded default (backlog item 6)", async () => {
+    enableAutomation();
+    profileRepo.save(USER, makeProfile());
+    settingsRepo.saveBuckets(USER, [{
+      id: "custom-bucket", name: "Custom Bucket", description: "Edited via /config",
+      titlesMatch: [], titlesExclude: [], sectorsPreferred: [], geographies: [],
+      keywordsRequired: [], keywordsBoost: [], targetCompanies: [], seniority: [], weight: 0.5,
+    }]);
+
+    scanJobsMock.mockResolvedValue({ jobs: [job()], counts: { total: 1, beforeFiltering: 1, ats: 1, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("skip", 2.0));
+
+    await runOnce(USER, NOW);
+
+    expect(scoreJobMock).toHaveBeenCalledWith(expect.objectContaining({
+      buckets: [{ id: "custom-bucket", name: "Custom Bucket", description: "Edited via /config" }],
+    }));
+  });
+
   it("folds scanJobs' own keyword/seniority rejections into filteredOut under stage 'keyword'", async () => {
     enableAutomation();
     profileRepo.save(USER, makeProfile());

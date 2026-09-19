@@ -90,6 +90,7 @@ export async function POST(req: NextRequest) {
   // appendAutomationRun prepends each call, so replay oldest-first to preserve
   // the original (newest-first) order after import.
   if (data.automationRuns)      for (const run of [...data.automationRuns].reverse()) settingsRepo.appendAutomationRun(email, run);
+  if (data.buckets)             settingsRepo.saveBuckets(email, data.buckets);
 
   return NextResponse.json({ ok: true, imported: { applications: apps.length, contacts: contacts.length } });
 }

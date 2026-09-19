@@ -4,42 +4,12 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "../components";
-import { saveApplication, generateSlug, generateId, TargetBucket } from "../../lib/store";
+import { saveApplication, generateSlug, generateId } from "../../lib/store";
 import { scoreJobWithAI } from "../../lib/scoring";
 import { getProfile, getSeedProfile } from "../../lib/profile";
 import { getModelSettings } from "../../lib/model-settings";
 import { getIntegrationSettings } from "../../lib/integration-settings";
-
-const MOCK_BUCKETS: TargetBucket[] = [
-  {
-    id: "ai-product",
-    name: "AI Product",
-    description: "Senior AI/ML product roles",
-    titlesMatch: ["ai product manager", "agentic", "ml product", "ai product"],
-    titlesExclude: ["junior", "intern"],
-    sectorsPreferred: ["saas", "fintech", "ai-frontier-tech"],
-    geographies: ["India", "UAE", "Remote"],
-    keywordsRequired: ["ai", "ml", "llm", "agentic", "product"],
-    keywordsBoost: ["agentic workflow", "rag", "multi-agent"],
-    targetCompanies: ["Anthropic", "talabat", "OpenAI"],
-    seniority: ["senior", "lead", "principal"],
-    weight: 0.3
-  },
-  {
-    id: "mbb-strategy",
-    name: "MBB Strategy",
-    description: "Top-tier consulting",
-    titlesMatch: ["engagement manager", "project leader"],
-    titlesExclude: ["associate"],
-    sectorsPreferred: ["energy", "financial services"],
-    geographies: ["India", "UAE", "Saudi Arabia", "UK"],
-    keywordsRequired: ["strategy", "consulting"],
-    keywordsBoost: ["due diligence", "financial modeling"],
-    targetCompanies: ["Bain", "BCG", "McKinsey"],
-    seniority: ["senior", "principal"],
-    weight: 0.3
-  }
-];
+import { getBuckets } from "../../lib/buckets";
 
 async function extractTextFromImage(base64: string, mimeType: string): Promise<string> {
   const response = await fetch("/api/extract-jd", {
@@ -328,7 +298,7 @@ export default function IngestPage() {
     setErrorMsg("");
     try {
       const profile = getProfile() ?? getSeedProfile();
-      const bucketsForScoring = MOCK_BUCKETS.map(b => ({ id: b.id, name: b.name, description: b.description }));
+      const bucketsForScoring = getBuckets().map(b => ({ id: b.id, name: b.name, description: b.description }));
       const result = await scoreJobWithAI(jdText, company, role, location, seniority, sector, remote, bucketsForScoring, profile);
       if (result?.unscored) {
         // Keep-but-mark-unscored: still lets you save this job to the

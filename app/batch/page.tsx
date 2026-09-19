@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { getProfile } from "../../lib/profile";
-import { DEFAULT_BUCKETS } from "../../lib/buckets";
+import { getBuckets } from "../../lib/buckets";
 import { runBatch, loadBatchState, clearBatchState, BatchState, BatchInput } from "../../lib/batch-runner";
 import { getCompanyTargets, getEnabledTargets, Region } from "../../lib/company-targets";
 import { getIntegrationSettings } from "../../lib/integration-settings";
@@ -99,7 +99,7 @@ export default function BatchPage() {
     }));
     if (inputs.length === 0) { setError("Select at least one job."); return; }
     setError(""); setRunning(true);
-    try { await runBatch(inputs, profile, DEFAULT_BUCKETS, 2); }
+    try { await runBatch(inputs, profile, getBuckets(), 2); }
     catch (e: any) { setError(e.message); }
     finally { setRunning(false); }
   };
@@ -121,7 +121,7 @@ export default function BatchPage() {
     });
     if (inputs.length === 0) { setError("Paste at least one block."); return; }
     setError(""); setRunning(true);
-    try { await runBatch(inputs, profile, DEFAULT_BUCKETS, 2); }
+    try { await runBatch(inputs, profile, getBuckets(), 2); }
     catch (e: any) { setError(e.message); }
     finally { setRunning(false); }
   };
