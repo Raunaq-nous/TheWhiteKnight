@@ -61,7 +61,7 @@ is terminology mapping, not keyword stuffing.
 
 **DONE WHEN:** a JD term with a profile synonym is flagged with both phrasings shown.
 
-## [ ] 8. Adversarial resume evaluation
+## [x] 8. Adversarial resume evaluation (already implemented — verified, not rebuilt)
 
 Score the generated resume from a screener's perspective: category scores, the evidence found for
 each, and explicit deductions (missing quantification, vague bullets, unaddressed JD requirements,
@@ -138,3 +138,18 @@ ran before scoring) silently dropped jobs with no visibility into why.
 - Tests: 3 new in `scan-service.test.ts` (no-match reason, excluded-term reason naming the term,
   never rejects a real match), 1 new integration test in `automation-service.test.ts` confirming
   the fold-in. Full suite 682/682, build clean, `tsc --noEmit` clean.
+
+### Item 8 — Adversarial resume evaluation (already done, discovered during item 4 investigation)
+
+While surveying the data model for item 4's response-analytics view, found this already fully
+built from earlier work in this codebase (not part of any session summarized to me — genuinely
+pre-existing): `lib/schemas.ts`'s `ResumeAuditResultSchema` (categories with evidence, deductions
+typed `missing_quantification | vague_bullet | unaddressed_requirement | formatting_problem` with
+severity, bonus points, overall score, verdict — matches the backlog's own wording almost
+verbatim), `/api/resume/audit` (routes through the `"audit"` AI task, confirmed wired to
+`CHEAP_MODEL` in `lib/ai-client.ts`'s task registry), `app/resume-builder.tsx` (runs the audit
+automatically once a draft exists, renders score/verdict/categories/deductions, BEFORE the user
+can confirm and move on to export), and `app/application/page.tsx`'s `persistResumeContent`
+(saves `resumeAudit` with `scoredAt`/`atsReadable` onto the application). All DONE WHEN criteria
+already satisfied. Verified `lib/__tests__/resume-audit.test.ts` (5/5 passing) rather than adding
+duplicate coverage. No code changed for this item.
