@@ -164,11 +164,11 @@ describe("resolveJobCap — rate-limit safety", () => {
   });
 
   it("falls back to the default when undefined", () => {
-    expect(resolveJobCap(undefined)).toBe(8);
+    expect(resolveJobCap(undefined)).toBe(2);
   });
 
   it("clamps a misconfigured huge value down to the hard ceiling", () => {
-    expect(resolveJobCap(10_000)).toBe(25);
+    expect(resolveJobCap(10_000)).toBe(5);
   });
 
   it("clamps zero or negative values up to at least 1", () => {
@@ -177,8 +177,8 @@ describe("resolveJobCap — rate-limit safety", () => {
   });
 
   it("never returns something a caller could use to exceed the ceiling", () => {
-    for (const v of [26, 100, 1_000_000]) {
-      expect(resolveJobCap(v)).toBeLessThanOrEqual(25);
+    for (const v of [6, 100, 1_000_000]) {
+      expect(resolveJobCap(v)).toBeLessThanOrEqual(5);
     }
   });
 });
@@ -285,6 +285,69 @@ describe("runAutomation happy path", () => {
     // Only the fresh job's new application was added (the dup existing one still there too).
     const apps = applicationRepo.list(USER);
     expect(apps).toHaveLength(2);
+  });
+
+  it("reports jobsFetched/jobsAfterRecencyFilter/jobsAfterLocationFilter alongside the existing stage counts", async () => {
+    enableAutomation({ maxJobsPerRun: 2 });
+    profileRepo.save(USER, makeProfile());
+
+    const j1 = job({ url: "https://boards.greenhouse.io/acme/jobs/1", title: "Role 1" });
+    const j2 = job({ url: "https://boards.greenhouse.io/acme/jobs/2", title: "Role 2" });
+    scanJobsMock.mockResolvedValue({ jobs: [j1, j2], counts: { total: 2, beforeFiltering: 4, ats: 2, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("skip", 2.0));
+
+    const run = await runOnce(USER, NOW);
+
+    // Nothing in this fixture is stale or location-mismatched, so every
+    // stage's survivor count equals jobsFound; jobsFetched reflects the
+    // raw pre-keyword-filter union from the scan.
+    expect(run.jobsFetched).toBe(4);
+    expect(run.jobsFound).toBe(2);
+    expect(run.jobsAfterRecencyFilter).toBe(2);
+    expect(run.jobsAfterLocationFilter).toBe(2);
+    expect(run.filteredOut).toEqual([]);
+  });
+
+  it("rejects a stale posting via the zero-token recency pre-filter — never sent to scoreJob, reason logged", async () => {
+    enableAutomation();
+    profileRepo.save(USER, makeProfile());
+
+    const stale = job({
+      url: "https://boards.greenhouse.io/acme/jobs/stale", title: "Stale Role",
+      publishedDate: new Date(NOW.getTime() - 100 * 86400000).toISOString(),
+    });
+    const fresh = job({ url: "https://boards.greenhouse.io/acme/jobs/fresh", title: "Fresh Role" });
+    scanJobsMock.mockResolvedValue({ jobs: [stale, fresh], counts: { total: 2, beforeFiltering: 2, ats: 2, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("skip", 2.0));
+
+    const run = await runOnce(USER, NOW);
+
+    expect(run.jobsFound).toBe(2);
+    expect(run.jobsAfterRecencyFilter).toBe(1);
+    expect(run.jobsScored).toBe(1); // only the fresh job ever reaches the model
+    expect(scoreJobMock).toHaveBeenCalledOnce();
+    expect(run.filteredOut).toEqual([
+      expect.objectContaining({ stage: "recency", title: "Stale Role" }),
+    ]);
+  });
+
+  it("rejects a job in a mismatched location via the zero-token location pre-filter — never sent to scoreJob, reason logged", async () => {
+    enableAutomation();
+    profileRepo.save(USER, makeProfile()); // location/locationsOpenTo: "Remote"
+
+    const mismatched = job({ url: "https://boards.greenhouse.io/acme/jobs/far", title: "Far Away Role", location: "Berlin, Germany" });
+    const local = job({ url: "https://boards.greenhouse.io/acme/jobs/near", title: "Remote Role", location: "Remote" });
+    scanJobsMock.mockResolvedValue({ jobs: [mismatched, local], counts: { total: 2, beforeFiltering: 2, ats: 2, adzuna: 0, exa: 0 } });
+    scoreJobMock.mockResolvedValue(scoreResult("skip", 2.0));
+
+    const run = await runOnce(USER, NOW);
+
+    expect(run.jobsAfterLocationFilter).toBe(1);
+    expect(run.jobsScored).toBe(1);
+    expect(scoreJobMock).toHaveBeenCalledOnce();
+    expect(run.filteredOut).toEqual([
+      expect.objectContaining({ stage: "location", title: "Far Away Role" }),
+    ]);
   });
 
   it("updates lastRunAt after a real run, so a second immediate run is skipped as not due", async () => {
@@ -399,7 +462,7 @@ describe("per-run cap and resumability", () => {
     scoreJobMock.mockResolvedValue(scoreResult("review_manually", 3.6));
 
     const run = await runOnce(USER, NOW);
-    expect(run.jobsScored).toBeLessThanOrEqual(25); // MAX_JOBS_PER_RUN_CEILING
+    expect(run.jobsScored).toBeLessThanOrEqual(5); // MAX_JOBS_PER_RUN_CEILING
   });
 
   it("picks up the jobs left over from a capped run on the NEXT run, via the same ledger — no extra bookkeeping needed", async () => {

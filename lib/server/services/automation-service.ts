@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { applicationRepo, profileRepo, settingsRepo, notificationRepo } from "../repositories";
 import { queueApproval } from "../approval-gate";
 import { scanJobs, JobResult } from "./scan-service";
+import { runRulesPreFilter } from "./rules-prefilter";
 import { fetchJdText } from "./jd-fetch-service";
 import { scoreJob, ScoreJobOutput } from "./scoring-service";
 import { generateDraft } from "./draft-service";
@@ -26,8 +27,8 @@ import type {
 const AUTOMATION_SCHEDULE_HOURS: Record<AutomationSettings["schedule"], number> = {
   "6h": 6, "12h": 12, "24h": 24, "72h": 72, "168h": 168,
 };
-const DEFAULT_MAX_JOBS_PER_RUN = 8;
-const MAX_JOBS_PER_RUN_CEILING = 25;
+const DEFAULT_MAX_JOBS_PER_RUN = 2;
+const MAX_JOBS_PER_RUN_CEILING = 5;
 
 // ============================================================================
 // Scheduled automation layer: scan -> score -> (for good-fit jobs) draft ->
@@ -161,7 +162,8 @@ async function resolveJdText(job: JobResult, exaApiKey?: string): Promise<string
 function skippedRun(id: string, startedAt: string, reason: string): AutomationRunLog {
   return {
     id, startedAt, finishedAt: new Date().toISOString(), status: "skipped", reason,
-    jobsFound: 0, jobsScored: 0, jobsStaged: 0, jobsSourced: 0, jobsSkippedDuplicate: 0, errors: [],
+    jobsFetched: 0, jobsFound: 0, jobsAfterRecencyFilter: 0, jobsAfterLocationFilter: 0, filteredOut: [],
+    jobsScored: 0, jobsStaged: 0, jobsSourced: 0, jobsSkippedDuplicate: 0, errors: [],
   };
 }
 
@@ -262,20 +264,30 @@ export async function runAutomation(
     const run: AutomationRunLog = {
       id, startedAt, finishedAt: new Date().toISOString(), status: "error",
       reason: `Scan failed: ${e.message}`,
-      jobsFound: 0, jobsScored: 0, jobsStaged: 0, jobsSourced: 0, jobsSkippedDuplicate: 0, errors: [e.message],
+      jobsFetched: 0, jobsFound: 0, jobsAfterRecencyFilter: 0, jobsAfterLocationFilter: 0, filteredOut: [],
+      jobsScored: 0, jobsStaged: 0, jobsSourced: 0, jobsSkippedDuplicate: 0, errors: [e.message],
     };
     settingsRepo.appendAutomationRun(userEmail, run);
     return run;
   }
 
   errors.push(...(scanResult.errors ?? []));
-  const jobsFound = scanResult.jobs.length;
+  const jobsFetched = scanResult.counts?.beforeFiltering ?? scanResult.jobs.length;
+  const jobsFound = scanResult.jobs.length; // survivors of scanJobs' own keyword/relevance filter (already zero-token)
+
+  // DETERMINISTIC, ZERO-TOKEN pre-filter (recency, then location) — runs
+  // BEFORE any model call, so an obviously off-target job never spends
+  // LLM budget. See lib/server/services/rules-prefilter.ts.
+  const ruleFilter = runRulesPreFilter(scanResult.jobs, profile, now);
+  const jobsAfterRecencyFilter = jobsFound - ruleFilter.rejected.filter(r => r.stage === "recency").length;
+  const jobsAfterLocationFilter = ruleFilter.survivors.length;
+  const filteredOut = ruleFilter.rejected;
 
   // Dedupe against the persistent ledger (applications table) — anything
   // already saved, from this or any prior run, is excluded here.
   const existingApps = applicationRepo.list(userEmail);
-  const newJobs = scanResult.jobs.filter(j => !isDuplicateJob(existingApps, { url: j.url, company: j.company, title: j.title }));
-  const jobsSkippedDuplicate = jobsFound - newJobs.length;
+  const newJobs = ruleFilter.survivors.filter(j => !isDuplicateJob(existingApps, { url: j.url, company: j.company, title: j.title }));
+  const jobsSkippedDuplicate = jobsAfterLocationFilter - newJobs.length;
 
   // Hard per-run cap, clamped to a safe ceiling regardless of configuration.
   // Anything beyond the cap is simply left unprocessed and unsaved this run —
@@ -416,7 +428,11 @@ export async function runAutomation(
     startedAt,
     finishedAt: new Date().toISOString(),
     status: "ok",
+    jobsFetched,
     jobsFound,
+    jobsAfterRecencyFilter,
+    jobsAfterLocationFilter,
+    filteredOut,
     jobsScored,
     jobsStaged,
     jobsSourced,

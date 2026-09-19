@@ -29,8 +29,14 @@ export const AUTOMATION_SCHEDULE_LABELS: Record<AutomationSchedule, string> = {
 // exceed (protects against a misconfigured huge number exhausting API
 // quota or making the cron endpoint run too long). Anything beyond the cap
 // is simply left for the next run — see automation-service.ts's ledger.
-export const DEFAULT_MAX_JOBS_PER_RUN = 8;
-export const MAX_JOBS_PER_RUN_CEILING = 25;
+// Small batches so a single cron invocation reliably finishes inside the
+// HTTP timeout (see app/api/cron/automation/route.ts's maxDuration): each
+// job in the sequential loop can take real wall-clock time (JD fetch, a
+// scoring model call, a drafting model call, plus the inter-job delay), so
+// the default and the hard ceiling are both kept low rather than "as many
+// as the rate limit theoretically allows."
+export const DEFAULT_MAX_JOBS_PER_RUN = 2;
+export const MAX_JOBS_PER_RUN_CEILING = 5;
 
 export type AutomationSettings = {
   enabled: boolean;
@@ -48,13 +54,34 @@ export const DEFAULT_AUTOMATION_SETTINGS: AutomationSettings = {
 
 export type AutomationRunStatus = "ok" | "error" | "skipped";
 
+// Every stage a scanned job passes through, in order, so a run's log can
+// show exactly where jobs fell out: fetched -> keyword -> recency ->
+// location -> dedup -> scored -> staged. "keyword" survivors is jobsFound
+// below (the scan's own relevance filter, already zero-token); "dedup"
+// survivors is jobsFound - jobsSkippedDuplicate. jobsFetched/jobsAfter*
+// below fill in the two stages that previously weren't counted at all.
+export type RulesFilterRejectionLog = { stage: "recency" | "location"; title: string; company?: string; reason: string };
+
 export type AutomationRunLog = {
   id: string;
   startedAt: string;
   finishedAt: string;
   status: AutomationRunStatus;
   reason?: string; // set when status is "skipped" or "error"
+  // Raw union across all sources, before the scan's own keyword/relevance
+  // filter — the "fetched" stage.
+  jobsFetched?: number;
   jobsFound: number;
+  // Survivors after the deterministic, zero-token recency filter
+  // (lib/server/services/rules-prefilter.ts) — the "recency" stage.
+  jobsAfterRecencyFilter?: number;
+  // Survivors after the deterministic, zero-token location filter — the
+  // "location" stage, immediately before dedup and any LLM scoring call.
+  jobsAfterLocationFilter?: number;
+  // Every job the rules pre-filter rejected, with its stage and reason —
+  // capped defensively but expected to be small given the new small-batch
+  // defaults (DEFAULT_MAX_JOBS_PER_RUN / MAX_JOBS_PER_RUN_CEILING above).
+  filteredOut?: RulesFilterRejectionLog[];
   jobsScored: number;
   jobsStaged: number; // good-fit jobs: drafted + queued for approval
   jobsSourced: number; // total new applications created (staged + not-good-fit)
