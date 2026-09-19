@@ -22,7 +22,7 @@ Document the off-box copy step in `RUN.md`.
 **DONE WHEN:** the cron line exists in setup.sh, a manual run produces a dated `.db` file, and
 RUN.md documents pulling a copy off the server.
 
-## [ ] 3. Rules pre-filter before LLM scoring
+## [x] 3. Rules pre-filter before LLM scoring
 
 Deterministic location/seniority/keyword filter running before any model call.
 
@@ -121,3 +121,20 @@ Naukri and SmartRecruiters return results or fail cleanly with a reason.
   and an `rsync`/`rclone` suggestion for the OFF-box copy step (on-box backups alone don't survive
   losing the server), and a restore procedure.
 - No TypeScript/JS touched — full suite 678/678 (unchanged), build clean, `tsc --noEmit` clean.
+
+### Item 3 — Rules pre-filter before LLM scoring (done)
+
+Location and recency were already fully handled by item 1's `rules-prefilter.ts`. The remaining
+gap: `scan-service.ts`'s existing keyword/seniority relevance filter (already zero-token, already
+ran before scoring) silently dropped jobs with no visibility into why.
+
+- `lib/server/services/scan-service.ts`: new `explainLowRelevance()` distinguishes an explicit
+  seniority/keyword exclusion match from a plain no-match; `scanJobs()` now returns a `rejected`
+  array (optional, backward compatible) alongside `jobs`.
+- `lib/automation-settings.ts`: `RulesFilterRejectionLog.stage` widened to include `"keyword"`.
+- `automation-service.ts` folds `scanResult.rejected` into `filteredOut` under stage `"keyword"`,
+  ahead of the recency/location entries — so the full pipeline (keyword → recency → location) now
+  has both counts AND per-job reasons in one place.
+- Tests: 3 new in `scan-service.test.ts` (no-match reason, excluded-term reason naming the term,
+  never rejects a real match), 1 new integration test in `automation-service.test.ts` confirming
+  the fold-in. Full suite 682/682, build clean, `tsc --noEmit` clean.

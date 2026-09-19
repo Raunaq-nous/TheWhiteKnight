@@ -331,6 +331,25 @@ describe("runAutomation happy path", () => {
     ]);
   });
 
+  it("folds scanJobs' own keyword/seniority rejections into filteredOut under stage 'keyword'", async () => {
+    enableAutomation();
+    profileRepo.save(USER, makeProfile());
+
+    const kept = job({ url: "https://boards.greenhouse.io/acme/jobs/kept", title: "Kept Role" });
+    scanJobsMock.mockResolvedValue({
+      jobs: [kept],
+      rejected: [{ title: "Intern Role", company: "Acme Corp", reason: 'Title contains excluded seniority/keyword term "intern"' }],
+      counts: { total: 1, beforeFiltering: 2, ats: 2, adzuna: 0, exa: 0 },
+    });
+    scoreJobMock.mockResolvedValue(scoreResult("skip", 2.0));
+
+    const run = await runOnce(USER, NOW);
+
+    expect(run.filteredOut).toEqual([
+      expect.objectContaining({ stage: "keyword", title: "Intern Role" }),
+    ]);
+  });
+
   it("rejects a job in a mismatched location via the zero-token location pre-filter — never sent to scoreJob, reason logged", async () => {
     enableAutomation();
     profileRepo.save(USER, makeProfile()); // location/locationsOpenTo: "Remote"

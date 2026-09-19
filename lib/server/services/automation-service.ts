@@ -273,7 +273,11 @@ export async function runAutomation(
 
   errors.push(...(scanResult.errors ?? []));
   const jobsFetched = scanResult.counts?.beforeFiltering ?? scanResult.jobs.length;
-  const jobsFound = scanResult.jobs.length; // survivors of scanJobs' own keyword/relevance filter (already zero-token)
+  const jobsFound = scanResult.jobs.length; // survivors of scanJobs' own keyword/seniority relevance filter (already zero-token)
+  // scanResult.rejected names WHY each dropped-at-the-keyword-stage job was
+  // excluded (seniority/keyword term match, or no target-keyword match at
+  // all) — the "keyword" stage of the survivor-count log.
+  const keywordRejections = (scanResult.rejected ?? []).map(r => ({ ...r, stage: "keyword" as const }));
 
   // DETERMINISTIC, ZERO-TOKEN pre-filter (recency, then location) — runs
   // BEFORE any model call, so an obviously off-target job never spends
@@ -281,7 +285,7 @@ export async function runAutomation(
   const ruleFilter = runRulesPreFilter(scanResult.jobs, profile, now);
   const jobsAfterRecencyFilter = jobsFound - ruleFilter.rejected.filter(r => r.stage === "recency").length;
   const jobsAfterLocationFilter = ruleFilter.survivors.length;
-  const filteredOut = ruleFilter.rejected;
+  const filteredOut = [...keywordRejections, ...ruleFilter.rejected];
 
   // Dedupe against the persistent ledger (applications table) — anything
   // already saved, from this or any prior run, is excluded here.

@@ -33,9 +33,17 @@ export type JobResult = {
   descriptionHtml?: string;
 };
 
+export type KeywordFilterRejection = { title: string; company?: string; reason: string };
+
 export type JobScanOutput = {
   jobs: JobResult[];
   errors?: string[];
+  // Postings dropped by the keyword/seniority relevance filter below —
+  // deterministic and zero-token (this runs entirely before any model
+  // call). Optional so existing callers/mocks that don't set it keep
+  // working; automation-service.ts folds this into its own
+  // stage-by-stage survivor-count log (see AutomationRunLog.filteredOut).
+  rejected?: KeywordFilterRejection[];
   counts: {
     total: number;
     beforeFiltering: number;
@@ -146,6 +154,21 @@ export function scoreRelevance(
 
   const raw = Math.min(70, titleScore) + Math.min(30, snippetScore);
   return Math.min(100, raw);
+}
+
+// Explains WHY a job scored below the relevance threshold — the keyword/
+// seniority stage of the pre-scoring rules pipeline (see
+// lib/server/services/rules-prefilter.ts for the recency/location stages
+// that run after this one). Distinguishes an explicit seniority/keyword
+// exclusion (e.g. "intern" on a senior candidate's search) from a plain
+// no-match, so the survivor-count log names the actual reason rather than
+// a generic "filtered."
+export function explainLowRelevance(title: string, snippet: string | undefined, queryTokens: string[], excludeTokens: string[]): string {
+  const t = title.toLowerCase();
+  const matchedExclude = excludeTokens.find(ex => t.includes(ex));
+  if (matchedExclude) return `Title contains excluded seniority/keyword term "${matchedExclude}"`;
+  const preview = queryTokens.slice(0, 3).join(", ") + (queryTokens.length > 3 ? ", ..." : "");
+  return `No match for any target keyword (${preview}) in title or snippet`;
 }
 
 async function fetchAdzuna(
@@ -295,9 +318,17 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
     .sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0))
     .slice(0, Math.max(numResults, 30));
 
+  // Zero-token keyword/seniority rejection log — every posting the
+  // relevance filter above actually dropped, with why. Deterministic;
+  // costs nothing beyond the string matching already done for scoring.
+  const rejected: KeywordFilterRejection[] = scored
+    .filter(j => (j.relevance ?? 0) < 20)
+    .map(j => ({ title: j.title, company: j.company, reason: explainLowRelevance(j.title, j.snippet, queryTokens, excludeTokens) }));
+
   return {
     jobs: relevant,
     errors: errors.length > 0 ? errors : undefined,
+    rejected,
     counts: {
       total: relevant.length,
       beforeFiltering: deduped.length,
