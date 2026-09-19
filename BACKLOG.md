@@ -14,7 +14,7 @@ location → dedup → scored → staged).
 **DONE WHEN:** a manual cron trigger processes its batch, stages into approvals, logs stage-by-stage
 counts, and a deliberately failing job is skipped with a reason rather than aborting the run.
 
-## [ ] 2. Automated backups
+## [x] 2. Automated backups
 
 Nightly SQLite `.backup` to `/root/backups` with 7-day retention, wired into `deploy/setup.sh`.
 Document the off-box copy step in `RUN.md`.
@@ -105,3 +105,19 @@ Naukri and SmartRecruiters return results or fail cleanly with a reason.
 - Tests: `lib/__tests__/rules-prefilter.test.ts` (12 new), 3 new tests in
   `automation-service.test.ts` for the stage counts and zero-token rejection. Full suite 678/678,
   build clean, `tsc --noEmit` clean.
+
+### Item 2 — Automated backups (done)
+
+- New `deploy/backup.sh`: SQLite `.backup` (a consistent online snapshot, not a raw `cp`) to
+  `/root/backups/careeros-<UTC timestamp>.db`, with 7-day retention (`find ... -mtime +7 -delete`).
+  Manually verified end-to-end in this session (a fake `sqlite3` CLI standing in for the real
+  binary, which isn't installable in this sandbox — no network access to the Ubuntu mirror): a
+  dated `.db` file was produced, and a synthetic 10-day-old backup was deleted on the next run
+  while a 2-day-old one survived.
+- `deploy/setup.sh`: added `sqlite3` to the Step 1 apt install list; new "Step 7c: Automated
+  nightly backups" installs a root crontab line running `backup.sh` at 03:00 UTC; the final
+  summary block now lists the manual-backup and `/root/backups` commands.
+- `RUN.md`'s backup section rewritten: documents the automated nightly backup, an `scp` example
+  and an `rsync`/`rclone` suggestion for the OFF-box copy step (on-box backups alone don't survive
+  losing the server), and a restore procedure.
+- No TypeScript/JS touched — full suite 678/678 (unchanged), build clean, `tsc --noEmit` clean.
