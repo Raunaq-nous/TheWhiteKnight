@@ -116,7 +116,7 @@ banner "Step 1: system baseline"
 wait_apt_lock
 DEBIAN_FRONTEND=noninteractive apt-get update -y
 apt_install ufw curl git build-essential python3 gnupg ca-certificates \
-  debian-keyring debian-archive-keyring apt-transport-https
+  debian-keyring debian-archive-keyring apt-transport-https sqlite3
 
 ufw --force reset
 ufw default deny incoming
@@ -290,6 +290,23 @@ CRON_CMD="curl -sf -X POST -H 'x-cron-secret: ${CRON_SECRET}' http://localhost:3
   echo "*/15 * * * * ${CRON_CMD}") | crontab -
 log "Follow-up + automation cron set (every 15 min; each endpoint decides if anything is actually due)"
 log "Step 7b done"
+
+# ────────────────────────────────────────────────────────────
+# 7c. Automated nightly backups — SQLite .backup (a consistent, online
+#     snapshot, not a raw cp) to /root/backups, 7-day retention. Root's
+#     crontab (not careeros') since /root/backups is root-owned by
+#     default — keeps the backup directory out of the app user's reach.
+#     See deploy/backup.sh for the actual backup logic; run it manually
+#     any time to force an out-of-band backup or verify it works.
+# ────────────────────────────────────────────────────────────
+banner "Step 7c: Automated nightly backups"
+mkdir -p /root/backups
+chmod +x "$REPO_DIR/deploy/backup.sh"
+BACKUP_CRON_CMD="CAREEROS_DB_PATH='${REPO_DIR}/private/careeros.db' BACKUP_DIR=/root/backups BACKUP_RETENTION_DAYS=7 bash '${REPO_DIR}/deploy/backup.sh' >> /var/log/careeros-backup.log 2>&1"
+(crontab -l 2>/dev/null | grep -v 'deploy/backup.sh'; \
+  echo "0 3 * * * ${BACKUP_CRON_CMD}") | crontab -
+log "Nightly backup cron set (03:00 UTC daily, 7-day retention, /root/backups)"
+log "Step 7c done"
 
 # ────────────────────────────────────────────────────────────
 # 8. Caddy — reverse proxy + auto TLS (Let's Encrypt)
@@ -525,6 +542,8 @@ Useful commands (run as root or careeros)
   su - careeros -c 'pm2 status'          # process list
   systemctl status caddy                 # Caddy / TLS status
   tail -f ${LOG}                         # this bootstrap log
+  bash ${REPO_DIR}/deploy/backup.sh       # force an out-of-band DB backup
+  ls -la /root/backups                   # nightly backups (03:00 UTC, 7-day retention)
 
 Next steps
   1. Open ${LIVE_URL} in a browser.

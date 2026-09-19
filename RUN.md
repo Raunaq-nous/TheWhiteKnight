@@ -156,11 +156,34 @@ server {
 
 Export all your data from `/settings` → "Export All Data". The downloaded JSON can be re-imported via the same page.
 
-The raw SQLite file lives at `$CAREEROS_PRIVATE_DIR/careeros.db` (default: `private/careeros.db`). You can back it up with:
+The raw SQLite file lives at `$CAREEROS_PRIVATE_DIR/careeros.db` (default: `private/careeros.db`).
+
+**Automated on-box backups.** A server provisioned with `deploy/setup.sh` runs `deploy/backup.sh`
+nightly at 03:00 UTC via root's crontab: a consistent SQLite `.backup` (an online snapshot, safe
+even while the app has the database open — not a raw `cp`, which can copy a torn file mid-write)
+written to `/root/backups/careeros-<UTC timestamp>.db`, with anything older than 7 days deleted
+automatically. Force one manually any time:
 
 ```bash
-cp private/careeros.db private/careeros.db.bak
+bash deploy/backup.sh   # writes /root/backups/careeros-<timestamp>.db
+ls -la /root/backups
 ```
+
+**This is still on-box.** A backup sitting next to the database it backs up doesn't survive
+losing the server. Pull a copy off the box periodically — e.g. from your own machine:
+
+```bash
+# Copy the most recent on-box backup down to your machine:
+scp careeros@YOUR_SERVER:/root/backups/$(ssh careeros@YOUR_SERVER 'ls -t /root/backups | head -1') ./
+```
+
+or set up a small `rsync`/`rclone` cron job on your own machine (or a second server) that pulls
+`/root/backups/` on a schedule — either way, the goal is at least one copy that isn't on the same
+box as the live database.
+
+**Restore** by stopping the app (`pm2 stop careeros`), replacing the live file
+(`cp /root/backups/careeros-<timestamp>.db $CAREEROS_PRIVATE_DIR/careeros.db`), and restarting
+(`pm2 start careeros`).
 
 ---
 
