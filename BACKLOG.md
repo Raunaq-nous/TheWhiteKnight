@@ -36,7 +36,7 @@ score and response, time-to-response.
 
 **DONE WHEN:** the view renders real numbers from the pipeline and handles the empty-data case.
 
-## [ ] 5. Bullet ID drift
+## [x] 5. Bullet ID drift
 
 Saved resumes referencing edited profile bullets must warn on load, listing the specific
 unresolvable bullets, and offer re-resolution or regeneration.
@@ -172,3 +172,22 @@ rejection is still a response), and time-to-response uses `updatedAt - createdAt
   denominator (only "applied"-or-later), correlation edge cases (too little data, no variance),
   and a full realistic-pipeline scenario. Full suite 698/698, build clean (confirmed `/analytics`
   in the build's route list), `tsc --noEmit` clean.
+
+### Item 5 — Bullet ID drift (done)
+
+- New `lib/resume-bullet-drift.ts`: `findDriftedBullets(content, profile)` — pure detection,
+  checks every experience bullet/project/key-win's `sourceBulletId` (a content-hash of the profile
+  bullet's TEXT) against the current profile's bullet index; anything that no longer resolves
+  (the bullet was edited or removed) is flagged, tagged with its stale text and, for experience
+  bullets, the employer it's under. `replacementCandidates(profile, company)` lists current
+  bullets from that SAME employer as re-resolve options — never a replacement from an unrelated
+  role.
+- `app/application/page.tsx`: a saved resume with any drifted bullet now shows a visible warning
+  banner naming each one (with its stale text and location), a per-bullet re-resolve dropdown
+  (only when the same employer still has current bullets to offer), and a "regenerate entire
+  resume" button reusing the existing generate handler. Nothing was ever silently dropped even
+  before this — the stale text was already fully rendered — this closes the actual gap: zero
+  visibility that it had gone stale.
+- Tests: 8 new in `resume-bullet-drift.test.ts` covering all three drift locations, the
+  same-employer restriction on replacement candidates, and a no-mutation guarantee. Full suite
+  706/706, build clean, `tsc --noEmit` clean.
