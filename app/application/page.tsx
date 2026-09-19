@@ -24,6 +24,7 @@ import { ResumeGapFillBox } from "../resume-gap-fill-box";
 import { ResumeBuilder } from "../resume-builder";
 import { ResumeAuditResult } from "../../lib/schemas";
 import { showToast } from "../../lib/toast";
+import { findDriftedBullets, replacementCandidates } from "../../lib/resume-bullet-drift";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
 function ApplicationDetail() {
@@ -539,6 +540,17 @@ window.addEventListener('load', function() {
     setTimeout(() => { setNlParsed(null); setNlApplied(false); }, 3000);
   };
 
+  // BULLET ID DRIFT (backlog item 5): a saved resume's bullets are tagged
+  // with a content-hash id derived from the profile bullet's TEXT at
+  // generation time. If that bullet was since edited (or removed), the id
+  // no longer resolves — the resume still shows the old text (nothing is
+  // silently dropped), but it's now out of sync with the profile. Surface
+  // this as a visible warning rather than carry on as if nothing changed.
+  const currentProfileForDrift = resumeContent ? getProfile() : null;
+  const driftedBullets = resumeContent && currentProfileForDrift
+    ? findDriftedBullets(resumeContent, currentProfileForDrift)
+    : [];
+
   return (
     <>
     <main className="container" style={{ paddingTop: 32, paddingBottom: 64, flex: 1 }}>
@@ -981,6 +993,66 @@ window.addEventListener('load', function() {
                   </button>
                 </div>
               </div>
+
+              {driftedBullets.length > 0 && currentProfileForDrift && (
+                <div style={{ background: "rgba(232,179,57,0.08)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 16, marginBottom: 16 }}>
+                  <div className="label" style={{ color: "var(--accent)", marginBottom: 8 }}>
+                    ⚠ {driftedBullets.length} BULLET{driftedBullets.length === 1 ? "" : "S"} IN THIS RESUME NO LONGER MATCH YOUR PROFILE
+                  </div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--text-secondary)", marginBottom: 12 }}>
+                    The profile bullet{driftedBullets.length === 1 ? "" : "s"} behind the line{driftedBullets.length === 1 ? "" : "s"} below {driftedBullets.length === 1 ? "was" : "were"} edited or removed since this resume was generated. The stale text is still what's shown below — nothing was silently dropped — but it's now out of sync with your profile.
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {driftedBullets.map((d, i) => {
+                      const candidates = d.company ? replacementCandidates(currentProfileForDrift, d.company) : [];
+                      return (
+                        <div key={`${d.sourceBulletId}-${i}`} style={{ padding: "8px 10px", background: "var(--bg-primary)", borderRadius: 4, border: "1px dashed var(--border)" }}>
+                          <div style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", marginBottom: 4, textTransform: "uppercase" }}>
+                            {d.company ? `${d.company} — ` : ""}{d.location}
+                          </div>
+                          <div style={{ fontSize: "0.75rem", marginBottom: 8 }}>{d.text}</div>
+                          {candidates.length > 0 ? (
+                            <select
+                              style={{ fontSize: "0.6875rem", padding: "4px 8px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-primary)" }}
+                              defaultValue=""
+                              onChange={e => {
+                                const chosen = candidates.find(c => c.id === e.target.value);
+                                if (!chosen || !resumeContent) return;
+                                const next: ResumeContent = {
+                                  ...resumeContent,
+                                  experience: resumeContent.experience.map(entry =>
+                                    entry.company !== d.company ? entry : {
+                                      ...entry,
+                                      bullets: entry.bullets.map(b =>
+                                        b.sourceBulletId === d.sourceBulletId
+                                          ? { sourceBulletId: chosen.id, text: chosen.text, priority: b.priority }
+                                          : b,
+                                      ),
+                                    },
+                                  ),
+                                };
+                                persistResumeContent(next, resumeArchetypeUsed ?? "general");
+                              }}
+                            >
+                              <option value="" disabled>RE-RESOLVE TO A CURRENT BULLET...</option>
+                              {candidates.map(c => (
+                                <option key={c.id} value={c.id}>{c.text.length > 80 ? `${c.text.slice(0, 80)}…` : c.text}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div style={{ fontSize: "0.6875rem", color: "var(--text-tertiary)" }}>
+                              No current bullets available to re-resolve to{d.company ? ` under ${d.company}` : ""} — regenerate the resume instead.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 12px", marginTop: 12 }} onClick={handleGenerateResume} disabled={resumeGenerating}>
+                    REGENERATE ENTIRE RESUME
+                  </button>
+                </div>
+              )}
 
               <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.7 }}>
                 {resumeContent.summary && <p style={{ margin: "0 0 8px", fontStyle: "italic" }}>{resumeContent.summary}</p>}
