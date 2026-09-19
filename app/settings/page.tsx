@@ -11,6 +11,7 @@ import {
   AUTOMATION_SCHEDULE_LABELS,
   AUTOMATION_SCHEDULE_HOURS,
   DEFAULT_AUTOMATION_SETTINGS,
+  MAX_JOBS_PER_RUN_CEILING,
   getAutomationSettings,
   saveAutomationSettings,
 } from "../../lib/automation-settings";
@@ -394,13 +395,13 @@ export default function SettingsPage() {
             <input
               type="number"
               min={1}
-              max={25}
+              max={MAX_JOBS_PER_RUN_CEILING}
               value={automation.maxJobsPerRun}
-              onChange={e => setAutomation(prev => ({ ...prev, maxJobsPerRun: Math.max(1, Math.min(25, parseInt(e.target.value, 10) || 1)) }))}
+              onChange={e => setAutomation(prev => ({ ...prev, maxJobsPerRun: Math.max(1, Math.min(MAX_JOBS_PER_RUN_CEILING, parseInt(e.target.value, 10) || 1)) }))}
               style={{ width: 80, padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
             />
             <p style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", marginTop: 6, lineHeight: 1.4 }}>
-              Caps how many new postings get scored (and, for good-fit ones, drafted) in a single run, to respect API rate limits and keep each run fast. Anything beyond the cap isn't lost — it's picked up automatically on the next run. Hard ceiling of 25 regardless of what's entered here.
+              Caps how many new postings get scored (and, for good-fit ones, drafted) in a single run, to respect API rate limits and keep each run fast. Anything beyond the cap isn't lost — it's picked up automatically on the next run. Small batches keep a run finishing well inside the cron HTTP timeout — hard ceiling of {MAX_JOBS_PER_RUN_CEILING} regardless of what's entered here.
             </p>
           </div>
 
@@ -433,9 +434,9 @@ export default function SettingsPage() {
                       {run.status.toUpperCase()}
                     </span>
                     <span>{new Date(run.startedAt).toLocaleString()}</span>
-                    <span>
+                    <span title={(run.filteredOut ?? []).map(f => `[${f.stage}] ${f.title}: ${f.reason}`).join("\n")}>
                       {run.status === "ok"
-                        ? `found ${run.jobsFound}, scored ${run.jobsScored}, staged ${run.jobsStaged}, dup ${run.jobsSkippedDuplicate}`
+                        ? `fetched ${run.jobsFetched ?? "?"} → keyword ${run.jobsFound} → recency ${run.jobsAfterRecencyFilter ?? run.jobsFound} → location ${run.jobsAfterLocationFilter ?? run.jobsFound} → dedup ${run.jobsAfterLocationFilter !== undefined ? run.jobsAfterLocationFilter - run.jobsSkippedDuplicate : run.jobsFound - run.jobsSkippedDuplicate} → scored ${run.jobsScored} → staged ${run.jobsStaged}`
                         : run.reason ?? ""}
                     </span>
                   </div>

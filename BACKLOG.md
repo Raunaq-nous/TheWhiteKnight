@@ -4,7 +4,7 @@ Prioritized, top to bottom. Each item is marked `[ ]` (pending), `[x]` (done), o
 Work one item at a time; commit once per completed item; never ask permission to commit (see
 CLAUDE.md's VERIFICATION CONTRACT).
 
-## [ ] 1. Autopilot throughput
+## [x] 1. Autopilot throughput
 
 Small batches (default 2, hard-clamped low) that finish inside the HTTP timeout. Per-job try/catch
 so one failure is logged and skipped rather than killing the run. Keep-but-mark-unscored on
@@ -87,4 +87,21 @@ Naukri and SmartRecruiters return results or fail cleanly with a reason.
 
 ## Run log
 
-(Appended as items complete or are blocked.)
+### Item 1 — Autopilot throughput (done)
+
+- `lib/automation-settings.ts` / `lib/server/services/automation-service.ts`: `DEFAULT_MAX_JOBS_PER_RUN`
+  8 → 2, `MAX_JOBS_PER_RUN_CEILING` 25 → 5 (both copies, kept in sync). `app/settings/page.tsx`'s
+  own hardcoded `25` (a third copy of the ceiling) replaced with the imported constant.
+- New `lib/server/services/rules-prefilter.ts`: deterministic, zero-token recency filter (drops
+  postings >45 days old with a known date) and location filter (drops postings in a clearly
+  different place than the candidate's open-to locations) — both permissive on ambiguity, run
+  BEFORE any scoring call.
+- `AutomationRunLog` gained `jobsFetched`, `jobsAfterRecencyFilter`, `jobsAfterLocationFilter`,
+  `filteredOut` (stage + reason per rejected job) — full stage-by-stage counts now: fetched →
+  keyword (`jobsFound`) → recency → location → dedup (`jobsSkippedDuplicate`) → scored → staged.
+  Settings page's run-log line now prints the whole chain with a tooltip listing rejection reasons.
+- Per-job try/catch and keep-but-mark-unscored on scoring failure were already implemented from
+  prior work in this codebase — verified via existing + new tests, not re-built.
+- Tests: `lib/__tests__/rules-prefilter.test.ts` (12 new), 3 new tests in
+  `automation-service.test.ts` for the stage counts and zero-token rejection. Full suite 678/678,
+  build clean, `tsc --noEmit` clean.
