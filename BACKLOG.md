@@ -29,7 +29,7 @@ Deterministic location/seniority/keyword filter running before any model call.
 **DONE WHEN:** an obviously off-target job is rejected with zero tokens spent, and the rejection
 reason appears in the survivor-count log.
 
-## [ ] 4. Response analytics
+## [x] 4. Response analytics
 
 A stats view over existing data: applications by status, reply rate, correlation between resume
 score and response, time-to-response.
@@ -153,3 +153,22 @@ can confirm and move on to export), and `app/application/page.tsx`'s `persistRes
 (saves `resumeAudit` with `scoredAt`/`atsReadable` onto the application). All DONE WHEN criteria
 already satisfied. Verified `lib/__tests__/resume-audit.test.ts` (5/5 passing) rather than adding
 duplicate coverage. No code changed for this item.
+
+### Item 4 — Response analytics (done)
+
+No dedicated inbound-reply/status-history tracking exists in this codebase
+(`send-service.ts` only records outbound sends) — documented as a stated limitation rather than
+silently faked: "responded" is inferred from status (interview/offer/rejected all count, a
+rejection is still a response), and time-to-response uses `updatedAt - createdAt` as a proxy.
+
+- New `lib/analytics.ts`: `countByStatus`, `computeReplyRate` (rate is `null`, not `0`, when
+  nothing has been sent yet), `scoreResponseCorrelation` (Pearson/point-biserial between
+  `Application.score` and response, `null` below 3 data points or with no variance),
+  `averageTimeToResponseDays`, and `computeResponseAnalytics` combining all four.
+- New `/analytics` page (added to nav): reply rate, avg. time to response, score↔response
+  correlation as stat cards, a by-status bar breakdown, and an explicit empty-data state (distinct
+  from a `0%`/`NaN` reply rate) plus a footnote stating the proxy limitations above.
+- Tests: 16 new in `lib/__tests__/analytics.test.ts` covering the empty-data case, the reply-rate
+  denominator (only "applied"-or-later), correlation edge cases (too little data, no variance),
+  and a full realistic-pipeline scenario. Full suite 698/698, build clean (confirmed `/analytics`
+  in the build's route list), `tsc --noEmit` clean.
