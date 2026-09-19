@@ -115,6 +115,47 @@ describe("scanJobs", () => {
     expect(result.counts.beforeFiltering).toBe(1);
   });
 
+  it("reports a rejection reason (zero-token, before any scoring call) for a job filtered by no keyword match", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobs: [{ title: "Warehouse Associate", absolute_url: "https://boards.greenhouse.io/acme/jobs/2", updated_at: "2024-01-01" }],
+      }),
+    });
+
+    const result = await scanJobs({ query: "product manager", companies: [greenhouseCompany] });
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected![0].title).toBe("Warehouse Associate");
+    expect(result.rejected![0].reason).toMatch(/no match/i);
+  });
+
+  it("reports a rejection reason naming the excluded seniority/keyword term when that's why it was dropped", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobs: [{ title: "Junior Product Manager Intern", absolute_url: "https://boards.greenhouse.io/acme/jobs/3", updated_at: "2024-01-01" }],
+      }),
+    });
+
+    const result = await scanJobs({ query: "product manager", roleKeywords: [], excludeKeywords: ["intern"], companies: [greenhouseCompany] });
+    expect(result.jobs).toHaveLength(0);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected![0].reason).toContain("intern");
+  });
+
+  it("never rejects a job that clears the relevance floor", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobs: [{ title: "Senior Product Manager", absolute_url: "https://boards.greenhouse.io/acme/jobs/4", updated_at: "2024-01-01" }],
+      }),
+    });
+
+    const result = await scanJobs({ query: "product manager", companies: [greenhouseCompany] });
+    expect(result.jobs).toHaveLength(1);
+    expect(result.rejected).toEqual([]);
+  });
+
   it("only calls Adzuna/Exa when keys are supplied", async () => {
     const result = await scanJobs({ query: "product manager", regions: ["global"], companies: [] });
     expect(adzunaSearchMock).not.toHaveBeenCalled();

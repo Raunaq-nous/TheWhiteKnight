@@ -60,7 +60,7 @@ export type AutomationRunStatus = "ok" | "error" | "skipped";
 // below (the scan's own relevance filter, already zero-token); "dedup"
 // survivors is jobsFound - jobsSkippedDuplicate. jobsFetched/jobsAfter*
 // below fill in the two stages that previously weren't counted at all.
-export type RulesFilterRejectionLog = { stage: "recency" | "location"; title: string; company?: string; reason: string };
+export type RulesFilterRejectionLog = { stage: "keyword" | "recency" | "location"; title: string; company?: string; reason: string };
 
 export type AutomationRunLog = {
   id: string;
