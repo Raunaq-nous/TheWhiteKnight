@@ -34,5 +34,6 @@ export async function GET() {
     companyTargets:      settingsRepo.getCompanyTargets(email),
     batchState:          settingsRepo.getBatchState(email),
     automationSettings:  settingsRepo.getAutomationSettings(email),
+    buckets:             settingsRepo.getBuckets(email),
   });
 }

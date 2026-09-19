@@ -7,6 +7,8 @@ import type { CompanyTarget } from "../../company-targets";
 import type { BatchState } from "../../batch-runner";
 import type { AutomationSettings, AutomationRunLog } from "../../automation-settings";
 import type { SettingsRepository } from "./types";
+import type { TargetBucket } from "../../store";
+import { DEFAULT_BUCKETS } from "../../buckets";
 
 const DEFAULT_MODEL: ModelSettings = { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" };
 // Duplicated (not imported as a value) rather than pulled from
@@ -62,6 +64,13 @@ export const settingsRepo: SettingsRepository = {
     const existing = getSingleton<AutomationRunLog[]>(userEmail, "automation_runs") ?? [];
     const next = [run, ...existing].slice(0, MAX_AUTOMATION_RUNS);
     setSingleton(userEmail, "automation_runs", next);
+  },
+
+  getBuckets(userEmail) {
+    return getSingleton<TargetBucket[]>(userEmail, "buckets") ?? DEFAULT_BUCKETS;
+  },
+  saveBuckets(userEmail, buckets) {
+    setSingleton(userEmail, "buckets", buckets);
   },
 };
 

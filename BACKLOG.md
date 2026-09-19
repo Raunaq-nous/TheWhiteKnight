@@ -44,7 +44,7 @@ unresolvable bullets, and offer re-resolution or regeneration.
 **DONE WHEN:** editing a profile bullet that a saved resume references produces a visible warning
 naming it, never a silent drop.
 
-## [ ] 6. Buckets config
+## [x] 6. Buckets config
 
 One persisted source of truth, editable in the UI, consumed by both ingest and batch scan. Remove
 the three hardcoded copies (`app/ingest` MOCK_BUCKETS, `lib/buckets` DEFAULT_BUCKETS, and the
@@ -191,3 +191,27 @@ rejection is still a response), and time-to-response uses `updatedAt - createdAt
 - Tests: 8 new in `resume-bullet-drift.test.ts` covering all three drift locations, the
   same-employer restriction on replacement candidates, and a no-mutation guarantee. Full suite
   706/706, build clean, `tsc --noEmit` clean.
+
+### Item 6 — Buckets config (done)
+
+Followed `lib/company-targets.ts`'s exact existing pattern (write-through client cache + a
+server-persisted singleton) rather than inventing a new one.
+
+- `lib/buckets.ts`: `DEFAULT_BUCKETS` is now only the seed data; added `getBuckets()`/
+  `saveBuckets()`/`resetBuckets()` going through `lib/data-cache.ts` (new `buckets` field, plus
+  `updateCacheBuckets`) and `wt_saveSettings("buckets", ...)`.
+- `lib/server/repositories/settings-repo.ts` / `types.ts`: new `getBuckets`/`saveBuckets` on
+  `SettingsRepository`, same `getSingleton`/`setSingleton` pattern as every other setting.
+- `app/api/data/bootstrap|export|import/route.ts`: `buckets` added alongside `companyTargets` in
+  all three.
+- `lib/server/services/automation-service.ts`: now calls `settingsRepo.getBuckets(userEmail)`
+  instead of the removed `DEFAULT_BUCKETS` import — the scheduled automation path picks up bucket
+  edits too, not just the two consumers named in the backlog item.
+- **All three hardcoded copies removed**: `app/ingest/page.tsx`'s `MOCK_BUCKETS` deleted (now
+  calls `getBuckets()`), `app/batch/page.tsx`'s `DEFAULT_BUCKETS` import replaced with `getBuckets()`
+  at both `runBatch()` call sites, and `app/config/page.tsx`'s static display-only `const buckets =
+  [...]` replaced with a real editable UI (add/edit/remove/reset, per-field inputs) backed by
+  `getBuckets()`/`saveBuckets()`.
+- Tests: 1 new integration test in `automation-service.test.ts` proving a bucket saved via
+  `settingsRepo.saveBuckets()` is exactly what reaches `scoreJob()` (not the old default) — the
+  literal DONE WHEN. Full suite 707/707, build clean, `tsc --noEmit` clean.

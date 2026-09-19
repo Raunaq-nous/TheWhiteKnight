@@ -9,6 +9,7 @@ import type { IntegrationSettings } from "../../integration-settings";
 import type { CompanyTarget } from "../../company-targets";
 import type { BatchState } from "../../batch-runner";
 import type { AutomationSettings, AutomationRunLog } from "../../automation-settings";
+import type { TargetBucket } from "../../store";
 
 export interface ApplicationRepository {
   list(userEmail: string): Application[];
@@ -64,6 +65,8 @@ export interface SettingsRepository {
   saveAutomationSettings(userEmail: string, s: AutomationSettings): void;
   getAutomationRuns(userEmail: string): AutomationRunLog[];
   appendAutomationRun(userEmail: string, run: AutomationRunLog): void;
+  getBuckets(userEmail: string): TargetBucket[];
+  saveBuckets(userEmail: string, buckets: TargetBucket[]): void;
 }
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "consumed";

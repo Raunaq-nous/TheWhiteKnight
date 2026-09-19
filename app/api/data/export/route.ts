@@ -32,6 +32,7 @@ export async function GET() {
     batchState:          settingsRepo.getBatchState(email),
     automationSettings:  settingsRepo.getAutomationSettings(email),
     automationRuns:      settingsRepo.getAutomationRuns(email),
+    buckets:             settingsRepo.getBuckets(email),
   };
 
   return new NextResponse(JSON.stringify(payload, null, 2), {

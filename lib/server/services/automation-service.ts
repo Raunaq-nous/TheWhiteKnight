@@ -7,7 +7,6 @@ import { runRulesPreFilter } from "./rules-prefilter";
 import { fetchJdText } from "./jd-fetch-service";
 import { scoreJob, ScoreJobOutput } from "./scoring-service";
 import { generateDraft } from "./draft-service";
-import { DEFAULT_BUCKETS } from "../../buckets";
 import { htmlToText } from "../../jd-fetch";
 import type { Region } from "../../company-targets";
 import type { Application } from "../../store";
@@ -336,7 +335,7 @@ export async function runAutomation(
         seniority: "senior",
         sector: "",
         remote: /remote/i.test(job.location ?? ""),
-        buckets: DEFAULT_BUCKETS.map(b => ({ id: b.id, name: b.name, description: b.description })),
+        buckets: settingsRepo.getBuckets(userEmail).map(b => ({ id: b.id, name: b.name, description: b.description })),
         profile,
         providerSettings,
       });
