@@ -341,6 +341,15 @@ describe("requirementMapPrompt — interactive builder step 1", () => {
     expect(output).toContain("Acme AI");
     expect(output).toContain("OpenAI");
   });
+
+  it("instructs ATS language alignment as terminology mapping, not keyword stuffing (backlog item 7)", () => {
+    const output = requirementMapPrompt(MOCK_PROFILE, MOCK_APP);
+    expect(output).toContain("terminologyMismatch");
+    expect(output).toContain("terminology MAPPING, not keyword stuffing");
+    expect(output).toContain("jdTerm");
+    expect(output).toContain("profileTerm");
+    expect(output).toMatch(/predictive analytics.+forecasting model|forecasting model.+predictive analytics/);
+  });
 });
 
 describe("resumeAuditPrompt — adversarial hiring-side resume evaluation", () => {

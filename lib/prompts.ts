@@ -1317,6 +1317,8 @@ STEP 2 — For EACH requirement, search the ENTIRE profile (every experience bul
 
 For "strong" or "weak", identify the EXACT source: whether it's an experience bullet (name the company) or a project (name the project), and copy the bulletText VERBATIM from the profile above — this exact string is used later to track whether that evidence is still present if the user edits their resume, so it must match character-for-character.
 
+STEP 3 — ATS LANGUAGE ALIGNMENT (terminology MAPPING, not keyword stuffing): for every requirement rated "strong" or "weak", check whether the matched evidence describes the same underlying skill/capability using DIFFERENT WORDS than the JD itself uses — e.g. the JD says "predictive analytics" and the evidence you matched says "forecasting model"; the JD says "stakeholder management" and the evidence says "cross-functional alignment." When the wording genuinely differs for the SAME skill, set "terminologyMismatch" naming both phrasings exactly as each source states them. This is about surfacing a real synonym gap for the candidate to see, never about inserting the JD's words into their profile for them — when the requirement and the evidence already use matching or near-identical language, omit this field entirely.
+
 ${RESUME_BASE_RULES}
 
 Do not invent evidence. If nothing in the profile addresses a requirement, rating must be "none" and evidence must be omitted — never fabricate a bullet or stretch an unrelated one into "strong"/"weak" coverage just to avoid a gap.
@@ -1328,7 +1330,8 @@ Output ONLY raw JSON matching exactly this shape, nothing before or after:
       "requirement": "the specific JD requirement, in the JD's own words where possible",
       "rating": "strong" | "weak" | "none",
       "evidence": { "sourceType": "experience" | "project", "sourceId": "exact company or project name from the profile", "bulletText": "exact bullet/description text, copied verbatim" } (omit entirely when rating is "none"),
-      "reasoning": "one line explaining the rating"
+      "reasoning": "one line explaining the rating",
+      "terminologyMismatch": { "jdTerm": "the JD's exact phrase", "profileTerm": "the evidence's different exact phrase for the same skill" } (omit entirely unless there is evidence AND its wording genuinely differs from the JD's own)
     }
   ]
 }
