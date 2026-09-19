@@ -53,7 +53,7 @@ static `app/config` page).
 **DONE WHEN:** editing a bucket in the UI changes scoring behaviour in both ingest and batch scan,
 and no hardcoded bucket array remains.
 
-## [ ] 7. ATS language alignment
+## [x] 7. ATS language alignment
 
 Compare resume vocabulary against the JD's and flag where different words are used for the same
 skill (e.g. "forecasting model" vs "predictive analytics"). Surface in the requirement map. This
@@ -215,3 +215,24 @@ server-persisted singleton) rather than inventing a new one.
 - Tests: 1 new integration test in `automation-service.test.ts` proving a bucket saved via
   `settingsRepo.saveBuckets()` is exactly what reaches `scoreJob()` (not the old default) — the
   literal DONE WHEN. Full suite 707/707, build clean, `tsc --noEmit` clean.
+
+### Item 7 — ATS language alignment (done)
+
+Genuine synonym recognition ("forecasting model" ≈ "predictive analytics") needs semantic
+judgment, not string matching — extended the requirement map's EXISTING LLM call rather than
+inventing a separate mechanism.
+
+- `lib/schemas.ts`: new `TerminologyMismatchSchema` (`jdTerm` + `profileTerm`), added as an
+  optional `terminologyMismatch` field on `RequirementCoverageSchema` — set only when a
+  requirement has real evidence (`rating` strong/weak) AND that evidence's wording genuinely
+  differs from the JD's own.
+- `lib/prompts.ts`'s `requirementMapPrompt`: new STEP 3 instructing this explicitly as
+  "terminology MAPPING, not keyword stuffing" — surfacing a real synonym gap for the candidate to
+  see, never an instruction to insert the JD's words into their profile.
+- `app/resume-builder.tsx`: the requirement-map row now shows a "DIFFERENT WORDING" line with both
+  phrasings whenever `terminologyMismatch` is set.
+- `app/api/resume/requirement-map/route.ts` already spreads the full model response through
+  unchanged — no stripping to fix.
+- Tests: 5 new in `requirement-coverage-schema.test.ts` (schema accepts/rejects the field
+  correctly, a full mixed-coverage map parses), 1 new in `prompts.test.ts` confirming the prompt
+  instruction and its exact example pair. Full suite 713/713, build clean, `tsc --noEmit` clean.

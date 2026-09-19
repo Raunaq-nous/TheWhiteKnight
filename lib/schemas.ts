@@ -295,17 +295,31 @@ export const RequirementEvidenceSchema = z.object({
   sourceBulletId: z.string().nullable().optional(),
 });
 
+// ATS language alignment — terminology MAPPING, not keyword stuffing. Set
+// only when the requirement genuinely has profile evidence (rating is
+// "strong" or "weak") but that evidence describes the same underlying
+// skill/capability in DIFFERENT words than the JD uses — e.g. the JD says
+// "predictive analytics" and the matched evidence says "forecasting
+// model." Surfacing both phrasings lets the candidate decide whether to
+// adopt the JD's own term, never an instruction to silently insert it.
+export const TerminologyMismatchSchema = z.object({
+  jdTerm: z.string().describe("The JD's own phrase for this skill/requirement"),
+  profileTerm: z.string().describe("The different phrase the matched profile evidence actually uses for the same thing"),
+});
+
 export const RequirementCoverageSchema = z.object({
   requirement: z.string().describe("The specific JD requirement, in the JD's own words where possible"),
   rating: z.enum(["strong", "weak", "none"]),
   evidence: RequirementEvidenceSchema.nullable().optional().describe("Omit or null when rating is 'none'"),
   reasoning: z.string().describe("One line explaining the rating"),
+  terminologyMismatch: TerminologyMismatchSchema.nullable().optional().describe("Set ONLY when there is evidence AND it uses genuinely different wording for the same skill than the JD does. Omit/null when the wording already matches, or when rating is 'none'."),
 });
 
 export const ResumeRequirementMapSchema = z.object({
   requirements: z.array(RequirementCoverageSchema),
 });
 
+export type TerminologyMismatch = z.infer<typeof TerminologyMismatchSchema>;
 export type RequirementCoverage = z.infer<typeof RequirementCoverageSchema>;
 export type ResumeRequirementMap = z.infer<typeof ResumeRequirementMapSchema>;
 

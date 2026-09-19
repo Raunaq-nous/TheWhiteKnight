@@ -231,6 +231,11 @@ export function ResumeBuilder({
                   <div style={{ flex: 1 }}>
                     <div style={{ color: "var(--text-primary)" }}>{req.requirement}{req.lostEvidence && <span style={{ color: "var(--error)" }}> — just lost its only evidence</span>}</div>
                     {req.evidence && <div style={{ color: "var(--text-tertiary)", fontSize: "0.6875rem", marginTop: 2 }}>{req.evidence.sourceId} — "{req.evidence.bulletText.slice(0, 90)}{req.evidence.bulletText.length > 90 ? "..." : ""}"</div>}
+                    {req.terminologyMismatch && (
+                      <div style={{ color: "var(--accent)", fontSize: "0.6875rem", marginTop: 2 }}>
+                        DIFFERENT WORDING — JD says "{req.terminologyMismatch.jdTerm}", your profile says "{req.terminologyMismatch.profileTerm}"
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
