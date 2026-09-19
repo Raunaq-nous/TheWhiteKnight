@@ -1,11 +1,23 @@
 import "server-only";
-import { exaJobSearch } from "../../exa-client";
 import { CompanyTarget, Region } from "../../company-targets";
-import { adzunaSearch, REGION_TO_ADZUNA_COUNTRIES, AdzunaCountry } from "../../adzuna-client";
+import {
+  ATS_COLLECTORS,
+  REGION_PORTAL_DOMAINS,
+  exaPortalCollector,
+  exaCompanyCollector,
+  adzunaCollector,
+} from "./collectors";
+import type { CompanyDomainHint, JobResult } from "./collectors/types";
 
 // Extracted from the former app/api/scan/jobs/route.ts body so both the
 // manual scan UI (via the route, now a thin wrapper) and the scheduled
 // automation service can call the same logic directly, with no HTTP hop.
+//
+// The per-source fetch logic itself now lives one-module-per-source under
+// ./collectors/ (JobCollector interface in collectors/types.ts). This file
+// keeps only the orchestration: which collectors to call for a given scan
+// input, and the dedupe/relevance-filter/rejected-reasons pipeline that
+// runs on their combined output.
 
 export type JobScanInput = {
   query: string;
@@ -19,19 +31,9 @@ export type JobScanInput = {
   excludeKeywords?: string[];
 };
 
-export type JobResult = {
-  title: string;
-  company?: string;
-  location?: string;
-  url: string;
-  source: "greenhouse" | "ashby" | "lever" | "exa-portal" | "exa-company" | "adzuna";
-  publishedDate?: string;
-  snippet?: string;
-  relevance?: number; // 0-100 score against query + roleKeywords
-  // Full job description text, when the source's own API already returns it
-  // (Greenhouse/Ashby/Lever) — avoids a second fetch per job for scoring.
-  descriptionHtml?: string;
-};
+// Re-exported for existing callers (automation-service.ts, rules-prefilter.ts)
+// that import JobResult from "./scan-service".
+export type { JobResult } from "./collectors/types";
 
 export type KeywordFilterRejection = { title: string; company?: string; reason: string };
 
@@ -51,70 +53,6 @@ export type JobScanOutput = {
     adzuna: number;
     exa: number;
   };
-};
-
-// ATS feed fetchers — public, no key required.
-async function fetchGreenhouse(tenant: string, companyName: string): Promise<JobResult[]> {
-  try {
-    // content=true is required by Greenhouse's public API for the full job
-    // description to be included at all — without it, `content` is always
-    // absent. Purely additive: does not change which jobs are returned.
-    const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${tenant}/jobs?content=true`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.jobs ?? []).map((j: any) => ({
-      title: j.title,
-      company: companyName,
-      location: j.location?.name,
-      url: j.absolute_url,
-      source: "greenhouse" as const,
-      publishedDate: j.updated_at,
-      descriptionHtml: j.content,
-    }));
-  } catch { return []; }
-}
-
-async function fetchAshby(tenant: string, companyName: string): Promise<JobResult[]> {
-  try {
-    const res = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${tenant}`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.jobs ?? []).map((j: any) => ({
-      title: j.title,
-      company: companyName,
-      location: j.locationName,
-      url: j.jobUrl ?? `https://jobs.ashbyhq.com/${tenant}/${j.id}`,
-      source: "ashby" as const,
-      publishedDate: j.publishedAt,
-      descriptionHtml: j.descriptionHtml ?? j.description,
-    }));
-  } catch { return []; }
-}
-
-async function fetchLever(tenant: string, companyName: string): Promise<JobResult[]> {
-  try {
-    const res = await fetch(`https://api.lever.co/v0/postings/${tenant}?mode=json`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data ?? []).map((j: any) => ({
-      title: j.text,
-      company: companyName,
-      location: j.categories?.location,
-      url: j.hostedUrl,
-      source: "lever" as const,
-      publishedDate: j.createdAt ? new Date(j.createdAt).toISOString() : undefined,
-      descriptionHtml: j.descriptionPlain ?? j.description,
-    }));
-  } catch { return []; }
-}
-
-const REGION_PORTAL_DOMAINS: Record<Region, string[]> = {
-  "middle-east": ["bayt.com", "naukrigulf.com", "linkedin.com/jobs", "gulftalent.com"],
-  "india": ["naukri.com", "linkedin.com/jobs", "instahyre.com", "iimjobs.com"],
-  "apac": ["jobstreet.com", "seek.com", "linkedin.com/jobs", "glassdoor.sg"],
-  "north-america": ["linkedin.com/jobs", "indeed.com", "glassdoor.com"],
-  "europe": ["linkedin.com/jobs", "indeed.co.uk"],
-  "global": ["linkedin.com/jobs"],
 };
 
 // Relevance scoring: 0-100. Title gets 70 weight, snippet 30.
@@ -171,45 +109,6 @@ export function explainLowRelevance(title: string, snippet: string | undefined, 
   return `No match for any target keyword (${preview}) in title or snippet`;
 }
 
-async function fetchAdzuna(
-  appId: string,
-  appKey: string,
-  query: string,
-  regions: Region[],
-): Promise<JobResult[]> {
-  const countries: AdzunaCountry[] = Array.from(new Set(
-    regions.flatMap(r => REGION_TO_ADZUNA_COUNTRIES[r] ?? []),
-  ));
-  if (countries.length === 0) return [];
-
-  const results: JobResult[] = [];
-  for (const country of countries.slice(0, 3)) {
-    try {
-      const jobs = await adzunaSearch(appId, appKey, {
-        country,
-        what: query,
-        resultsPerPage: 20,
-        sortBy: "relevance",
-        maxDaysOld: 30,
-      });
-      for (const j of jobs) {
-        results.push({
-          title: j.title,
-          company: j.company,
-          location: j.location,
-          url: j.url,
-          source: "adzuna",
-          publishedDate: j.created,
-          snippet: j.description?.slice(0, 240),
-        });
-      }
-    } catch {
-      // Skip country on failure; other countries continue
-    }
-  }
-  return results;
-}
-
 export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
   const {
     query,
@@ -231,74 +130,75 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
   const errors: string[] = [];
   const allResults: JobResult[] = [];
 
+  // Per-company ATS collectors (Greenhouse/Ashby/Lever/SmartRecruiters).
+  // A company needs a tenant identifier to be dispatched: its own
+  // `atsTenant`, or, for SmartRecruiters, a fallback to the company's own
+  // `id` slug (ASSUMPTION: SmartRecruiters' companyIdentifier commonly
+  // matches the kind of slug already used for CompanyTarget.id, e.g.
+  // "roland-berger"; existing SmartRecruiters seed entries don't set
+  // atsTenant explicitly).
   const atsPromises: Promise<JobResult[]>[] = [];
   for (const c of companies) {
-    if (!c.enabled || !c.atsTenant) continue;
-    if (c.ats === "greenhouse") atsPromises.push(fetchGreenhouse(c.atsTenant, c.name));
-    else if (c.ats === "ashby") atsPromises.push(fetchAshby(c.atsTenant, c.name));
-    else if (c.ats === "lever") atsPromises.push(fetchLever(c.atsTenant, c.name));
+    if (!c.enabled) continue;
+    const collector = ATS_COLLECTORS[c.ats];
+    if (!collector) continue;
+    const tenant = c.atsTenant ?? (c.ats === "smartrecruiters" ? c.id : undefined);
+    if (!tenant) continue;
+    atsPromises.push(
+      collector.collect({ tenant, companyName: c.name }).then(r => {
+        if (r.error) errors.push(`${c.ats} (${c.name}): ${r.error}`);
+        return r.jobs;
+      }),
+    );
   }
 
   const atsResults = await Promise.all(atsPromises);
   for (const r of atsResults) allResults.push(...r);
 
   if (adzunaAppId && adzunaAppKey && regions.length > 0) {
-    try {
-      const adzunaResults = await fetchAdzuna(adzunaAppId, adzunaAppKey, query, regions);
-      allResults.push(...adzunaResults);
-    } catch (e: any) {
-      errors.push(`Adzuna: ${e.message}`);
-    }
+    const adzunaResult = await adzunaCollector.collect({
+      appId: adzunaAppId,
+      appKey: adzunaAppKey,
+      query,
+      regions,
+    });
+    if (adzunaResult.error) errors.push(`Adzuna: ${adzunaResult.error}`);
+    allResults.push(...adzunaResult.jobs);
   }
 
   if (exaApiKey && regions.length > 0) {
     const portalDomains = Array.from(new Set(regions.flatMap(r => REGION_PORTAL_DOMAINS[r] ?? [])));
-    try {
-      const exaResults = await exaJobSearch(
-        exaApiKey,
-        `${query} job opening 2025`,
-        portalDomains,
-        Math.min(numResults, 30),
-      );
-      for (const r of exaResults) {
-        allResults.push({
-          title: r.title,
-          url: r.url,
-          source: "exa-portal" as const,
-          publishedDate: r.publishedDate,
-          snippet: r.highlights?.[0] ?? r.text?.slice(0, 200),
-        });
-      }
-    } catch (e: any) {
-      errors.push(`Exa portal search: ${e.message}`);
-    }
+    const portalResult = await exaPortalCollector.collect({
+      apiKey: exaApiKey,
+      query: `${query} job opening 2025`,
+      domains: portalDomains,
+      numResults: Math.min(numResults, 30),
+    });
+    if (portalResult.error) errors.push(`Exa portal search: ${portalResult.error}`);
+    allResults.push(...portalResult.jobs);
 
-    const customCompanies = companies.filter(c => c.enabled && (c.ats === "custom" || c.ats === "workday" || c.ats === "smartrecruiters"));
+    const customCompanies = companies.filter(c => c.enabled && (c.ats === "custom" || c.ats === "workday"));
     if (customCompanies.length > 0 && customCompanies.length <= 30) {
-      const customDomains = customCompanies
-        .map(c => { try { return new URL(c.careersUrl.startsWith("http") ? c.careersUrl : `https://${c.careersUrl}`).hostname; } catch { return null; } })
-        .filter((d): d is string => !!d);
-      try {
-        const exaCompanyResults = await exaJobSearch(
-          exaApiKey,
-          `${query} careers opening`,
-          customDomains,
-          Math.min(numResults, 30),
-        );
-        for (const r of exaCompanyResults) {
-          const matchedCompany = customCompanies.find(c => r.url.includes(new URL(c.careersUrl.startsWith("http") ? c.careersUrl : `https://${c.careersUrl}`).hostname));
-          allResults.push({
-            title: r.title,
-            company: matchedCompany?.name,
-            url: r.url,
-            source: "exa-company" as const,
-            publishedDate: r.publishedDate,
-            snippet: r.highlights?.[0] ?? r.text?.slice(0, 200),
-          });
+      const companyLookup: CompanyDomainHint[] = [];
+      const customDomains: string[] = [];
+      for (const c of customCompanies) {
+        try {
+          const hostname = new URL(c.careersUrl.startsWith("http") ? c.careersUrl : `https://${c.careersUrl}`).hostname;
+          customDomains.push(hostname);
+          companyLookup.push({ name: c.name, hostname });
+        } catch {
+          // Skip a company whose careersUrl doesn't parse as a URL.
         }
-      } catch (e: any) {
-        errors.push(`Exa company search: ${e.message}`);
       }
+      const companyResult = await exaCompanyCollector.collect({
+        apiKey: exaApiKey,
+        query: `${query} careers opening`,
+        domains: customDomains,
+        numResults: Math.min(numResults, 30),
+        companyLookup,
+      });
+      if (companyResult.error) errors.push(`Exa company search: ${companyResult.error}`);
+      allResults.push(...companyResult.jobs);
     }
   }
 
@@ -332,7 +232,7 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
     counts: {
       total: relevant.length,
       beforeFiltering: deduped.length,
-      ats: relevant.filter(j => j.source === "greenhouse" || j.source === "ashby" || j.source === "lever").length,
+      ats: relevant.filter(j => j.source === "greenhouse" || j.source === "ashby" || j.source === "lever" || j.source === "smartrecruiters").length,
       adzuna: relevant.filter(j => j.source === "adzuna").length,
       exa: relevant.filter(j => j.source === "exa-portal" || j.source === "exa-company").length,
     },

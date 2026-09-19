@@ -73,7 +73,7 @@ persists against the application.
 
 *(Research-heavy — delegated to a subagent per CLAUDE.md's instruction.)*
 
-## [ ] 9. Collector-per-source refactor
+## [x] 9. Collector-per-source refactor
 
 Abstract base interface, one module per source, then add Naukri and SmartRecruiters. Reference
 pattern: github.com/algsoch/job_agentic collectors/.
@@ -236,3 +236,44 @@ inventing a separate mechanism.
 - Tests: 5 new in `requirement-coverage-schema.test.ts` (schema accepts/rejects the field
   correctly, a full mixed-coverage map parses), 1 new in `prompts.test.ts` confirming the prompt
   instruction and its exact example pair. Full suite 713/713, build clean, `tsc --noEmit` clean.
+
+### Item 9 — Collector-per-source refactor (done, delegated to a subagent — research-heavy per this item's own note)
+
+- New `JobCollector` interface (`lib/server/services/collectors/types.ts`) — `collect(input):
+  Promise<CollectorResult>`, every collector returning `{jobs: [], error?}` on any failure, never
+  throwing. One module per source under `lib/server/services/collectors/`: `greenhouse.ts`,
+  `ashby.ts`, `lever.ts`, `adzuna.ts`, `exa.ts` (portal + company-domain variants) — each extracted
+  from the old inline fetchers with byte-identical `JobResult` output (proven by tests comparing
+  the collector's output to the pre-refactor shape). `index.ts` is the barrel + `ATS_COLLECTORS`
+  dispatch map.
+- `lib/server/services/scan-service.ts` is now pure orchestration: builds a `CollectorInput` per
+  company/source, calls the matching collector, folds errors into the existing `errors[]` array.
+  The dedupe → relevance-filter → `rejected`-reasons → counts pipeline (items 1 and 3's work) is
+  untouched.
+- **SmartRecruiters** (new): a real collector for the public, unauthenticated Postings API
+  (`api.smartrecruiters.com/v1/companies/{id}/postings`), now actually wired into
+  `ATS_COLLECTORS` — `CompanyTarget`s with `ats: "smartrecruiters"` (already a valid enum value,
+  previously unhandled and falling through to Exa company-search) now dispatch to it directly.
+  **Caveat**: the live API/docs were unreachable from this sandbox (egress blocked), so the
+  response schema is a best-effort reconstruction, not fetched-and-confirmed — flagged in a code
+  comment. It degrades to `{jobs: []}` on any schema mismatch, never a crash or bad data, so a
+  wrong guess costs nothing but a silently-empty result until someone can verify against a live
+  response.
+  Also assumed a `atsTenant ?? companyTarget.id` fallback for the two seed SmartRecruiters targets
+  (`roland-berger`, `talabat`, in `lib/company-targets.ts`), which don't set `atsTenant` — worth
+  setting explicitly once the real SmartRecruiters `companyIdentifier` values are confirmed.
+- **Naukri finding**: no public, unauthenticated, per-company postings API exists (confirmed by
+  reading the algsoch/job_agentic reference repo's own Naukri collector, which is an HTML scraper,
+  not an API client). Per this project's own hard rule ("scraped content is untrusted, never a
+  trusted structured source") and the no-fabrication instruction, `naukriCollector` does **not**
+  scrape — it always returns a clean `{jobs: [], error: "..."}` naming exactly why, never touching
+  the network. Naukri is already indirectly covered today: `REGION_PORTAL_DOMAINS.india` already
+  lists `naukri.com` as an Exa portal-search domain, so India-region scans already surface Naukri
+  postings via Exa (`source: "exa-portal"`) — this was true before the refactor too, just not
+  previously documented as "the Naukri story."
+- Tests: 14 new in `lib/__tests__/collectors.test.ts` (Greenhouse/Ashby/Lever producing identical
+  output to the pre-refactor shape, all clean-failure paths, SmartRecruiters success + both
+  failure paths + `ATS_COLLECTORS` wiring, Naukri's always-clean-failure + non-wiring). All
+  pre-existing `scan-service.test.ts`/`automation-service.test.ts` tests pass unchanged. Full
+  suite 727/727, build clean, `tsc --noEmit` clean — all three verified independently by the
+  orchestrating session, not just trusted from the subagent's own report.
