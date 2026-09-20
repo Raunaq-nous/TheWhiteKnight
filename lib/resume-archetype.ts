@@ -223,7 +223,7 @@ export function withArchetypeSequence(content: ResumeContent, archetype: ResumeA
 const KEYWORD_RULES: { archetype: ResumeArchetype; pattern: RegExp }[] = [
   { archetype: "vc_investing", pattern: /\b(venture capital|vc associate|vc analyst|growth equity|investment associate|portfolio (?:company|management)|fund (?:manager|associate)|\bvc\b)\b/i },
   { archetype: "finance_ib", pattern: /\b(investment bank(?:ing)?|m&a|mergers (?:and|&) acquisitions|corporate finance|equity research|ib analyst|\bib\b)\b/i },
-  { archetype: "consulting", pattern: /\b(strategy consult|management consult|mckinsey|bain(?:\s*&\s*company)?|bcg|boston consulting)\b/i },
+  { archetype: "consulting", pattern: /\b(strategy consult(?:ing)?|management consult(?:ing)?|consulting services|mckinsey|bain(?:\s*&\s*company)?|bcg|boston consulting)\b/i },
   { archetype: "product", pattern: /\b(product manager|product management|\bpm\b(?!\s*\/))/i },
   { archetype: "ai_ml_engineering", pattern: /\b(machine learning|\bml\b|\bai\b|software engineer|backend engineer|full[\s-]?stack|data scientist|ml engineer)\b/i },
 ];

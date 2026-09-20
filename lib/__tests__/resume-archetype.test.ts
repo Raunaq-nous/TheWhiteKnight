@@ -226,6 +226,33 @@ describe("detectResumeArchetype", () => {
     expect(detectResumeArchetype(profile, app)).toBe("consulting");
   });
 
+  it("detects consulting from the gerund form 'strategy consulting' in a JD requirement", () => {
+    const profile = baseProfile();
+    const app = baseApp({
+      role: "Manager", company: "Accenture",
+      jdParsed: { keyRequirements: ["Experience in strategy consulting for Fortune 500 clients"] },
+    });
+    expect(detectResumeArchetype(profile, app)).toBe("consulting");
+  });
+
+  it("detects consulting from the gerund form 'management consulting' in a JD requirement", () => {
+    const profile = baseProfile();
+    const app = baseApp({
+      role: "Senior Manager", company: "Accenture",
+      jdParsed: { keyRequirements: ["Background in management consulting or corporate strategy"] },
+    });
+    expect(detectResumeArchetype(profile, app)).toBe("consulting");
+  });
+
+  it("detects consulting from 'consulting services' in a JD requirement", () => {
+    const profile = baseProfile();
+    const app = baseApp({
+      role: "Manager", company: "Deloitte",
+      jdParsed: { keyRequirements: ["Delivers consulting services to enterprise clients"] },
+    });
+    expect(detectResumeArchetype(profile, app)).toBe("consulting");
+  });
+
   it("detects product management from role title", () => {
     const profile = baseProfile();
     const app = baseApp({ role: "Senior Product Manager", company: "Acme" });
