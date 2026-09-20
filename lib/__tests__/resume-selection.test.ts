@@ -191,4 +191,44 @@ describe("resolveResumeSelections — every rendered bullet maps to a real profi
     const resolved = resolveResumeSelections(raw, profile);
     expect(resolved.summary).toBe("A totally free-form summary sentence.");
   });
+
+  it("threads an explicit ExperienceEntry.bulletTags category onto the resolved ResumeBullet", () => {
+    const aiText = "Built an internal reporting tool that cut manual review time.";
+    const profile = baseProfile({
+      experience: [{
+        id: "bain-1", company: "Bain & Company", role: "Project Leader", tenure: "Jun 2025 - Present",
+        location: "Gurgaon", current: true,
+        bullets: `${OG_BULLET}\n${aiText}`,
+        bulletTags: { [aiText]: "ai_build", [OG_BULLET]: "consulting_engagement" },
+      }],
+    });
+    const aiId = bulletId("experience", "Bain & Company", aiText);
+    const engagementId = bulletId("experience", "Bain & Company", OG_BULLET);
+    const raw = baseRawContent({
+      experience: [{
+        company: "Bain & Company", role: "Project Leader", tenure: "Jun 2025 - Present", location: "Gurgaon",
+        bullets: [
+          { sourceBulletId: aiId, text: "ignored", priority: 1 },
+          { sourceBulletId: engagementId, text: "ignored", priority: 2 },
+        ],
+      }],
+    });
+    const resolved = resolveResumeSelections(raw, profile);
+    const bullets = resolved.experience[0].bullets;
+    expect(bullets.find(b => b.sourceBulletId === aiId)?.category).toBe("ai_build");
+    expect(bullets.find(b => b.sourceBulletId === engagementId)?.category).toBe("consulting_engagement");
+  });
+
+  it("resolves category to null (not undefined-that-crashes) when the profile bullet has no explicit tag", () => {
+    const profile = baseProfile(); // OG_BULLET has no bulletTags entry
+    const id = bulletId("experience", "Bain & Company", OG_BULLET);
+    const raw = baseRawContent({
+      experience: [{
+        company: "Bain & Company", role: "Project Leader", tenure: "Jun 2025 - Present", location: "Gurgaon",
+        bullets: [{ sourceBulletId: id, text: "ignored", priority: 1 }],
+      }],
+    });
+    const resolved = resolveResumeSelections(raw, profile);
+    expect(resolved.experience[0].bullets[0].category).toBeNull();
+  });
 });
