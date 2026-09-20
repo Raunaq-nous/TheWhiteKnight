@@ -1,6 +1,14 @@
 import { getCache, wt_saveProfile } from "./data-cache";
 import { showToast } from "./toast";
 
+// Groups a bullet under the "consulting" archetype's two experience
+// sub-labels (see lib/resume-docx.ts's CONSULTING_ENGAGEMENTS_LABEL /
+// AI_BUILDS_LABEL). Optional and explicit — when absent, the renderer
+// falls back to its own keyword heuristic (classifyExperienceBulletLabel);
+// an explicit tag here always wins, since it's a real fact about the
+// bullet the profile owner or an import already knows, not a guess.
+export type BulletCategory = "consulting_engagement" | "ai_build";
+
 export type ExperienceEntry = {
   id: string;
   company: string;
@@ -14,6 +22,11 @@ export type ExperienceEntry = {
   // e.g. a placeholder/empty stint the candidate never wants on a resume,
   // without deleting the underlying record. Optional; defaults to shown.
   excludeFromResume?: boolean;
+  // Per-bullet category, keyed by the bullet's own exact text (same string
+  // that appears verbatim in `bullets` above, and the same string
+  // lib/profile-bullets.ts hashes into a stable id) — a bullet not present
+  // here has no explicit tag and falls back to the renderer's heuristic.
+  bulletTags?: Record<string, BulletCategory>;
 };
 
 export type EducationEntry = {

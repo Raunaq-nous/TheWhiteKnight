@@ -8,7 +8,8 @@
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
-    "mcp:dev": "tsx --tsconfig mcp/tsconfig.json mcp/server.ts"
+    "mcp:dev": "tsx --tsconfig mcp/tsconfig.json mcp/server.ts",
+    "import:master-profile": "tsx scripts/import-master-profile.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

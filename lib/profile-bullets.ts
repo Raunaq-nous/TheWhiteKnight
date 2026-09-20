@@ -8,7 +8,7 @@
 // text changes, which is the correct behavior: an edited bullet is, for
 // selection purposes, a new bullet.
 
-import { Profile } from "./profile";
+import { Profile, BulletCategory } from "./profile";
 
 export type ProfileBulletSourceType = "experience" | "project";
 
@@ -22,6 +22,11 @@ export type ProfileBulletRef = {
   sourceId: string;
   sourceLabel: string;
   text: string;
+  // Explicit category from the source ExperienceEntry.bulletTags, when set
+  // (experience bullets only — projects have no equivalent concept).
+  // Threaded through resolveResumeSelections onto the final ResumeBullet so
+  // the renderer can group by it instead of guessing from bullet text.
+  category?: BulletCategory;
 };
 
 // djb2 — small, deterministic, no crypto dependency needed (this runs
@@ -57,6 +62,7 @@ export function listProfileBullets(profile: Profile): ProfileBulletRef[] {
         sourceId: e.company,
         sourceLabel: `${e.company} — ${e.role}`,
         text,
+        category: e.bulletTags?.[text],
       });
     }
   }

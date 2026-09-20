@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildDocxPlan, generateResumeDocxBuffer, selectDocxFormat,
   TWO_PAGE_SENIOR_CONSULTING_FORMAT, ONE_PAGE_DENSE_FORMAT,
-  classifyExperienceBulletLabel, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL,
+  classifyExperienceBulletLabel, resolveExperienceBulletLabel, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL,
 } from "../resume-docx";
 import type { ResumeContent } from "../resume-schema";
 
@@ -188,6 +188,20 @@ describe("experience sub-labels (consulting archetype only) — spec Part 8/9", 
   it("classifies an engagement/study/case bullet as a consulting engagement", () => {
     expect(classifyExperienceBulletLabel("Led a concept selection study for a national oil and gas company.")).toBe(CONSULTING_ENGAGEMENTS_LABEL);
     expect(classifyExperienceBulletLabel("Drove performance improvement on a utility-scale solar asset.")).toBe(CONSULTING_ENGAGEMENTS_LABEL);
+  });
+
+  it("resolveExperienceBulletLabel: an explicit category always wins over the text heuristic", () => {
+    // Text alone would heuristically read as a consulting engagement (no
+    // AI_BUILD_PATTERN keyword at all) — the explicit tag overrides that.
+    expect(resolveExperienceBulletLabel({ sourceBulletId: "x", text: "Led a client workshop series.", priority: 1, category: "ai_build" })).toBe(AI_BUILDS_LABEL);
+    // And the reverse: text alone would heuristically read as an AI build
+    // ("platform"), but an explicit consulting_engagement tag overrides it.
+    expect(resolveExperienceBulletLabel({ sourceBulletId: "y", text: "Advised on a platform migration roadmap.", priority: 1, category: "consulting_engagement" })).toBe(CONSULTING_ENGAGEMENTS_LABEL);
+  });
+
+  it("resolveExperienceBulletLabel falls back to the text heuristic when no explicit category is set", () => {
+    expect(resolveExperienceBulletLabel({ sourceBulletId: "z", text: "Built an AI-first platform for document intelligence.", priority: 1 })).toBe(AI_BUILDS_LABEL);
+    expect(resolveExperienceBulletLabel({ sourceBulletId: "w", text: "Led a concept selection study for a national oil and gas company.", priority: 1, category: null })).toBe(CONSULTING_ENGAGEMENTS_LABEL);
   });
 
   it("groups a consulting archetype's bullets under both sub-labels, consulting engagements first", () => {

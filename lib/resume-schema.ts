@@ -38,6 +38,13 @@ export const ResumeBulletSchema = z.object({
   // 1 = most relevant to this JD / keep at all costs. Higher = cut first when
   // the rendered page overflows. The model ranks these; the fit loop trims them.
   priority: z.number().int().min(1),
+  // Same contract as "text" above: not trusted from the model. Always
+  // overwritten server-side in lib/resume-selection.ts from the source
+  // profile bullet's own ExperienceEntry.bulletTags, when set — lets the
+  // "consulting" archetype's renderer group experience bullets under
+  // CONSULTING ENGAGEMENTS / AI BUILDS AND PROCESS REINVENTION without
+  // guessing from the bullet's text (see lib/resume-docx.ts).
+  category: z.enum(["consulting_engagement", "ai_build"]).nullable().optional(),
 });
 
 // NOTE ON .nullable().optional(): every optional field below is marked both

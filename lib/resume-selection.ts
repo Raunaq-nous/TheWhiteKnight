@@ -53,7 +53,9 @@ export function resolveResumeSelections(raw: ResumeContent, profile: Profile): R
       bullets: e.bullets
         .map((b): ResumeBullet | null => {
           const text = resolveBulletText(b.sourceBulletId, index, ONE_PAGE_BUDGET.bulletMaxChars);
-          return text ? { sourceBulletId: b.sourceBulletId, text, priority: b.priority } : null;
+          if (!text) return null;
+          const ref = b.sourceBulletId ? index.get(b.sourceBulletId) : undefined;
+          return { sourceBulletId: b.sourceBulletId, text, priority: b.priority, category: ref?.category ?? null };
         })
         .filter((b): b is ResumeBullet => b !== null),
     }))

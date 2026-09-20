@@ -109,6 +109,27 @@ describe("listProfileBullets", () => {
       expect(index.get(b.id)).toEqual(b);
     }
   });
+
+  it("carries an explicit bulletTags category onto the matching bullet's ref", () => {
+    const aiText = "Built an internal reporting tool that cut manual review time.";
+    const engagementText = "Led capital project reviews";
+    const profile = baseProfile({
+      experience: [{
+        id: "bain-1", company: "Bain & Company", role: "Consultant", tenure: "2020 - Present",
+        location: "Gurgaon", current: true,
+        bullets: `${engagementText}\n${aiText}`,
+        bulletTags: { [aiText]: "ai_build", [engagementText]: "consulting_engagement" },
+      }],
+    });
+    const bullets = listProfileBullets(profile);
+    expect(bullets.find(b => b.text === aiText)?.category).toBe("ai_build");
+    expect(bullets.find(b => b.text === engagementText)?.category).toBe("consulting_engagement");
+  });
+
+  it("leaves category undefined for a bullet with no explicit tag", () => {
+    const bullets = listProfileBullets(baseProfile());
+    expect(bullets.every(b => b.category === undefined)).toBe(true);
+  });
 });
 
 describe("renderAvailableBulletsBlock", () => {

@@ -28,7 +28,7 @@
 import {
   AlignmentType, BorderStyle, Document, ExternalHyperlink, LineRuleType, Packer, Paragraph, TabStopType, TextRun,
 } from "docx";
-import { ResumeContent, resolveSectionSequence, ResumeSectionKey, formatDegreeLine } from "./resume-schema";
+import { ResumeContent, ResumeBullet, resolveSectionSequence, ResumeSectionKey, formatDegreeLine } from "./resume-schema";
 import { ResumeArchetype } from "./resume-archetype";
 import { computeBoldSpans, splitTextByBoldSpans } from "./resume-bolding";
 
@@ -146,6 +146,19 @@ export function classifyExperienceBulletLabel(text: string): typeof CONSULTING_E
   return AI_BUILD_PATTERN.test(text) ? AI_BUILDS_LABEL : CONSULTING_ENGAGEMENTS_LABEL;
 }
 
+/**
+ * An explicit ResumeBullet.category (sourced from the profile's own
+ * ExperienceEntry.bulletTags — see lib/resume-selection.ts) always wins
+ * over the keyword heuristic above: it's a real fact already known about
+ * the bullet, not a guess. Only bullets with no explicit tag fall back to
+ * classifyExperienceBulletLabel.
+ */
+export function resolveExperienceBulletLabel(bullet: ResumeBullet): typeof CONSULTING_ENGAGEMENTS_LABEL | typeof AI_BUILDS_LABEL {
+  if (bullet.category === "ai_build") return AI_BUILDS_LABEL;
+  if (bullet.category === "consulting_engagement") return CONSULTING_ENGAGEMENTS_LABEL;
+  return classifyExperienceBulletLabel(bullet.text);
+}
+
 export type DocxPlanNode =
   | { kind: "header"; name: string; contactLine: string; links: { label: string; url: string }[] }
   | { kind: "sectionHeading"; heading: string }
@@ -220,8 +233,8 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
         // spec's fixed section-structure order — but each band only
         // appears when the role actually has a bullet in it (a role with
         // no AI-build bullets never gets an empty "AI BUILDS" heading).
-        const consultingBullets = sorted.filter(b => classifyExperienceBulletLabel(b.text) === CONSULTING_ENGAGEMENTS_LABEL);
-        const aiBullets = sorted.filter(b => classifyExperienceBulletLabel(b.text) === AI_BUILDS_LABEL);
+        const consultingBullets = sorted.filter(b => resolveExperienceBulletLabel(b) === CONSULTING_ENGAGEMENTS_LABEL);
+        const aiBullets = sorted.filter(b => resolveExperienceBulletLabel(b) === AI_BUILDS_LABEL);
         if (consultingBullets.length > 0) {
           plan.push({ kind: "subLabel", text: CONSULTING_ENGAGEMENTS_LABEL });
           for (const b of consultingBullets) plan.push({ kind: "bullet", text: b.text });
