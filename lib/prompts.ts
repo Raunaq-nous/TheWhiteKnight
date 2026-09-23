@@ -299,7 +299,7 @@ BULLET SELECTION FORMULA — every bullet you pick, no exceptions, and THIS IS T
 - The FIRST bullet id under the most relevant/most recent role is the single most-read line on the page. It must always be the single strongest quantified result available anywhere in the profile relevant to THIS JD — priority 1, always.
 
 EXPERIENCE INCLUSION RULES:
-- There are ${expCount} experience entries in the profile, already ranked above by relevance to this JD. Show at most ${budget.experienceMaxRoles} roles — select ids for all of them if you want, but budget your best effort on the strongest ${budget.experienceMaxRoles}.${expCount > budget.experienceMaxRoles ? (isTwoPage ? ` A role beyond that is never dropped entirely — it still renders, compressed to its single strongest bullet, so spend your effort on the top ${budget.experienceMaxRoles}.` : ` A weaker ${budget.experienceMaxRoles + 1}th+ role may be dropped entirely by the automatic clamp, so spend your effort on the top ${budget.experienceMaxRoles}, not evenly across all of them.`) : ""}
+- There are ${expCount} experience entries in the profile, already ranked above by relevance to this JD. Show at most ${budget.experienceMaxRoles} roles — select ids for all of them if you want, but budget your best effort on the strongest ${budget.experienceMaxRoles}.${expCount > budget.experienceMaxRoles ? ` Every employer still renders: a role beyond the top ${budget.experienceMaxRoles} is compressed to its single strongest bullet, never dropped, so still select at least one id for it.` : ""}
 - Within a shown role, MUST NOT drop it to zero bullets — select its 2-${budget.bulletsPerRoleMax} strongest ids instead.
 - Preserve the exact company name and tenure for every entry you include.
 

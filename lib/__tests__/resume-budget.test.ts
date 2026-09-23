@@ -375,16 +375,15 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     }
   });
 
-  it("drops the weakest roles entirely once there are more than experienceMaxRoles (BUG D) — never more than the cap survive", () => {
+  it("never drops a role at 1 page either: roles beyond experienceMaxRoles are compressed to one bullet", () => {
     const content = richConsultingContent(); // 6 entries, distinct priority bands
     const clamped = clampToOnePageBudget(content, "consulting");
-    expect(clamped.experience.length).toBeLessThanOrEqual(ONE_PAGE_BUDGET.experienceMaxRoles);
-    expect(clamped.experience.length).toBe(4);
-    // The 2 lowest-relevance roles (highest priority bands) are gone entirely.
+    expect(clamped.experience).toHaveLength(6);
     const companies = clamped.experience.map(e => e.company);
-    expect(companies).toContain("Company 0");
-    expect(companies).not.toContain("Company 4");
-    expect(companies).not.toContain("Company 5");
+    for (let i = 0; i < 6; i++) expect(companies).toContain(`Company ${i}`);
+    // The 2 lowest-relevance roles (highest priority bands) survive at one bullet each.
+    expect(clamped.experience.find(e => e.company === "Company 4")!.bullets).toHaveLength(1);
+    expect(clamped.experience.find(e => e.company === "Company 5")!.bullets).toHaveLength(1);
   });
 
   it("does not drop any role when there are experienceMaxRoles or fewer to begin with", () => {
@@ -840,15 +839,15 @@ describe("capRolesByRelevance via clampToOnePageBudget(maxPages: 2) — no role 
     expect(weakest.bullets.length).toBe(1);
   });
 
-  it("at maxPages 1, still drops roles beyond ONE_PAGE_BUDGET.experienceMaxRoles entirely (unchanged 1-page behavior)", () => {
+  it("at maxPages 1, also renders every employer, compressing roles beyond ONE_PAGE_BUDGET.experienceMaxRoles to 1 bullet", () => {
     const roleCount = ONE_PAGE_BUDGET.experienceMaxRoles + 2;
     const content = richConsultingContent({
       experience: Array.from({ length: roleCount }, (_, i) => roleWithBullets(`Employer ${i}`, (i + 1) * 10)),
     });
     const clamped = clampToOnePageBudget(content, "consulting", 1);
-    expect(clamped.experience.length).toBeLessThanOrEqual(ONE_PAGE_BUDGET.experienceMaxRoles);
-    const companies = clamped.experience.map(e => e.company);
-    expect(companies).not.toContain(`Employer ${roleCount - 1}`);
+    expect(clamped.experience).toHaveLength(roleCount);
+    for (let i = 0; i < roleCount; i++) expect(clamped.experience.map(e => e.company)).toContain(`Employer ${i}`);
+    expect(clamped.experience.find(e => e.company === `Employer ${roleCount - 1}`)!.bullets).toHaveLength(1);
   });
 
   it("preserves original role order when degrading overflow roles at maxPages 2 (not reordered to the end)", () => {
