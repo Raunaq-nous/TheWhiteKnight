@@ -33,7 +33,7 @@
     "ai_product": 2,
     "product": 2,
     "ai_ml_engineering": 2,
-    "startup": 1,
+    "startup": 2,
     "vc_investing": 2
   },
   "sideBuildsAllowed": ["ai_product", "startup", "vc_investing"],

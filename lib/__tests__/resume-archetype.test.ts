@@ -419,6 +419,13 @@ describe("resolveConfiguredMaxPages — config wins over the generic engine defa
     expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Venture Capital Associate" }), "vc_investing")).toBe(2);
   });
 
+  it("gives a 10-year candidate 2 pages at a startup too (page count follows experience, not company stage)", () => {
+    const tenYears = baseProfile({ yearsOfExperience: "10" });
+    const startupApp = baseApp({ role: "Founding Product Manager", company: "Seed-stage startup" });
+    expect(resolveConfiguredMaxPages(tenYears, startupApp, "product")).toBe(2);
+    expect(resolveConfiguredMaxPages(baseProfile({ yearsOfExperience: "3" }), startupApp, "product")).toBe(1);
+  });
+
   it("keeps MBB consulting at 1 page even for a 10-year candidate", () => {
     const profile = baseProfile({ yearsOfExperience: "10" });
     expect(resolveConfiguredMaxPages(profile, baseApp({ company: "McKinsey & Company" }), "consulting")).toBe(1);
