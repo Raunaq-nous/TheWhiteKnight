@@ -32,8 +32,29 @@ function baseProfile(overrides: Partial<Profile> = {}): Profile {
 
 describe("normalizeName / namesMatch", () => {
   it("strips corporate suffixes and punctuation", () => {
-    expect(normalizeName("Bain & Company")).toBe("bain company");
+    expect(normalizeName("Bain & Company")).toBe("bain");
     expect(normalizeName("Acme Inc.")).toBe("acme");
+  });
+
+  it("treats '&' and 'and', and 'Co.' and 'Company', as equivalent, ignoring case and punctuation", () => {
+    expect(namesMatch("Bain & Company", "Bain and Company")).toBe(true);
+    expect(namesMatch("Bain & Co.", "Bain and Company")).toBe(true);
+    expect(namesMatch("BAIN AND COMPANY", "bain & company")).toBe(true);
+    expect(namesMatch("Johnson & Johnson", "Johnson and Johnson")).toBe(true);
+    expect(namesMatch("Bain & Company", "Aranca")).toBe(false);
+  });
+
+  it("an import into a profile holding 'Bain & Company' enriches that entry instead of adding a second Bain role", () => {
+    const profile = baseProfile({
+      experience: [{ id: "b", company: "Bain & Company", role: "Consultant", tenure: "2025 - Present", location: "Gurgaon", current: true, bullets: "Legacy bullet." }],
+    });
+    const diff = diffExtractionAgainstProfile(
+      { experience: [{ company: "Bain and Company", role: "Project Leader", tenure: "Jun 2025 - Present", bullets: ["Built a portfolio and project intelligence cockpit, cutting manual review effort by 80%."] }] },
+      profile,
+    );
+    expect(diff).toHaveLength(1);
+    expect(diff[0].action).toBe("enrich");
+    expect(applyMergeDiffItem(profile, diff[0]).experience).toHaveLength(1);
   });
 
   it("matches exact, substring-contains, and suffix variants", () => {
