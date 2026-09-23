@@ -85,6 +85,23 @@ describe("fetchJdText", () => {
     }
   });
 
+  it("extracts the role from a direct LinkedIn fetch where the title line lives in <title>, followed directly by an <h1> (real page shape, no ld+json)", async () => {
+    const html =
+      `<html><head><meta charset="utf-8"><title>Accenture in India hiring S&amp;C GN - TS&amp;T –Enterprise AI Value Strategy - Manager in Pune, Maharashtra, India | LinkedIn</title><meta name="description" content="x"></head>` +
+      `<body><h1 class="top-card-layout__title">S&amp;C GN - TS&amp;T –Enterprise AI Value Strategy - Manager</h1>` +
+      `<div>${"Full JD body text here. ".repeat(10)}</div></body></html>`;
+    fetchMock.mockResolvedValue({ ok: true, text: async () => html });
+
+    const result = await fetchJdText("https://in.linkedin.com/jobs/view/123");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.source).toBe("direct");
+      expect(result.role).toBe("S&C GN - TS&T –Enterprise AI Value Strategy - Manager");
+      expect(result.company).toBe("Accenture in India");
+      expect(result.location).toBe("Pune, Maharashtra, India");
+    }
+  });
+
   it("falls back to text-metadata extraction on a direct LinkedIn fetch with no ld+json block", async () => {
     const html = "<div>Accenture in India hiring S&C GN Manager in Pune, India | LinkedIn</div><div>" + "Full JD body text here. ".repeat(10) + "</div>";
     fetchMock.mockResolvedValue({ ok: true, text: async () => html });
