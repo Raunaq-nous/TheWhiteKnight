@@ -37,12 +37,8 @@ export type AuditedBullet = {
   superseded: boolean;
 };
 
-// "&" and "and" are the same employer here. lib/profile-merge.ts's namesMatch
-// does NOT treat them as equal, which is how an import can create a second
-// entry for an employer that already exists ("Bain & Company" vs "Bain and
-// Company"); the audit must see through that to compare the two.
 export function sameEmployer(a: string, b: string): boolean {
-  return namesMatch(a.replace(/&/g, " and "), b.replace(/&/g, " and "));
+  return namesMatch(a, b);
 }
 
 function importedTextsFor(company: string): string[] {

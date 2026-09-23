@@ -47,12 +47,19 @@ export type MergeDiffItem = {
 // normalizeCompany/companyMatches, generalized for any entity name).
 // ---------------------------------------------------------------------------
 
+// "&" and "and" are the same word, and legal-form suffixes (Company, Co.,
+// Inc., Ltd, ...) are dropped, so "Bain & Company", "Bain and Company" and
+// "Bain & Co." all normalize to "bain". Without this an import created a
+// second employer entry for an employer the profile already had.
 export function normalizeName(s: string): string {
   return s
     .toLowerCase()
-    .replace(/\binc\.?\b|\bllc\.?\b|\bltd\.?\b|\bcorp\.?\b|\bco\.?\b|\bplc\.?\b|\bgroup\b/g, "")
+    .replace(/&/g, " and ")
     .replace(/[^a-z0-9]/g, " ")
+    .replace(/\b(inc|llc|ltd|limited|corp|corporation|co|company|plc|group)\b/g, " ")
     .replace(/\s+/g, " ")
+    .trim()
+    .replace(/(^|\s)and$/, "")
     .trim();
 }
 
