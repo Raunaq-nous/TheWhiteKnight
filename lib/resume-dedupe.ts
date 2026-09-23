@@ -61,13 +61,17 @@ const ENGAGEMENT_OVERLAP_THRESHOLD = 0.5;
 const MIN_TOKENS_FOR_CONTAINMENT = 3;
 
 export function sameEngagement(a: string, b: string, threshold: number = ENGAGEMENT_OVERLAP_THRESHOLD): boolean {
+  return engagementContainment(a, b) >= threshold;
+}
+
+/** The raw containment ratio behind sameEngagement (0 when either side is below the token floor). */
+export function engagementContainment(a: string, b: string): number {
   const ta = engagementTokens(a);
   const tb = engagementTokens(b);
-  if (Math.min(ta.size, tb.size) < MIN_TOKENS_FOR_CONTAINMENT) return false;
+  if (Math.min(ta.size, tb.size) < MIN_TOKENS_FOR_CONTAINMENT) return 0;
   let intersection = 0;
   for (const t of ta) if (tb.has(t)) intersection++;
-  const containment = intersection / Math.min(ta.size, tb.size);
-  return containment >= threshold;
+  return intersection / Math.min(ta.size, tb.size);
 }
 
 /**
