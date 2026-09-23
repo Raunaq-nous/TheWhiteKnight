@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clampToOnePageBudget, clampText, clampBulletText, clampBulletPreservingOutcome, estimateResumeLineCount,
   MAX_LINES_PER_PAGE, ONE_PAGE_BUDGET, TWO_PAGE_BUDGET, budgetForMaxPages, compressOlderRoles,
-  enforceMinBulletsPerRole, capTopBandPerCompany,
+  enforceMinBulletsPerRole, capTopBandPerCompany, splitOutcomeClause,
 } from "../resume-budget";
 import type { ResumeContent } from "../resume-schema";
 
@@ -755,5 +755,110 @@ describe("compressOlderRoles — detail only the last 10-15 years, compress olde
     const old = clamped.experience.find(e => e.company.includes("20y ago"));
     expect(old).toBeDefined();
     expect(old!.bullets.length).toBe(1);
+  });
+});
+
+describe("clause-cutting never lands mid-enumeration (real reported bug) — \"across financial,\" -> jump", () => {
+  // The exact reported broken output was: "designed AI-augmented evaluation
+  // framework across financial, structured C-suite decision document
+  // enabling investment commitment on a previously non-feasible project." —
+  // a cut that landed INSIDE a 3-item serial list ("financial, technical,
+  // and regulatory criteria"), keeping "financial," and silently dropping
+  // "technical, and regulatory criteria and authoring the" before resuming
+  // mid-sentence. This bullet reproduces the same 3-item-list shape with
+  // the same profile-sourced wording that actually triggered it.
+  const bullet = "Led a concept selection study for a national oil and gas company in South America on a stalled upstream asset, building the evaluation framework across financial, technical, and regulatory criteria and authoring the C-suite decision document that unlocked investment on a previously non-feasible project.";
+
+  it("never cuts inside the \"financial, technical, and regulatory\" list — either the whole list survives together or the bullet is dropped", () => {
+    for (const maxChars of [300, 240, 220, 200, 190, 180, 160, 140, 120, 100, 80, 60, 40, 20]) {
+      const result = clampBulletPreservingOutcome(bullet, maxChars);
+      if (result === null) continue; // dropping rather than emitting a broken fragment is an acceptable outcome
+      const hasFinancial = result.includes("financial");
+      const hasTechnical = result.includes("technical");
+      const hasRegulatory = result.includes("regulatory");
+      // All three list items present together, or none of them at all —
+      // never a subset (the exact "kept financial, dropped technical/
+      // regulatory" shape the reported bug produced).
+      expect([hasFinancial, hasTechnical, hasRegulatory].every(Boolean) || [hasFinancial, hasTechnical, hasRegulatory].every(v => !v)).toBe(true);
+    }
+  });
+
+  it("never produces a result starting on a dangling conjunction (\"and regulatory criteria...\")", () => {
+    for (const maxChars of [300, 240, 200, 180, 160, 140, 120, 100, 80, 60, 40, 20]) {
+      const result = clampBulletPreservingOutcome(bullet, maxChars);
+      if (result === null) continue;
+      expect(/^(and|or|but|nor|so|yet)\b/i.test(result)).toBe(false);
+    }
+  });
+
+  it("at a moderate budget, keeps the full list together as the outcome rather than truncating it", () => {
+    const result = clampBulletPreservingOutcome(bullet, 220);
+    expect(result).toBe("building the evaluation framework across financial, technical, and regulatory criteria and authoring the C-suite decision document that unlocked investment on a previously non-feasible project.");
+  });
+
+  it("drops the bullet entirely when even the full list-preserving outcome cannot fit — never a broken fragment", () => {
+    expect(clampBulletPreservingOutcome(bullet, 100)).toBeNull();
+  });
+});
+
+describe("splitOutcomeClause — the outcome clause never opens on a dangling conjunction", () => {
+  it("absorbs a preceding clause rather than returning an outcome starting with \"and\"", () => {
+    const { outcome } = splitOutcomeClause(
+      "Led a concept selection study for a national oil and gas company in South America on a stalled upstream asset, building the evaluation framework across financial, technical, and regulatory criteria and authoring the C-suite decision document that unlocked investment on a previously non-feasible project.",
+    );
+    expect(/^(and|or|but|nor|so|yet)\b/i.test(outcome)).toBe(false);
+  });
+
+  it("still finds a normal outcome clause when there is no list/conjunction hazard", () => {
+    const { setup, outcome } = splitOutcomeClause("Led the deal team, closing a $10 billion acquisition.");
+    expect(setup).toBe("Led the deal team");
+    expect(outcome).toBe("closing a $10 billion acquisition");
+  });
+});
+
+describe("capRolesByRelevance via clampToOnePageBudget(maxPages: 2) — no role is ever silently dropped (BUG: budget must scale with maxPages)", () => {
+  function roleWithBullets(company: string, priorityBase: number, bulletCount = 3) {
+    return {
+      company, role: "Consultant", tenure: "2020 - Present", location: "",
+      bullets: Array.from({ length: bulletCount }, (_, i) => makeBullet(`${company} bullet ${i}: delivered a $${priorityBase}0 million program.`, priorityBase + i)),
+    };
+  }
+
+  it("renders every employer at maxPages 2, even beyond TWO_PAGE_BUDGET.experienceMaxRoles, compressed to 1 bullet rather than dropped", () => {
+    const roleCount = TWO_PAGE_BUDGET.experienceMaxRoles + 2;
+    const content = richConsultingContent({
+      experience: Array.from({ length: roleCount }, (_, i) => roleWithBullets(`Employer ${i}`, (i + 1) * 10)),
+    });
+    const clamped = clampToOnePageBudget(content, "consulting", 2);
+    expect(clamped.experience).toHaveLength(roleCount);
+    const companies = clamped.experience.map(e => e.company);
+    for (let i = 0; i < roleCount; i++) expect(companies).toContain(`Employer ${i}`);
+    // The overflow (lowest-relevance) roles are compressed to a single
+    // bullet, not dropped — the weakest role (highest priority numbers)
+    // is guaranteed to be among the overflow set.
+    const weakest = clamped.experience.find(e => e.company === `Employer ${roleCount - 1}`)!;
+    expect(weakest.bullets.length).toBe(1);
+  });
+
+  it("at maxPages 1, still drops roles beyond ONE_PAGE_BUDGET.experienceMaxRoles entirely (unchanged 1-page behavior)", () => {
+    const roleCount = ONE_PAGE_BUDGET.experienceMaxRoles + 2;
+    const content = richConsultingContent({
+      experience: Array.from({ length: roleCount }, (_, i) => roleWithBullets(`Employer ${i}`, (i + 1) * 10)),
+    });
+    const clamped = clampToOnePageBudget(content, "consulting", 1);
+    expect(clamped.experience.length).toBeLessThanOrEqual(ONE_PAGE_BUDGET.experienceMaxRoles);
+    const companies = clamped.experience.map(e => e.company);
+    expect(companies).not.toContain(`Employer ${roleCount - 1}`);
+  });
+
+  it("preserves original role order when degrading overflow roles at maxPages 2 (not reordered to the end)", () => {
+    const roleCount = TWO_PAGE_BUDGET.experienceMaxRoles + 1;
+    const content = richConsultingContent({
+      experience: Array.from({ length: roleCount }, (_, i) => roleWithBullets(`Employer ${i}`, (i + 1) * 10)),
+    });
+    const clamped = clampToOnePageBudget(content, "consulting", 2);
+    expect(clamped.experience.map(e => e.company)).toEqual(
+      Array.from({ length: roleCount }, (_, i) => `Employer ${i}`),
+    );
   });
 });

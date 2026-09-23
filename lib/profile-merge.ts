@@ -4,6 +4,7 @@
 // here, not in the model — this is what's actually testable and reliable.
 
 import { Profile, ExperienceEntry, EducationEntry, ProjectEntry, Publication, Certification } from "./profile";
+import { sameEngagement } from "./resume-dedupe";
 
 export type CandidateExperience = { company: string; role: string; tenure: string; location?: string | null; bullets: string[] };
 export type CandidateEducation = { institution: string; degree: string; field?: string | null; years: string; gpa?: string | null; achievements?: string[] | null };
@@ -91,8 +92,24 @@ export function splitBullets(s: string): string[] {
   return s.split("\n").map(b => b.trim()).filter(Boolean);
 }
 
+/**
+ * Two checks, deliberately kept independent (either one alone catches a
+ * real duplicate the other misses):
+ *   - textSimilarity (Jaccard, union-based) — catches close paraphrases
+ *     where both sides are a similar length.
+ *   - sameEngagement (containment, from lib/resume-dedupe.ts) — catches
+ *     the SAME underlying engagement described at very different lengths
+ *     or in very different wording (e.g. a terse existing bullet and a
+ *     fuller imported one about the same deal), which Jaccard's
+ *     union-based ratio systematically under-scores. This is what the
+ *     master-profile import's real, reported "EMEA B2B Series A shows up
+ *     twice, phrased differently" duplicate needed — Jaccard alone missed
+ *     it because the two phrasings shared too few words relative to their
+ *     combined vocabulary, even though one is a near-total subset of the
+ *     other's distinctive nouns.
+ */
 export function isNewBullet(candidate: string, existingBullets: string[]): boolean {
-  return !existingBullets.some(b => textSimilarity(b, candidate) >= BULLET_DUPLICATE_THRESHOLD);
+  return !existingBullets.some(b => textSimilarity(b, candidate) >= BULLET_DUPLICATE_THRESHOLD || sameEngagement(b, candidate));
 }
 
 let idCounter = 0;

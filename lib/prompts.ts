@@ -5,7 +5,7 @@ import { ResumeContent } from "./resume-schema";
 import { BulletCandidate } from "./profile-bullet-quality";
 import { computeBulletRelevanceHints, renderRelevanceHintsBlock, rankProfileForResume } from "./resume-bullet-relevance";
 import { renderAvailableBulletsBlock } from "./profile-bullets";
-import { budgetForMaxPages } from "./resume-budget";
+import { budgetForMaxPages, ResumeBudget } from "./resume-budget";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -195,7 +195,7 @@ STYLE RULES:
 - Banned: "passionate about", "results-oriented", "proven track record", "leveraged", "spearheaded", "facilitated", "synergies", "cutting-edge", "innovative solutions", "self-starter".
 - Vary verbs. Do not start two consecutive bullets with the same word.`;
 
-function resumeOutputFormatInstructions(): string {
+function resumeOutputFormatInstructions(budget: ResumeBudget): string {
   return `OUTPUT — a single JSON object, nothing before or after, matching exactly this shape:
 {
   "name": string,
@@ -204,10 +204,10 @@ function resumeOutputFormatInstructions(): string {
   "summary": string (the ONLY field you write freely — everything else below is selected by id, see SELECTION, NOT WRITING),
   "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),
   "subFocus": string (the specific sub-focus/practice-area of THIS role within its archetype, from your Step 1 analysis — 1 short phrase, e.g. "Capital Excellence: capital project delivery, cost/schedule optimization"),
-  "keyWinIds": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; ids from AVAILABLE BULLETS, most relevant first, exactly 3-4 combined with "projects" below),
+  "keyWinIds": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; ids from AVAILABLE BULLETS, most relevant first, up to ${budget.keyImpactMaxItems} combined with "projects" below),
   "keyWins": [] (leave as an empty array — the system fills this in from keyWinIds; do not write text here),
   "sectionOrder": "education-first" | "experience-first",
-  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "sourceBulletId": string, "text": "", "priority": number } ] } ] (2-3 bullets per entry, one per distinct engagement — see SELECTION, NOT WRITING, ONE-PAGE CONTENT BUDGET, and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "sourceBulletId": string, "text": "", "priority": number } ] } ] (2-${budget.bulletsPerRoleMax} bullets per entry, one per distinct engagement — see SELECTION, NOT WRITING, the CONTENT BUDGET section below, and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
   "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
   "skills": [ { "category": string, "items": string[] } ],
   "projects": [ { "sourceBulletId": string, "name": "", "description": "", "repoUrl": null } ] (optional, omit key entirely if not used — name/description/repoUrl are filled in by the system from sourceBulletId, leave them empty)
@@ -287,7 +287,7 @@ ${isTwoPage ? "TWO-PAGE CONTENT BUDGET" : "ONE-PAGE CONTENT BUDGET"} — this re
 - Education: one line per entry (institution/degree/years), no achievements bullets.
 
 THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES — read this literally, it is a common failure mode: a profile experience entry is a JOB, not a single project. Its bullet ids frequently describe MULTIPLE DISTINCT ENGAGEMENTS — separate clients, separate deals, separate initiatives done during that one role. When that's true:
-- Select 2-3 SEPARATE bullet ids under that entry, each covering ONE distinct engagement. NEVER select a single generic "summary of the role" bullet when the entry's real bullets name distinct engagements — pick the actual distinct-engagement ids instead.
+- Select 2-${budget.bulletsPerRoleMax} SEPARATE bullet ids under that entry, each covering ONE distinct engagement. NEVER select a single generic "summary of the role" bullet when the entry's real bullets name distinct engagements — pick the actual distinct-engagement ids instead.
 - Select WHICH engagement ids to surface by relevance to THIS job's target priorities — the most JD-relevant role can carry more bullets than a barely-relevant older role.
 - The ids under each entry in AVAILABLE BULLETS are already deterministically pre-ranked by relevance to this JD (most relevant first, per entry) — see DETERMINISTIC RELEVANCE RANKING above. Pick from the top of that ranking, then apply the SUB-FOCUS lens to refine the choice; do not ignore the ranking and pick arbitrarily.
 - Direct delivery beats tool-building when both are plausible picks: if two ids from the same entry could both fill a slot, prefer the one where the candidate directly did the JD's core work over one that describes building a tool or platform that merely touches similar topics.
@@ -299,8 +299,8 @@ BULLET SELECTION FORMULA — every bullet you pick, no exceptions, and THIS IS T
 - The FIRST bullet id under the most relevant/most recent role is the single most-read line on the page. It must always be the single strongest quantified result available anywhere in the profile relevant to THIS JD — priority 1, always.
 
 EXPERIENCE INCLUSION RULES:
-- There are ${expCount} experience entries in the profile, already ranked above by relevance to this JD. Show at most 4 roles — select ids for all of them if you want, but budget your best effort on the strongest 4, since a weaker 5th+ role may be dropped entirely by the automatic one-page clamp.
-- Within a shown role, MUST NOT drop it to zero bullets — select its 2-3 strongest ids instead.
+- There are ${expCount} experience entries in the profile, already ranked above by relevance to this JD. Show at most ${budget.experienceMaxRoles} roles — select ids for all of them if you want, but budget your best effort on the strongest ${budget.experienceMaxRoles}.${expCount > budget.experienceMaxRoles ? (isTwoPage ? ` A role beyond that is never dropped entirely — it still renders, compressed to its single strongest bullet, so spend your effort on the top ${budget.experienceMaxRoles}.` : ` A weaker ${budget.experienceMaxRoles + 1}th+ role may be dropped entirely by the automatic clamp, so spend your effort on the top ${budget.experienceMaxRoles}, not evenly across all of them.`) : ""}
+- Within a shown role, MUST NOT drop it to zero bullets — select its 2-${budget.bulletsPerRoleMax} strongest ids instead.
 - Preserve the exact company name and tenure for every entry you include.
 
 NO REPETITION — pick each engagement's id for exactly ONE slot: if you select a bullet id (or a project id) for "keyWinIds", do not also select that SAME id for an experience entry's bullets, and vice versa. A deterministic server-side check also enforces this as an exact-id backstop, but do not rely on it — since ids are exact, this is fully in your control: just do not reuse the same id in two places.
@@ -326,8 +326,8 @@ ARCHETYPE — ${spec.label}:
 - EMPHASIZE: ${spec.emphasize}
 - OMIT: ${spec.omit}
 - CERTIFICATIONS: omit entirely — never include a certifications section, for any archetype (see the absolute CERTIFICATIONS rule above).
-${spec.sectionSequence.includes("selectedImpact") ? '- KEY PROJECTS & IMPACT — MANDATORY, this is not optional for this archetype, and it renders as a HIGHLIGHTED block immediately after the summary, before experience. Populate "keyWinIds" (ids of the highest-impact bullets pulled from across ALL experience entries, not just the current role) and "projects" (sourceBulletId of ONLY the profile projects that most directly match THIS role\'s sub-focus) — they render together under ONE combined heading, never as two separate sections. 3-4 ids TOTAL across both combined, most relevant first, preferring ids with a real number. This is the most relevant material for THIS specific JD, selected from the full profile — not an afterthought. Do not leave "keyWinIds" empty when the profile has quantified achievements available — look across every experience entry\'s ids for them.' : ""}
-${(!spec.sectionSequence.includes("selectedImpact") && spec.includeKeyWins) ? '- KEY WINS: populate "keyWinIds" with the 3-4 highest-impact bullet ids pulled from across ALL experience entries (not just the current role), preferring ids with a real number. These are the resume\'s headline band — pick the ids that best match THIS role\'s sub-focus, not generic ones.' : ""}
+${spec.sectionSequence.includes("selectedImpact") ? `- KEY PROJECTS & IMPACT — MANDATORY, this is not optional for this archetype, and it renders as a HIGHLIGHTED block immediately after the summary, before experience. Populate "keyWinIds" (ids of the highest-impact bullets pulled from across ALL experience entries, not just the current role) and "projects" (sourceBulletId of ONLY the profile projects that most directly match THIS role's sub-focus) — they render together under ONE combined heading, never as two separate sections. Up to ${budget.keyImpactMaxItems} ids TOTAL across both combined, most relevant first, preferring ids with a real number. This is the most relevant material for THIS specific JD, selected from the full profile — not an afterthought. Do not leave "keyWinIds" empty when the profile has quantified achievements available — look across every experience entry's ids for them.` : ""}
+${(!spec.sectionSequence.includes("selectedImpact") && spec.includeKeyWins) ? `- KEY WINS: populate "keyWinIds" with up to ${budget.keyImpactMaxItems} highest-impact bullet ids pulled from across ALL experience entries (not just the current role), preferring ids with a real number. These are the resume's headline band — pick the ids that best match THIS role's sub-focus, not generic ones.` : ""}
 ${(!spec.sectionSequence.includes("selectedImpact") && spec.sectionSequence.includes("projects")) ? '- RELEVANT PROJECTS: include a "projects" array (sourceBulletId only) with ONLY the 2-4 profile projects that most directly match THIS role\'s sub-focus, most relevant first. If no project genuinely matches, omit the key.' : ""}
 ${spec.sectionSequence.includes("leadership") ? '- LEADERSHIP & ACTIVITIES: include a "leadership" array of 2-3 bullets proving ability to mobilize/lead people — drawn only from real profile content (roles, projects, or education achievements that genuinely show this, e.g. team leadership, mentoring, extracurricular leadership). Do not invent an activity that is not in the profile; omit the key if the profile has nothing that qualifies.' : ""}
 
@@ -337,7 +337,7 @@ LINKS: put LinkedIn/Portfolio/GitHub URLs from the profile in the "links" array 
 
 SKILLS: maximum 3 categories, each with no more than 6 items. Do not pad this section.
 
-${resumeOutputFormatInstructions()}`;
+${resumeOutputFormatInstructions(budget)}`;
 }
 
 export function resumeRefinePrompt(
@@ -346,8 +346,10 @@ export function resumeRefinePrompt(
   archetype: ResumeArchetype,
   currentContent: ResumeContent,
   instruction: string,
+  maxPages: number = 1,
 ): string {
   const spec = RESUME_SPECS[archetype];
+  const budget = budgetForMaxPages(maxPages);
   const availableBulletsBlock = renderAvailableBulletsBlock(profile);
   return `You are refining a ${spec.label} resume for ${profile.name} applying to the ${app.role} role at ${app.company}.
 
@@ -384,7 +386,7 @@ RULES:
 
 ARCHETYPE reference (still applies unless the instruction overrides it): section order ${spec.sectionOrder}, summary ${spec.summaryAllowed ? "allowed" : "omitted"}, certifications: ${spec.certificationPolicy}, mandatory sections: ${spec.mandatorySections.join(", ")}, never include: ${spec.omittedSections.length > 0 ? spec.omittedSections.join(", ") : "(none)"}
 
-${resumeOutputFormatInstructions()}`;
+${resumeOutputFormatInstructions(budget)}`;
 }
 
 export function coverLetterPrompt(profile: Profile, app: Application): string {

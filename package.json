@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "mcp:dev": "tsx --tsconfig mcp/tsconfig.json mcp/server.ts",
-    "import:master-profile": "tsx scripts/import-master-profile.ts"
+    "import:master-profile": "tsx scripts/import-master-profile.ts",
+    "dedupe:profile-bullets": "tsx scripts/dedupe-profile-bullets.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

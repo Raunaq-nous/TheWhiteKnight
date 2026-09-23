@@ -405,7 +405,7 @@ BULLET SELECTION FORMULA — every bullet you pick, no exceptions, and THIS IS T
 - The FIRST bullet id under the most relevant/most recent role is the single most-read line on the page. It must always be the single strongest quantified result available anywhere in the profile relevant to THIS JD — priority 1, always.
 
 EXPERIENCE INCLUSION RULES:
-- There are 2 experience entries in the profile, already ranked above by relevance to this JD. Show at most 4 roles — select ids for all of them if you want, but budget your best effort on the strongest 4, since a weaker 5th+ role may be dropped entirely by the automatic one-page clamp.
+- There are 2 experience entries in the profile, already ranked above by relevance to this JD. Show at most 4 roles — select ids for all of them if you want, but budget your best effort on the strongest 4.
 - Within a shown role, MUST NOT drop it to zero bullets — select its 2-3 strongest ids instead.
 - Preserve the exact company name and tenure for every entry you include.
 
@@ -446,10 +446,10 @@ OUTPUT — a single JSON object, nothing before or after, matching exactly this 
   "summary": string (the ONLY field you write freely — everything else below is selected by id, see SELECTION, NOT WRITING),
   "targetPriorities": string[] (the 3-5 things this JD most values, from your Step 1 analysis),
   "subFocus": string (the specific sub-focus/practice-area of THIS role within its archetype, from your Step 1 analysis — 1 short phrase, e.g. "Capital Excellence: capital project delivery, cost/schedule optimization"),
-  "keyWinIds": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; ids from AVAILABLE BULLETS, most relevant first, exactly 3-4 combined with "projects" below),
+  "keyWinIds": string[] (optional — only when the archetype instructions call for a Key Wins/Key Projects & Impact band; omit key entirely otherwise; ids from AVAILABLE BULLETS, most relevant first, up to 3 combined with "projects" below),
   "keyWins": [] (leave as an empty array — the system fills this in from keyWinIds; do not write text here),
   "sectionOrder": "education-first" | "experience-first",
-  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "sourceBulletId": string, "text": "", "priority": number } ] } ] (2-3 bullets per entry, one per distinct engagement — see SELECTION, NOT WRITING, ONE-PAGE CONTENT BUDGET, and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
+  "experience": [ { "company": string, "role": string, "tenure": string, "location": string, "bullets": [ { "sourceBulletId": string, "text": "", "priority": number } ] } ] (2-3 bullets per entry, one per distinct engagement — see SELECTION, NOT WRITING, the CONTENT BUDGET section below, and THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES),
   "education": [ { "institution": string, "degree": string, "field": string, "years": string, "gpa": string (optional), "achievements": string[] (optional) } ],
   "skills": [ { "category": string, "items": string[] } ],
   "projects": [ { "sourceBulletId": string, "name": "", "description": "", "repoUrl": null } ] (optional, omit key entirely if not used — name/description/repoUrl are filled in by the system from sourceBulletId, leave them empty)

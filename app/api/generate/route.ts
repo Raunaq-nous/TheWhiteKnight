@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "refine requires currentContent and instruction" }, { status: 400 });
       }
       const archetype = detectResumeArchetype(profile, app, resumeArchetype);
+      const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
       let parsedCurrent: ResumeContent;
       try {
         parsedCurrent = ResumeContentSchema.parse(JSON.parse(currentContent));
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "currentContent is not valid resume JSON" }, { status: 400 });
       }
       const data = await chatJSON<ResumeContent>(
-        [{ role: "user", content: resumeRefinePrompt(profile, app, archetype, parsedCurrent, instruction) }],
+        [{ role: "user", content: resumeRefinePrompt(profile, app, archetype, parsedCurrent, instruction, maxPages) }],
         { temperature: 0.5, maxTokens: 4000, task: "resume_selection" },
         providerSettings,
         ResumeContentSchema,
@@ -100,7 +101,6 @@ export async function POST(req: NextRequest) {
       const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
       const targetKey = resolveTargetArchetypeKey(app, archetype);
       const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
-      const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
       return NextResponse.json({
         data: withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype),
         archetype,

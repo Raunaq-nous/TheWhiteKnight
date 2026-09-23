@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  applyConfidentialitySubstitutions, runConfidentialityGate, confidentialityGateFailureMessage,
+  applyConfidentialitySubstitutions, applyConfidentialitySubstitutionsToResumeContent,
+  runConfidentialityGate, confidentialityGateFailureMessage,
   enforceEmployerLocations, repairEmDashesInDocx, extractDocxText,
   type ProfileRulesConfig,
 } from "../resume-confidentiality";
+import type { ResumeContent } from "../resume-schema";
 
 function testConfig(overrides: Partial<ProfileRulesConfig> = {}): ProfileRulesConfig {
   return {
@@ -61,6 +63,97 @@ describe("applyConfidentialitySubstitutions", () => {
   it("repairs an em dash the same way the docx sweep does, when run over plain text", () => {
     const result = applyConfidentialitySubstitutions("Delivered impact—unlocking investment.", testConfig());
     expect(result).toBe("Delivered impact, unlocking investment.");
+  });
+});
+
+function baseResumeContent(overrides: Partial<ResumeContent> = {}): ResumeContent {
+  return {
+    name: "Jordan Lee",
+    contactLine: "jordan@example.com | 555-0100",
+    summary: "",
+    sectionOrder: "experience-first",
+    experience: [],
+    education: [],
+    skills: [],
+    ...overrides,
+  } as ResumeContent;
+}
+
+describe("applyConfidentialitySubstitutionsToResumeContent — GENERATION-time substitution (ONE-SHOT FIX)", () => {
+  it("cleans a forbidden term out of the summary", () => {
+    const content = baseResumeContent({ summary: "Delivered a $10.45B portfolio at a nuclear utility." });
+    const cleaned = applyConfidentialitySubstitutionsToResumeContent(content, testConfig());
+    expect(cleaned.summary).toBe("Delivered a $10 billion portfolio at a green energy entity.");
+  });
+
+  it("cleans every experience bullet across every entry", () => {
+    const content = baseResumeContent({
+      experience: [
+        {
+          company: "Bain", role: "Consultant", tenure: "2020 - Present", location: "Gurgaon",
+          bullets: [
+            { sourceBulletId: "b1", text: "Built a $10.45B portfolio cockpit.", priority: 1 },
+            { sourceBulletId: "b2", text: "Led capital readiness for a nuclear utility.", priority: 2 },
+          ],
+        },
+      ],
+    });
+    const cleaned = applyConfidentialitySubstitutionsToResumeContent(content, testConfig());
+    expect(cleaned.experience[0].bullets[0].text).toBe("Built a $10 billion portfolio cockpit.");
+    expect(cleaned.experience[0].bullets[1].text).toBe("Led capital readiness for a green energy entity.");
+  });
+
+  it("cleans skills, projects, keyWins, leadership, and education achievements", () => {
+    const content = baseResumeContent({
+      skills: [{ category: "Tech", items: ["Built for a nuclear utility"] }],
+      projects: [{ sourceBulletId: "p1", name: "Cockpit", description: "A $10.45B portfolio tool." }],
+      keyWins: ["Delivered a $10.45B program."],
+      leadership: ["Led a nuclear utility taskforce."],
+      education: [{ institution: "MIT", degree: "B.Tech", years: "2016", achievements: ["Built for a nuclear utility."] }],
+    });
+    const cleaned = applyConfidentialitySubstitutionsToResumeContent(content, testConfig());
+    expect(cleaned.skills[0].items[0]).toBe("Built for a green energy entity");
+    expect(cleaned.projects![0].description).toBe("A $10 billion portfolio tool.");
+    expect(cleaned.keyWins![0]).toBe("Delivered a $10 billion program.");
+    expect(cleaned.leadership![0]).toBe("Led a green energy entity taskforce.");
+    expect(cleaned.education[0].achievements![0]).toBe("Built for a green energy entity.");
+  });
+
+  it("a resume cleaned at generation time already passes the confidentiality gate, with zero forbidden terms remaining", () => {
+    const content = baseResumeContent({
+      summary: "Delivered a $10.45B portfolio at a nuclear utility.",
+      experience: [
+        {
+          company: "Bain", role: "Consultant", tenure: "2020 - Present", location: "Gurgaon",
+          bullets: [{ sourceBulletId: "b1", text: "Led capital readiness for a nuclear utility, a $10.45B build.", priority: 1 }],
+        },
+      ],
+    });
+    const cleaned = applyConfidentialitySubstitutionsToResumeContent(content, testConfig());
+    const wholeText = [
+      cleaned.summary,
+      ...cleaned.experience.flatMap(e => e.bullets.map(b => b.text)),
+    ].join(" ");
+    expect(wholeText).not.toContain("$10.45B");
+    expect(wholeText).not.toContain("nuclear utility");
+    const gate = runConfidentialityGate(wholeText, testConfig());
+    expect(gate.ok).toBe(true);
+    expect(gate.blockedTerms).toEqual([]);
+  });
+
+  it("respects archetype scope, same as the plain-text function", () => {
+    const content = baseResumeContent({
+      experience: [
+        {
+          company: "Bain", role: "Consultant", tenure: "2020 - Present", location: "Gurgaon",
+          bullets: [{ sourceBulletId: "b1", text: "Built a knowledge graph-linked search engine.", priority: 1 }],
+        },
+      ],
+    });
+    const cleanedConsulting = applyConfidentialitySubstitutionsToResumeContent(content, testConfig(), "consulting");
+    const cleanedProduct = applyConfidentialitySubstitutionsToResumeContent(content, testConfig(), "product");
+    expect(cleanedConsulting.experience[0].bullets[0].text).toContain("AI-based");
+    expect(cleanedProduct.experience[0].bullets[0].text).toBe("Built a knowledge graph-linked search engine.");
   });
 });
 

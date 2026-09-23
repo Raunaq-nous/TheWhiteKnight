@@ -66,7 +66,7 @@ export const TWO_PAGE_BUDGET = {
   educationMaxEntries: 2,
 } as const;
 
-type ResumeBudget = {
+export type ResumeBudget = {
   readonly summaryMaxChars: number;
   readonly keyImpactMaxItems: number;
   readonly keyImpactItemMaxChars: number;
@@ -115,6 +115,15 @@ const DANGLING_TRAILING_WORDS = new Set([
   "as", "the", "a", "an", "from", "into", "onto", "via", "using", "across", "within",
 ]);
 
+// Coordinating conjunctions that can never grammatically OPEN a standalone
+// clause — if compression would otherwise start a bullet's protected
+// outcome on one of these (e.g. "...and regulatory criteria and authoring
+// the C-suite decision document..." with its lead-in dropped), the
+// preceding clause must be absorbed into the outcome instead (see
+// splitOutcomeClause below), and if that still isn't possible, the whole
+// bullet is dropped rather than rendered as a dangling fragment.
+const DANGLING_LEADING_WORDS = new Set(["and", "or", "but", "nor", "so", "yet"]);
+
 function stripTrailingPunctuation(s: string): string {
   return s.replace(/[.,;:!?\-–—]+$/, "").trim();
 }
@@ -131,16 +140,60 @@ function endsGrammatically(s: string): boolean {
   return !DANGLING_TRAILING_WORDS.has(lettersOnly);
 }
 
+function startsGrammatically(s: string): boolean {
+  const firstWord = s.trim().split(/\s+/)[0];
+  if (!firstWord) return false;
+  const lettersOnly = firstWord.toLowerCase().replace(/[^a-z]/g, "");
+  if (lettersOnly.length === 0) return true;
+  return !DANGLING_LEADING_WORDS.has(lettersOnly);
+}
+
 function withTerminalPeriod(s: string): string {
   const stripped = stripTrailingPunctuation(s);
   return stripped ? `${stripped}.` : stripped;
 }
 
-// Splits text after each comma/semicolon/colon — the same clause-boundary
-// convention splitOutcomeClause uses below, kept as its own helper so
-// clampBulletText can re-split a setup fragment the same way.
+// A comma-separated run inside a serial list ("financial, technical, and
+// regulatory criteria") is ONE syntactic unit, not three independent
+// clause boundaries — a bare, verb-less fragment like "financial," or
+// "technical," can never stand as its own clause. Without this merge,
+// compression could cut right after such a fragment (keeping "...across
+// financial," and dropping "technical, and regulatory criteria..."),
+// which reads as a broken mid-enumeration fragment even though it
+// technically ended on a comma. This is the real bug behind reports like
+// "...evaluation framework across financial, structured C-suite decision
+// document..." — the cut landed inside a 3-item list, not at a clause
+// boundary at all.
+const LIST_FRAGMENT_MAX_WORDS = 2;
+
+function isListFragment(segment: string): boolean {
+  const words = stripTrailingPunctuation(segment).trim().split(/\s+/).filter(Boolean);
+  return words.length > 0 && words.length <= LIST_FRAGMENT_MAX_WORDS;
+}
+
+function mergeListFragments(segments: string[]): string[] {
+  const merged: string[] = [];
+  for (const seg of segments) {
+    // A short, bare list item ("technical,") attaches to whatever came
+    // BEFORE it — it's a continuation of that clause's own enumeration
+    // ("...across financial," + "technical," -> "...across financial,
+    // technical,"), never a standalone unit worth cutting at.
+    if (merged.length > 0 && isListFragment(seg)) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${seg}`;
+    } else {
+      merged.push(seg);
+    }
+  }
+  return merged;
+}
+
+// Splits text after each comma/semicolon/colon, then merges bare list-item
+// fragments back into their neighbor (see mergeListFragments above) — the
+// single shared clause-boundary convention both clampBulletText and
+// splitOutcomeClause use, so a compression cut can never land mid-list.
 function clauseSegments(text: string): string[] {
-  return text.trim().split(/(?<=[,;:])\s+/).filter(Boolean);
+  const raw = text.trim().split(/(?<=[,;:])\s+/).filter(Boolean);
+  return mergeListFragments(raw);
 }
 
 /**
@@ -202,11 +255,18 @@ export const OUTCOME_MARKER_PATTERN =
  * treating the whole text as ordinary (non-outcome-protected) content.
  */
 export function splitOutcomeClause(text: string): { setup: string | null; outcome: string } {
-  const clauses = text.trim().split(/(?<=[,;:])\s+/).filter(Boolean);
+  const clauses = clauseSegments(text.trim());
   for (let i = clauses.length - 1; i >= 0; i--) {
     if (OUTCOME_MARKER_PATTERN.test(clauses[i])) {
-      const outcome = stripTrailingPunctuation(clauses.slice(i).join(" "));
-      const setup = i > 0 ? stripTrailingPunctuation(clauses.slice(0, i).join(" ")) : "";
+      // Never let the outcome clause open on a dangling conjunction —
+      // absorb the preceding clause(s) into it instead, so a
+      // standalone-outcome result (see clampBulletPreservingOutcome) is
+      // always a complete, self-starting clause, never a fragment like
+      // "and regulatory criteria and authoring...".
+      let start = i;
+      while (start > 0 && !startsGrammatically(clauses[start])) start--;
+      const outcome = stripTrailingPunctuation(clauses.slice(start).join(" "));
+      const setup = start > 0 ? stripTrailingPunctuation(clauses.slice(0, start).join(" ")) : "";
       return { setup, outcome };
     }
   }
@@ -229,8 +289,10 @@ export function clampBulletPreservingOutcome(text: string, maxChars: number): st
   if (setup === null) return clampBulletText(text, maxChars);
 
   const outcomeFinal = withTerminalPeriod(outcome);
-  if (outcomeFinal.length > maxChars) {
-    // Can't fit even the outcome alone — an impact-less bullet is worse
+  if (outcomeFinal.length > maxChars || !startsGrammatically(outcomeFinal)) {
+    // Can't fit even the outcome alone, or (splitOutcomeClause's absorption
+    // notwithstanding) it would still read as a dangling fragment with no
+    // setup to lean on — an impact-less or ungrammatical bullet is worse
     // than no bullet at all.
     return null;
   }
@@ -244,7 +306,7 @@ export function clampBulletPreservingOutcome(text: string, maxChars: number): st
   // outcome and never cutting inside a clause (see clampBulletText above —
   // this is exactly the function that fix applies to).
   const setupBudget = maxChars - connector.length - outcomeFinal.length;
-  if (setupBudget < 10) return outcomeFinal; // no room for any setup — outcome alone
+  if (setupBudget < 10) return outcomeFinal; // no room for any setup — outcome alone, already verified grammatical above
   const trimmedSetup = clampBulletText(setup, setupBudget + 1);
   if (!trimmedSetup) return outcomeFinal;
   const setupNoPeriod = stripTrailingPunctuation(trimmedSetup);
@@ -269,20 +331,45 @@ function topBulletsByPriority(bullets: ResumeBullet[], max: number, bulletMaxCha
 }
 
 /**
- * Drops the lowest-relevance ROLES entirely (not just their bullets) when
- * there are more than maxRoles — new in this pass (BUG D). A role's
- * relevance proxy is its single best (lowest-numbered) bullet priority,
- * since "priority" is assigned on a shared global scale across the whole
- * resume (the same assumption trimToGlobalBulletBudget already relies on).
- * Roles with no bullets at all are always dropped first.
+ * Caps how many roles get FULL treatment when there are more than maxRoles.
+ * A role's relevance proxy is its single best (lowest-numbered) bullet
+ * priority, since "priority" is assigned on a shared global scale across
+ * the whole resume (the same assumption trimToGlobalBulletBudget already
+ * relies on).
+ *
+ * `neverDrop=false` (the 1-page default, BUG D): the weakest roles beyond
+ * maxRoles are dropped ENTIRELY — a strict one-pager legitimately cannot
+ * show every role in the profile.
+ *
+ * `neverDrop=true` (2-page+): a role beyond the cap is never silently
+ * removed from the resume — it still renders, compressed to its single
+ * strongest bullet, so a candidate's employment history never looks
+ * incomplete just because there was more room to elaborate on the
+ * strongest roles. Original array order (not relevance order) is
+ * preserved either way.
  */
-function capRolesByRelevance(experience: ResumeContent["experience"], maxRoles: number): ResumeContent["experience"] {
+function capRolesByRelevance(
+  experience: ResumeContent["experience"],
+  maxRoles: number,
+  neverDrop: boolean = false,
+): ResumeContent["experience"] {
   if (experience.length <= maxRoles) return experience;
   const bestPriority = (e: ResumeContent["experience"][number]) =>
     e.bullets.length > 0 ? Math.min(...e.bullets.map(b => b.priority)) : Infinity;
-  return [...experience]
-    .sort((a, b) => bestPriority(a) - bestPriority(b))
-    .slice(0, maxRoles);
+  const byRelevance = experience
+    .map((e, idx) => ({ idx, priority: bestPriority(e) }))
+    .sort((a, b) => a.priority - b.priority);
+  const keptIdx = new Set(byRelevance.slice(0, maxRoles).map(o => o.idx));
+
+  if (!neverDrop) {
+    return experience.filter((_, idx) => keptIdx.has(idx));
+  }
+
+  return experience.map((e, idx) => {
+    if (keptIdx.has(idx) || e.bullets.length <= 1) return e;
+    const strongest = [...e.bullets].sort((a, b) => a.priority - b.priority)[0];
+    return { ...e, bullets: [strongest] };
+  });
 }
 
 /**
@@ -385,7 +472,7 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   const budget = budgetForMaxPages(maxPages);
 
   const olderCompressed = compressOlderRoles(content.experience);
-  const roleCapped = capRolesByRelevance(olderCompressed, budget.experienceMaxRoles);
+  const roleCapped = capRolesByRelevance(olderCompressed, budget.experienceMaxRoles, maxPages >= 2);
   const perEntryCapped = roleCapped.map(e => ({
     ...e,
     bullets: topBulletsByPriority(e.bullets, budget.bulletsPerRoleMax, budget.bulletMaxChars),
