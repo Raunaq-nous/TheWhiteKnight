@@ -386,14 +386,17 @@ export function resolveConfiguredYearsOfExperience(profile: Profile, app: Applic
 }
 
 /**
- * Page ceiling, config-first: "when spec and code disagree, the spec
- * wins" (docs/MASTER-PROFILE-SPEC.md Part 0) — a configured
- * pagesByArchetype value for the resolved target key overrides the
- * generic engine default. Falls back to resolveMaxPages (archetype base +
- * years-of-experience threshold) when no mapping applies.
+ * Page ceiling. Precedence:
+ *   1. Under 5 years of experience -> 1 page, always. No config entry can
+ *      override this; a second page for an early-career candidate reads as
+ *      padding.
+ *   2. pagesByArchetype for the resolved target key (e.g. consulting_mbb).
+ *   3. pagesByArchetype for the plain ResumeArchetype key (e.g. product).
+ *   4. resolveMaxPages (archetype base) when nothing is configured.
  */
 export function resolveConfiguredMaxPages(profile: Profile, app: Application, archetype: ResumeArchetype): number {
+  if (parseYearsOfExperience(profile) < MIN_YEARS_FOR_SECOND_PAGE) return 1;
   const key = resolveTargetArchetypeKey(app, archetype);
-  const configured = key ? CONFIG.pagesByArchetype?.[key] : undefined;
+  const configured = (key ? CONFIG.pagesByArchetype?.[key] : undefined) ?? CONFIG.pagesByArchetype?.[archetype];
   return configured ?? resolveMaxPages(profile, app, archetype);
 }

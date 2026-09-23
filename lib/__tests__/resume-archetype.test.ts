@@ -412,11 +412,28 @@ describe("resolveConfiguredYearsOfExperience — years flex by target, not a fix
 });
 
 describe("resolveConfiguredMaxPages — config wins over the generic engine default (spec Part 0)", () => {
-  it("uses the configured value for a mapped target archetype, regardless of years of experience", () => {
-    const profile = baseProfile({ yearsOfExperience: "15" });
-    // ai_product is configured to 1 page even at high seniority — this
-    // deliberately overrides the generic engine's product/5+-years=2 rule.
-    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Product Manager" }), "product")).toBe(1);
+  it("gives a 10-year candidate 2 pages for AI/ML, product, and VC roles", () => {
+    const profile = baseProfile({ yearsOfExperience: "10" });
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Senior Product Manager" }), "product")).toBe(2);
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Machine Learning Engineer" }), "ai_ml_engineering")).toBe(2);
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Venture Capital Associate" }), "vc_investing")).toBe(2);
+  });
+
+  it("keeps MBB consulting at 1 page even for a 10-year candidate", () => {
+    const profile = baseProfile({ yearsOfExperience: "10" });
+    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "McKinsey & Company" }), "consulting")).toBe(1);
+  });
+
+  it("gives anyone under 5 years exactly 1 page, overriding every configured 2-page archetype", () => {
+    const profile = baseProfile({ yearsOfExperience: "3" });
+    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "Accenture" }), "consulting")).toBe(1);
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Senior Product Manager" }), "product")).toBe(1);
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Machine Learning Engineer" }), "ai_ml_engineering")).toBe(1);
+    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "Venture Capital Associate" }), "vc_investing")).toBe(1);
+  });
+
+  it("treats a blank yearsOfExperience as under 5 years (1 page), never assumed seniority", () => {
+    expect(resolveConfiguredMaxPages(baseProfile({ yearsOfExperience: "" }), baseApp({ company: "Accenture" }), "consulting")).toBe(1);
   });
 
   it("matches the generic engine default when the configured value agrees with it", () => {

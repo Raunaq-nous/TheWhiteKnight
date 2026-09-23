@@ -24,11 +24,9 @@ export const ONE_PAGE_BUDGET = {
   // The Key Projects & Impact / Key Wins band must read as a portfolio
   // across the candidate's career, not a highlight reel of one employer.
   topBandMaxPerCompany: 2,
-  // At most this many ROLES are shown at all — the rest are dropped
-  // entirely (lowest JD-relevance first), not just trimmed to fewer
-  // bullets. New in this pass (BUG D): with the raised per-bullet char
-  // cap, showing every role would blow the one-page budget; showing fewer,
-  // richer roles reads better and actually fits.
+  // At most this many roles get full treatment; any role beyond it is
+  // compressed to its single strongest bullet, never dropped (see
+  // capRolesByRelevance).
   experienceMaxRoles: 4,
   // Global ceiling across ALL shown roles combined.
   totalExperienceBulletsMax: 10,
@@ -337,21 +335,14 @@ function topBulletsByPriority(bullets: ResumeBullet[], max: number, bulletMaxCha
  * the whole resume (the same assumption trimToGlobalBulletBudget already
  * relies on).
  *
- * `neverDrop=false` (the 1-page default, BUG D): the weakest roles beyond
- * maxRoles are dropped ENTIRELY — a strict one-pager legitimately cannot
- * show every role in the profile.
- *
- * `neverDrop=true` (2-page+): a role beyond the cap is never silently
- * removed from the resume — it still renders, compressed to its single
- * strongest bullet, so a candidate's employment history never looks
- * incomplete just because there was more room to elaborate on the
- * strongest roles. Original array order (not relevance order) is
- * preserved either way.
+ * A role beyond maxRoles is NEVER removed, at any page count: an omitted
+ * employer reads as a gap in the candidate's history. It still renders,
+ * compressed to its single strongest bullet. Original array order (not
+ * relevance order) is preserved.
  */
 function capRolesByRelevance(
   experience: ResumeContent["experience"],
   maxRoles: number,
-  neverDrop: boolean = false,
 ): ResumeContent["experience"] {
   if (experience.length <= maxRoles) return experience;
   const bestPriority = (e: ResumeContent["experience"][number]) =>
@@ -360,10 +351,6 @@ function capRolesByRelevance(
     .map((e, idx) => ({ idx, priority: bestPriority(e) }))
     .sort((a, b) => a.priority - b.priority);
   const keptIdx = new Set(byRelevance.slice(0, maxRoles).map(o => o.idx));
-
-  if (!neverDrop) {
-    return experience.filter((_, idx) => keptIdx.has(idx));
-  }
 
   return experience.map((e, idx) => {
     if (keptIdx.has(idx) || e.bullets.length <= 1) return e;
@@ -472,7 +459,7 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   const budget = budgetForMaxPages(maxPages);
 
   const olderCompressed = compressOlderRoles(content.experience);
-  const roleCapped = capRolesByRelevance(olderCompressed, budget.experienceMaxRoles, maxPages >= 2);
+  const roleCapped = capRolesByRelevance(olderCompressed, budget.experienceMaxRoles);
   const perEntryCapped = roleCapped.map(e => ({
     ...e,
     bullets: topBulletsByPriority(e.bullets, budget.bulletsPerRoleMax, budget.bulletMaxChars),
