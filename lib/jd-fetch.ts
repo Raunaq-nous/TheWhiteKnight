@@ -14,7 +14,11 @@ export function htmlToText(html: string): string {
     .replace(/<header[\s\S]*?<\/header>/gi, "");
 
   // Convert block-level tags to newlines
-  text = text.replace(/<\/(p|div|li|h[1-6]|br|tr|td)>/gi, "\n");
+  // </title> must end its line: LinkedIn's "<Company> hiring <Role> in
+  // <Location> | LinkedIn" line lives in <title>, and without a break it
+  // merges with the first body text, so the title-line pattern's
+  // end-of-line anchor can never match on a direct fetch.
+  text = text.replace(/<\/(p|div|li|h[1-6]|br|tr|td|title)>/gi, "\n");
   text = text.replace(/<br\s*\/?>/gi, "\n");
 
   // Strip remaining tags
