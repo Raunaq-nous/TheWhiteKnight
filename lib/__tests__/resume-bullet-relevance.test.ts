@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeBulletRelevanceHints, renderRelevanceHintsBlock, rankProfileForResume } from "../resume-bullet-relevance";
+import { computeBulletRelevanceHints, renderRelevanceHintsBlock, rankProfileForResume, outcomeBucket, impactDensity } from "../resume-bullet-relevance";
 import type { Profile } from "../profile";
 import type { Application } from "../store";
 
@@ -228,5 +228,30 @@ describe("rankProfileForResume — deterministic pre-ranking pass", () => {
     const snapshot = JSON.stringify(profile);
     rankProfileForResume(profile, baseApp(), "consulting");
     expect(JSON.stringify(profile)).toBe(snapshot);
+  });
+});
+
+describe("impact scoring recognises the master-spec scope markers", () => {
+  it.each([
+    ["green energy entity building 10+ plants", 1],
+    ["118 processes", 1],
+    ["55+ partial and 10 complete live client cases", 1],
+    ["150+ independent creators and 70,000 monthly viewers", 2],
+    ["serving 200+ enterprise customers", 1],
+    ["assessing 10+ global system integrators", 1],
+    ["spanning 17 capital-project industries", 1],
+  ])("%s is quantified (density %i)", (text, density) => {
+    expect(outcomeBucket(text)).toBe(2);
+    expect(impactDensity(text)).toBe(density);
+  });
+
+  it("the N+ marker works before a space or at the end, not only before a letter", () => {
+    expect(impactDensity("grew to 10+ sites")).toBe(1);
+    expect(impactDensity("a team of 40+")).toBe(1);
+  });
+
+  it("does not treat a bare number with an unrelated noun as a scope marker", () => {
+    expect(impactDensity("Managed 3 cross-functional teams")).toBe(0);
+    expect(impactDensity("Wrote 2 reports")).toBe(0);
   });
 });

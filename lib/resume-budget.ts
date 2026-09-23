@@ -241,8 +241,13 @@ export function clampBulletText(text: string, maxChars: number): string | null {
 // satisfy a trailing \b on its own (word char directly followed by word
 // char), so the abbreviation form needs its own explicit alternative
 // rather than relying on [bmk]illion to (accidentally) cover it.
+// "N+" uses (?!\w), not a trailing \b: "+" is a non-word character, so \b
+// after it only holds when a letter/digit follows directly ("10+x"), which
+// made "10+ plants" / "55+ partial" invisible. The scope-noun alternative
+// allows digit-group commas ("70,000") and one qualifier word between the
+// number and the noun ("70,000 monthly viewers").
 export const OUTCOME_MARKER_PATTERN =
-  /\$[\d,.]+\s?(?:[bmk]illion|[bmk])?\b|\d+(\.\d+)?%|\b\d+\+\b|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d+\+?\s?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?)\b/i;
+  /\$[\d,.]+\s?(?:[bmk]illion|[bmk])?\b|\d+(\.\d+)?%|\b\d+\+(?!\w)|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d[\d,]*\+?\s?(?:[a-z-]+\s)?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?|plants?|process(?:es)?|cases?|creators?|viewers?|industr(?:y|ies)|integrators?)\b/i;
 
 /**
  * Splits text into clauses (after each comma/semicolon/colon), then finds
