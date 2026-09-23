@@ -23,11 +23,12 @@ import {
   detectResumeArchetype, withArchetypeSequence, resolveConfiguredMaxPages, resolveConfiguredYearsOfExperience,
   resolveTargetArchetypeKey, ResumeArchetype,
 } from "../../resume-archetype";
-import { clampToOnePageBudget } from "../../resume-budget";
+import { budgetForMaxPages, clampToOnePageBudget } from "../../resume-budget";
 import { resolveResumeSelections } from "../../resume-selection";
 import { runFormatGate, FormatGateResult } from "../../resume-format-gate";
-import { enforceEmployerLocations } from "../../resume-confidentiality";
+import { applyConfidentialitySubstitutionsToResumeContent, enforceEmployerLocations } from "../../resume-confidentiality";
 import { suppressSideBuilds, runToolPlacementGate, ToolPlacementGateResult } from "../../resume-tool-placement";
+import { listProfileBullets } from "../../profile-bullets";
 import type { Profile } from "../../profile";
 import type { Application } from "../../store";
 
@@ -93,11 +94,32 @@ export async function generateResumeContent(
   // too — not just at export — so a resume looks right the moment it's
   // first generated, not only after the export-time gate corrects it.
   const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
+  // CONFIDENTIALITY substitutions ("$10.45B" -> "$10 billion", "nuclear
+  // utility" -> "green energy entity", internal tool names, etc.) applied
+  // here too — not just as an export-time gate — so the ResumeContent that
+  // actually gets stored/returned is already clean. The export gate
+  // (app/api/resume/export/route.ts) remains the hard backstop.
+  const withConfidentialitySubstitutions = applyConfidentialitySubstitutionsToResumeContent(withCanonicalLocations, undefined, archetype);
   const targetKey = resolveTargetArchetypeKey(app, archetype);
-  const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
+  const withSideBuildsResolved = suppressSideBuilds(withConfidentialitySubstitutions, targetKey);
   const finalContent = withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype);
   const formatGate = runFormatGate(finalContent);
   const toolPlacementGate = runToolPlacementGate(finalContent);
+
+  // Applied-caps visibility (ONE-SHOT FIX): the budget that scaled with
+  // maxPages used to be invisible — a generation could silently select 9
+  // bullets from a 38-bullet profile with no signal anywhere that the
+  // per-role/global caps even ran. Logged on every generation so a budget
+  // regression is never silent again.
+  const candidateBulletCount = listProfileBullets(effectiveProfile).length;
+  const budget = budgetForMaxPages(maxPages);
+  const renderedBulletCount = finalContent.experience.reduce((n, e) => n + e.bullets.length, 0);
+  console.log(
+    `[CareerOS] resume generated for ${app?.company ?? "unknown"} — archetype=${archetype} maxPages=${maxPages} ` +
+    `candidateBullets=${candidateBulletCount} perRoleCap=${budget.bulletsPerRoleMax} globalBulletCap=${budget.totalExperienceBulletsMax} ` +
+    `roleCap=${budget.experienceMaxRoles} keyImpactCap=${budget.keyImpactMaxItems} -> ` +
+    `rolesRendered=${finalContent.experience.length} bulletsRendered=${renderedBulletCount}`,
+  );
 
   return { data: finalContent, archetype, maxPages, formatGate, toolPlacementGate };
 }

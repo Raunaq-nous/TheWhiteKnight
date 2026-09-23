@@ -22,6 +22,7 @@
 import "server-only";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ResumeContent } from "./resume-schema";
 
 export type ForbiddenTermRule = {
   match: string;
@@ -98,6 +99,41 @@ export function applyConfidentialitySubstitutions(
     result = result.replace(pattern, rule.replace);
   }
   return result;
+}
+
+/**
+ * Applies applyConfidentialitySubstitutions to EVERY string field of a
+ * ResumeContent — summary, every experience bullet, every skill item,
+ * project description, key win, leadership bullet, education achievement.
+ * Run this at GENERATION time (see resume-generation-service.ts) so the
+ * ResumeContent that actually gets stored/returned is already clean — a
+ * blocked term like "$10.45B" should never reach a rendered/stored resume
+ * in the first place. runConfidentialityGate at export time remains the
+ * hard backstop in case anything still slips through (e.g. a docx/pdf
+ * conversion artifact, or a rule added after this content was generated).
+ */
+export function applyConfidentialitySubstitutionsToResumeContent(
+  content: ResumeContent,
+  config: ProfileRulesConfig = loadProfileRulesConfig(),
+  archetype?: string,
+): ResumeContent {
+  const clean = (s: string) => applyConfidentialitySubstitutions(s, config, archetype);
+  return {
+    ...content,
+    summary: clean(content.summary),
+    experience: content.experience.map(e => ({
+      ...e,
+      bullets: e.bullets.map(b => ({ ...b, text: clean(b.text) })),
+    })),
+    skills: content.skills.map(g => ({ ...g, items: g.items.map(clean) })),
+    projects: content.projects?.map(p => ({ ...p, description: clean(p.description) })),
+    keyWins: content.keyWins?.map(clean),
+    leadership: content.leadership?.map(clean),
+    education: content.education.map(ed => ({
+      ...ed,
+      achievements: ed.achievements?.map(clean),
+    })),
+  };
 }
 
 export type ConfidentialityGateResult = {

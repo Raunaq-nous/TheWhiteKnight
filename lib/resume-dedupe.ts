@@ -44,14 +44,30 @@ function engagementTokens(text: string): Set<string> {
 // underlying engagement, regardless of how differently they're phrased.
 const ENGAGEMENT_OVERLAP_THRESHOLD = 0.5;
 
-export function sameEngagement(a: string, b: string): boolean {
+/**
+ * `threshold` defaults to the resume-render use case (dropping a real,
+ * distinct bullet from a single generated resume is the costlier mistake,
+ * so it stays conservative at 0.5). A caller with a different cost profile
+ * — e.g. lib/profile-merge.ts's import-time dedupe, where a false positive
+ * just means an operator-reviewed diff doesn't surface a genuine duplicate
+ * as "new" and a false negative means an actual duplicate gets imported —
+ * can pass a lower threshold to catch looser paraphrases.
+ */
+// Below this many distinct tokens on the smaller side, a containment ratio
+// isn't a reliable signal — e.g. two totally unrelated one-line bullets
+// that both happen to contain the literal word "bullet" would hit 0.5
+// containment on a 2-token set. Real engagement descriptions comfortably
+// clear this floor; short placeholder-style text does not.
+const MIN_TOKENS_FOR_CONTAINMENT = 3;
+
+export function sameEngagement(a: string, b: string, threshold: number = ENGAGEMENT_OVERLAP_THRESHOLD): boolean {
   const ta = engagementTokens(a);
   const tb = engagementTokens(b);
-  if (ta.size === 0 || tb.size === 0) return false;
+  if (Math.min(ta.size, tb.size) < MIN_TOKENS_FOR_CONTAINMENT) return false;
   let intersection = 0;
   for (const t of ta) if (tb.has(t)) intersection++;
   const containment = intersection / Math.min(ta.size, tb.size);
-  return containment >= ENGAGEMENT_OVERLAP_THRESHOLD;
+  return containment >= threshold;
 }
 
 /**
