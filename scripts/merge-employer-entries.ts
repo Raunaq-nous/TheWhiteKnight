@@ -15,6 +15,7 @@
 
 import { profileRepo } from "../lib/server/repositories";
 import { namesMatch, splitBullets } from "../lib/profile-merge";
+import { employerCounts, formatCounts } from "./audit-profile-bullets";
 import type { Profile, ExperienceEntry } from "../lib/profile";
 
 export type MergePreview = {
@@ -93,7 +94,9 @@ function main() {
     process.exit(1);
   }
   const { profile: next, preview } = mergeEmployerEntries(profile, keep, from);
+  console.log(`Bullets per employer before:\n${formatCounts(employerCounts(profile))}\n`);
   console.log(formatMergePreview(preview));
+  console.log(`\nBullets per employer after:\n${formatCounts(employerCounts(next))}`);
   if (!process.argv.includes("--apply")) {
     console.log("\nPreview only. Re-run with --apply to write.");
     return;
