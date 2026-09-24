@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dedupeExperienceEntry, dedupeProfile } from "../../scripts/dedupe-profile-bullets";
+import { dedupeExperienceEntry, dedupeProfile, compareSurvivor, isVerbLed } from "../../scripts/dedupe-profile-bullets";
 import { getSeedProfile } from "../profile";
 import type { ExperienceEntry, Profile } from "../profile";
 
@@ -84,5 +84,57 @@ describe("dedupeProfile — scans every employer, reports a total count", () => 
     };
     const { pairs } = dedupeProfile(profile);
     expect(pairs).toHaveLength(0);
+  });
+});
+
+describe("survivor rule — which duplicate is kept", () => {
+  const T_FRAG = "$10B French conglomerate: India market entry across automotive, pharma, and consumer electronics simultaneously";
+  const T_FULL = "Led full market entry for a $10B French conglomerate across automotive, pharma, and consumer electronics simultaneously. M&A/JV targets, partner origination, competitive intelligence";
+  const E_FRAG = "Competitive intelligence and market analysis for Fortune 1000 technology clients. Dense, deadline-driven work translating complex multi-source data into executive-actionable insights";
+
+  it("detects verb-led sentences vs fragments (figure label, noun phrase, client name)", () => {
+    expect(isVerbLed(T_FULL)).toBe(true);
+    expect(isVerbLed("Co-founded and scaled a creator economy platform.")).toBe(true);
+    expect(isVerbLed(T_FRAG)).toBe(false);
+    expect(isVerbLed(E_FRAG)).toBe(false);
+    expect(isVerbLed("Accenture: led the GTM workstream.")).toBe(false);
+  });
+
+  it("real reported Tecnova pair: keeps the full verb-led sentence, drops the '$10B ...:' fragment", () => {
+    const { bullets, pairs } = dedupeExperienceEntry(entry({ company: "Tecnova India", bullets: `${T_FRAG}\n${T_FULL}` }));
+    expect(bullets).toEqual([T_FULL]);
+    expect(pairs[0]).toMatchObject({ keptText: T_FULL, droppedText: T_FRAG, whyKept: "full sentence over fragment" });
+  });
+
+  it("never keeps a fragment over a full sentence, even when the fragment has more impact markers", () => {
+    const denseFragment = "$10B conglomerate: 3 sectors, 12 mandates, 40% growth, India market entry for the French conglomerate";
+    const plainSentence = "Led India market entry for the French conglomerate across three sectors";
+    expect(compareSurvivor(plainSentence, denseFragment)).toBeLessThan(0);
+  });
+
+  it("between two full sentences, prefers one with an outcome clause, then higher impact density", () => {
+    const noOutcome = "Led a market analysis for a logistics firm covering demand and supply";
+    const withOutcome = "Led a market analysis for a logistics firm, cutting cost by 12% across 4 sites";
+    const lessDense = "Led a market analysis for a logistics firm, cutting cost by 12%";
+    expect(compareSurvivor(withOutcome, noOutcome)).toBeLessThan(0);
+    expect(compareSurvivor(withOutcome, lessDense)).toBeLessThan(0);
+  });
+
+  it("uses imported master-spec text only as a tiebreak, then length", () => {
+    const imported = "Built an M&A roadmap for a global IT services firm, sequencing acquisition targets to improve the valuation multiple and enabling private equity investment.";
+    const legacySameRank = "Built an M&A roadmap for a global IT services firm, sequencing acquisition targets to lift the valuation multiple and enabling PE investment for the owners today.";
+    expect(compareSurvivor(imported, legacySameRank)).toBeLessThan(0);
+  });
+
+  it("every KEEP shown is a final survivor: a bullet kept in one pair is never dropped by another", () => {
+    const { bullets, pairs } = dedupeExperienceEntry(entry({ company: "Tecnova India", bullets: [T_FRAG, T_FULL, "Led India market entry strategy for a $10 billion French conglomerate across automotive, pharmaceuticals, and consumer electronics simultaneously, covering M&A and joint venture targets, partner origination, and competitive intelligence."].join("\n") }));
+    for (const p of pairs) expect(bullets).toContain(p.keptText);
+    for (const p of pairs) expect(bullets).not.toContain(p.droppedText);
+  });
+
+  it("'Fortune 1000' is a list name, not a scope figure", () => {
+    const { pairs } = dedupeExperienceEntry(entry({ company: "Evalueserve", bullets: `${E_FRAG}\nLed competitive intelligence and market analysis for Fortune 1000 technology clients, translating multi-source data into executive-actionable insights that shaped 3 product roadmaps.` }));
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].droppedText).toBe(E_FRAG);
   });
 });

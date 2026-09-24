@@ -255,3 +255,11 @@ describe("impact scoring recognises the master-spec scope markers", () => {
     expect(impactDensity("Wrote 2 reports")).toBe(0);
   });
 });
+
+describe("'Fortune 500/1000' is not a scope marker", () => {
+  it("does not count a Fortune list name as quantified impact", () => {
+    expect(impactDensity("market analysis for Fortune 1000 technology clients")).toBe(0);
+    expect(impactDensity("served Fortune 500 clients")).toBe(0);
+    expect(impactDensity("across 12+ mandates for Fortune 500 clients")).toBe(1);
+  });
+});
