@@ -12,6 +12,7 @@
     "import:master-profile": "tsx scripts/import-master-profile.ts",
     "dedupe:profile-bullets": "tsx scripts/dedupe-profile-bullets.ts",
     "audit:profile-bullets": "tsx scripts/audit-profile-bullets.ts",
+    "merge:employer": "tsx scripts/merge-employer-entries.ts",
     "merge:employer-entries": "tsx scripts/merge-employer-entries.ts",
     "verify:resume": "tsx scripts/verify-resume.ts"
   },
