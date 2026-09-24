@@ -245,9 +245,10 @@ export function clampBulletText(text: string, maxChars: number): string | null {
 // after it only holds when a letter/digit follows directly ("10+x"), which
 // made "10+ plants" / "55+ partial" invisible. The scope-noun alternative
 // allows digit-group commas ("70,000") and one qualifier word between the
-// number and the noun ("70,000 monthly viewers").
+// number and the noun ("70,000 monthly viewers"). "Fortune 500/1000" is a
+// list name, not a scope figure, so a number right after "Fortune" is skipped.
 export const OUTCOME_MARKER_PATTERN =
-  /\$[\d,.]+\s?(?:[bmk]illion|[bmk])?\b|\d+(\.\d+)?%|\b\d+\+(?!\w)|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b\d[\d,]*\+?\s?(?:[a-z-]+\s)?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?|plants?|process(?:es)?|cases?|creators?|viewers?|industr(?:y|ies)|integrators?)\b/i;
+  /\$[\d,.]+\s?(?:[bmk]illion|[bmk])?\b|\d+(\.\d+)?%|\b\d+\+(?!\w)|\bboard[- ]level\b|\bc-suite\b|\bmulti-billion(?:-dollar)?\b|\bmulti-million(?:-dollar)?\b|\b(?<!fortune\s)\d[\d,]*\+?\s?(?:[a-z-]+\s)?(?:sites?|projects?|mandates?|clients?|engagements?|workstreams?|deals?|years?|months?|people|hires?|plants?|process(?:es)?|cases?|creators?|viewers?|industr(?:y|ies)|integrators?)\b/i;
 
 /**
  * Splits text into clauses (after each comma/semicolon/colon), then finds
