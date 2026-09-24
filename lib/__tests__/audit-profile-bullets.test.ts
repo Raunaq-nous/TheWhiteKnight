@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { auditProfile, duplicateEmployerEntries, removeBullets, sameEmployer } from "../../scripts/audit-profile-bullets";
+import { auditProfile, duplicateEmployerEntries, removeBullets, sameEmployer, verifyRemoval, formatBand, employerCounts } from "../../scripts/audit-profile-bullets";
 import { EXPERIENCE_CANDIDATES } from "../../scripts/import-master-profile";
 import { bulletId } from "../profile-bullets";
 import { getSeedProfile } from "../profile";
@@ -65,5 +65,54 @@ describe("audit-profile-bullets", () => {
     const profile = mixedProfile();
     expect(removeBullets(profile, new Set()).removed).toHaveLength(0);
     expect(removeBullets(profile, new Set(["e_doesnotexist"])).profile).toEqual(profile);
+  });
+});
+
+describe("audit-profile-bullets — removal verification against the live profile", () => {
+  const NUCLEAR = "Delivered multi-plant capital program strategy for North American nuclear utility: delivered board-level recommendation for a multi-billion-dollar program";
+  const COCKPIT_FORBIDDEN = "Built a portfolio intelligence cockpit on a $10.45B portfolio of 16 projects.";
+  const DISTINCT = "Earned multiple Star Performance awards and a fast-track promotion.";
+  function profile(): Profile {
+    return {
+      ...getSeedProfile(),
+      experience: [{
+        id: "b", company: "Bain & Company", role: "Consultant", tenure: "2025 - Present", location: "", current: true,
+        bullets: [LEGACY_AI_PLATFORM, LEGACY_OG, NUCLEAR, COCKPIT_FORBIDDEN, DISTINCT, ...importedBain].join("\n"),
+      }],
+    };
+  }
+  const id = (t: string) => bulletId("experience", "Bain & Company", t);
+
+  it("flags forbidden terms per bullet", () => {
+    const rows = auditProfile(profile());
+    expect(rows.find(r => r.text === NUCLEAR)!.forbiddenTerms).toContain("nuclear utility");
+    expect(rows.find(r => r.text === COCKPIT_FORBIDDEN)!.forbiddenTerms).toContain("$10.45B");
+    expect(rows.find(r => r.text === DISTINCT)!.forbiddenTerms).toEqual([]);
+  });
+
+  it("passes a high-overlap id, a tool-placement id and a forbidden-term id at min overlap 0.8", () => {
+    const checks = verifyRemoval(auditProfile(profile()), [id(LEGACY_OG), id(LEGACY_AI_PLATFORM), id(NUCLEAR)], 0.8);
+    expect(checks.map(c => c.ok)).toEqual([true, true, true]);
+    expect(checks[1].reason).toMatch(/Document intelligence engine/);
+    expect(checks[2].reason).toMatch(/nuclear utility/);
+  });
+
+  it("fails an id that is missing, imported, or a distinct legacy bullet below the overlap floor", () => {
+    const checks = verifyRemoval(auditProfile(profile()), ["e_doesnotexist", id(importedBain[0]), id(DISTINCT)], 0.8);
+    expect(checks.map(c => c.ok)).toEqual([false, false, false]);
+    expect(checks[0].reason).toMatch(/not found/);
+    expect(checks[1].reason).toMatch(/imported/);
+    expect(checks[2].reason).toMatch(/below 0.8/);
+  });
+
+  it("formatBand lists legacy bullets in the band with both texts, excluding ones outside it", () => {
+    const out = formatBand(auditProfile(profile()), 0.5, 0.8);
+    expect(out).not.toContain(LEGACY_OG); // 0.90, above the band
+    expect(out).not.toContain(DISTINCT);
+    expect(out).toMatch(/LEGACY: .*\n  IMPORTED: /);
+  });
+
+  it("employerCounts reports total, imported and legacy per employer", () => {
+    expect(employerCounts(profile())).toEqual([{ company: "Bain & Company", total: 5 + importedBain.length, imported: importedBain.length, legacy: 5 }]);
   });
 });

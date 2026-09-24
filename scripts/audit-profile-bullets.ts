@@ -5,21 +5,27 @@
 //     else, i.e. pre-import content)
 //   - toolPlacement violations: names a build that config/profile-rules.json
 //     assigns to a DIFFERENT employer (the same check that blocks export)
+//   - forbidden terms: anything the confidentiality gate blocks ("nuclear
+//     utility", "$10.45B", ...)
 //   - superseded: a legacy bullet whose engagement overlaps an imported
-//     bullet under the same employer (containment >= 0.5, the same
-//     threshold as resume dedupe)
+//     bullet under the same employer (containment >= 0.5)
 //
-// Nothing is removed unless you name the exact bullet ids AND pass --apply.
+// Removal is by explicit id only, and every id is re-verified against the
+// live profile first: it must exist, must be legacy, and must either reach
+// --min-overlap with an imported bullet or carry a tool-placement /
+// forbidden-term flag. If ANY id fails, nothing is written.
 //
 // USAGE:
-//   npx tsx scripts/audit-profile-bullets.ts <userEmail>
-//   npx tsx scripts/audit-profile-bullets.ts <userEmail> --remove <id,id,...>          # dry run: shows what would go
-//   npx tsx scripts/audit-profile-bullets.ts <userEmail> --remove <id,id,...> --apply  # actually removes them
+//   npx tsx scripts/audit-profile-bullets.ts <email>                                   # full audit + counts
+//   npx tsx scripts/audit-profile-bullets.ts <email> --band 0.5 0.8                    # legacy vs closest imported, side by side
+//   npx tsx scripts/audit-profile-bullets.ts <email> --remove <ids> [--min-overlap 0.8] # verify + preview
+//   npx tsx scripts/audit-profile-bullets.ts <email> --remove <ids> [--min-overlap 0.8] --apply
 
 import { profileRepo } from "../lib/server/repositories";
 import { namesMatch, splitBullets } from "../lib/profile-merge";
 import { engagementContainment } from "../lib/resume-dedupe";
 import { bulletId } from "../lib/profile-bullets";
+import { runConfidentialityGate } from "../lib/resume-confidentiality";
 import { EXPERIENCE_CANDIDATES } from "./import-master-profile";
 import profileRulesConfig from "../config/profile-rules.json";
 import type { Profile } from "../lib/profile";
@@ -33,6 +39,7 @@ export type AuditedBullet = {
   text: string;
   origin: "imported" | "legacy";
   toolViolations: { tool: string; belongsTo: string }[];
+  forbiddenTerms: string[];
   bestImportedMatch: { text: string; containment: number } | null;
   superseded: boolean;
 };
@@ -85,12 +92,53 @@ export function auditProfile(profile: Profile): AuditedBullet[] {
         text,
         origin,
         toolViolations: toolViolations(text, e.company),
+        forbiddenTerms: runConfidentialityGate(text).blockedTerms,
         bestImportedMatch: best,
         superseded: origin === "legacy" && !!best && best.containment >= SUPERSEDED_THRESHOLD,
       });
     }
   }
   return rows;
+}
+
+export type EmployerCount = { company: string; total: number; imported: number; legacy: number };
+
+export function employerCounts(profile: Profile): EmployerCount[] {
+  const rows = auditProfile(profile);
+  return profile.experience.map(e => {
+    const mine = rows.filter(r => r.company === e.company);
+    const legacy = mine.filter(r => r.origin === "legacy").length;
+    return { company: e.company, total: mine.length, imported: mine.length - legacy, legacy };
+  });
+}
+
+export function formatCounts(counts: EmployerCount[]): string {
+  return counts.map(c => `  ${c.company}: ${c.total} (${c.imported} imported, ${c.legacy} legacy)`).join("\n");
+}
+
+export type RemovalCheck = { id: string; ok: boolean; reason: string; row?: AuditedBullet };
+
+/**
+ * Re-verifies every requested id against the LIVE profile. An id passes
+ * only if it exists, is legacy (imported bullets are never removable here),
+ * and either reaches minOverlap with an imported bullet or carries a
+ * tool-placement or forbidden-term flag.
+ */
+export function verifyRemoval(rows: AuditedBullet[], ids: string[], minOverlap: number): RemovalCheck[] {
+  return ids.map(id => {
+    const row = rows.find(r => r.id === id);
+    if (!row) return { id, ok: false, reason: "not found in the live profile" };
+    if (row.origin === "imported") return { id, ok: false, reason: "is an imported bullet, never removed by this tool", row };
+    const overlap = row.bestImportedMatch?.containment ?? 0;
+    const reasons: string[] = [];
+    if (overlap >= minOverlap && row.bestImportedMatch) reasons.push(`overlap ${overlap.toFixed(2)}`);
+    for (const v of row.toolViolations) reasons.push(`names ${v.belongsTo}'s "${v.tool}"`);
+    for (const t of row.forbiddenTerms) reasons.push(`forbidden term "${t}"`);
+    if (reasons.length === 0) {
+      return { id, ok: false, reason: `overlap ${overlap.toFixed(2)} is below ${minOverlap} and it has no tool-placement or forbidden-term flag`, row };
+    }
+    return { id, ok: true, reason: reasons.join(", "), row };
+  });
 }
 
 /** Removes exactly the named bullet ids (and their bulletTags entries). Never removes anything not listed. */
@@ -110,6 +158,21 @@ export function removeBullets(profile: Profile, ids: Set<string>): { profile: Pr
   return { profile: { ...profile, experience }, removed };
 }
 
+/** Legacy bullets whose closest imported match falls in [lo, hi), shown side by side for a human decision. */
+export function formatBand(rows: AuditedBullet[], lo: number, hi: number): string {
+  const inBand = rows
+    .filter(r => r.origin === "legacy" && r.bestImportedMatch && r.bestImportedMatch.containment >= lo && r.bestImportedMatch.containment < hi)
+    .sort((a, b) => b.bestImportedMatch!.containment - a.bestImportedMatch!.containment);
+  const out = [`${inBand.length} legacy bullet(s) with ${lo.toFixed(2)} <= overlap < ${hi.toFixed(2)}:`];
+  for (const r of inBand) {
+    const flags = [...r.toolViolations.map(v => `TOOL-PLACEMENT (${v.belongsTo})`), ...r.forbiddenTerms.map(t => `FORBIDDEN "${t}"`)];
+    out.push(`\n[${r.id}] ${r.company}  overlap ${r.bestImportedMatch!.containment.toFixed(2)}${flags.length ? "  " + flags.join(" | ") : ""}`);
+    out.push(`  LEGACY:   ${r.text}`);
+    out.push(`  IMPORTED: ${r.bestImportedMatch!.text}`);
+  }
+  return out.join("\n");
+}
+
 export function formatAudit(rows: AuditedBullet[], duplicateEntries: string[][] = []): string {
   const out: string[] = [];
   for (const g of duplicateEntries) {
@@ -124,6 +187,7 @@ export function formatAudit(rows: AuditedBullet[], duplicateEntries: string[][] 
       const flags = [
         r.origin.toUpperCase(),
         ...r.toolViolations.map(v => `TOOL-PLACEMENT: "${v.tool}" belongs to ${v.belongsTo}`),
+        ...r.forbiddenTerms.map(t => `FORBIDDEN: "${t}"`),
         ...(r.superseded ? [`SUPERSEDED (${r.bestImportedMatch!.containment.toFixed(2)} overlap)`] : []),
       ];
       out.push(`  [${r.id}] ${flags.join(" | ")}`);
@@ -133,15 +197,20 @@ export function formatAudit(rows: AuditedBullet[], duplicateEntries: string[][] 
       }
     }
   }
-  const flagged = rows.filter(r => r.toolViolations.length > 0 || r.superseded);
+  const flagged = rows.filter(r => r.toolViolations.length > 0 || r.forbiddenTerms.length > 0 || r.superseded);
   out.push(`\n${rows.length} bullets total, ${rows.filter(r => r.origin === "legacy").length} legacy, ${flagged.length} flagged for review: ${flagged.map(r => r.id).join(",") || "none"}`);
   return out.join("\n");
 }
 
+function arg(name: string, offset = 1): string | undefined {
+  const i = process.argv.indexOf(name);
+  return i === -1 ? undefined : process.argv[i + offset];
+}
+
 function main() {
   const userEmail = process.argv[2] || process.env.ADMIN_EMAIL;
-  if (!userEmail) {
-    console.error("Usage: npx tsx scripts/audit-profile-bullets.ts <userEmail> [--remove id,id,...] [--apply]");
+  if (!userEmail || userEmail.startsWith("--")) {
+    console.error("Usage: npx tsx scripts/audit-profile-bullets.ts <email> [--band lo hi] [--remove id,id,... [--min-overlap n] [--apply]]");
     process.exit(1);
   }
   const profile = profileRepo.get(userEmail);
@@ -149,20 +218,42 @@ function main() {
     console.error(`No profile found for ${userEmail}.`);
     process.exit(1);
   }
-  console.log(formatAudit(auditProfile(profile), duplicateEmployerEntries(profile)));
+  const rows = auditProfile(profile);
 
-  const removeIdx = process.argv.indexOf("--remove");
-  if (removeIdx === -1) return;
-  const ids = new Set((process.argv[removeIdx + 1] ?? "").split(",").map(s => s.trim()).filter(Boolean));
-  const { profile: next, removed } = removeBullets(profile, ids);
-  console.log(`\nWould remove ${removed.length} of ${ids.size} requested ids:`);
-  for (const r of removed) console.log(`  - [${r.company}] ${r.text}`);
+  if (process.argv.includes("--band")) {
+    console.log(formatBand(rows, Number(arg("--band", 1)), Number(arg("--band", 2))));
+    return;
+  }
+
+  const removeArg = arg("--remove");
+  if (!removeArg) {
+    console.log(formatAudit(rows, duplicateEmployerEntries(profile)));
+    console.log(`\nBullets per employer:\n${formatCounts(employerCounts(profile))}`);
+    return;
+  }
+
+  const ids = [...new Set(removeArg.split(",").map(s => s.trim()).filter(Boolean))];
+  const minOverlap = Number(arg("--min-overlap") ?? 0);
+  const checks = verifyRemoval(rows, ids, minOverlap);
+  console.log(`Verifying ${ids.length} id(s) against the live profile (min overlap ${minOverlap}):`);
+  for (const c of checks) {
+    console.log(`  ${c.ok ? "OK  " : "FAIL"} [${c.id}] ${c.row ? `${c.row.company}: ` : ""}${c.reason}`);
+    if (c.row) console.log(`         ${c.row.text}`);
+  }
+  const failed = checks.filter(c => !c.ok);
+  if (failed.length > 0) {
+    console.log(`\n${failed.length} id(s) failed verification. Nothing removed.`);
+    process.exit(1);
+  }
+
+  const { profile: next, removed } = removeBullets(profile, new Set(ids));
+  console.log(`\nBullets per employer after removal:\n${formatCounts(employerCounts(next))}`);
   if (!process.argv.includes("--apply")) {
-    console.log("Dry run only. Re-run with --apply to remove them.");
+    console.log(`\nPreview only: ${removed.length} bullet(s) would be removed. Re-run with --apply to write.`);
     return;
   }
   profileRepo.save(userEmail, next);
-  console.log(`Removed ${removed.length} bullet(s).`);
+  console.log(`\nRemoved ${removed.length} bullet(s).`);
 }
 
 if (process.argv[1]?.endsWith("audit-profile-bullets.ts")) main();
