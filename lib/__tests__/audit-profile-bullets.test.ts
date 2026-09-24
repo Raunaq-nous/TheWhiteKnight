@@ -116,3 +116,13 @@ describe("audit-profile-bullets — removal verification against the live profil
     expect(employerCounts(profile())).toEqual([{ company: "Bain & Company", total: 5 + importedBain.length, imported: importedBain.length, legacy: 5 }]);
   });
 });
+
+describe("audit-profile-bullets --band argument parsing", () => {
+  it("defaults to 0.50-0.79 when no bounds are given (the reported NaN bug)", async () => {
+    const { parseBand } = await import("../../scripts/audit-profile-bullets");
+    expect(parseBand(undefined, undefined)).toEqual([0.5, 0.8]);
+    expect(parseBand("--apply", undefined)).toEqual([0.5, 0.8]);
+    expect(parseBand("0.6", "0.9")).toEqual([0.6, 0.9]);
+    expect(parseBand("0.9", "0.6")).toEqual([0.5, 0.8]);
+  });
+});

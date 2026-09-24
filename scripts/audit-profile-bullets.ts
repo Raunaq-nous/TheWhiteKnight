@@ -17,7 +17,7 @@
 //
 // USAGE:
 //   npx tsx scripts/audit-profile-bullets.ts <email>                                   # full audit + counts
-//   npx tsx scripts/audit-profile-bullets.ts <email> --band 0.5 0.8                    # legacy vs closest imported, side by side
+//   npx tsx scripts/audit-profile-bullets.ts <email> --band [lo hi]                     # legacy vs closest imported, side by side (default 0.50-0.79)
 //   npx tsx scripts/audit-profile-bullets.ts <email> --remove <ids> [--min-overlap 0.8] # verify + preview
 //   npx tsx scripts/audit-profile-bullets.ts <email> --remove <ids> [--min-overlap 0.8] --apply
 
@@ -163,7 +163,7 @@ export function formatBand(rows: AuditedBullet[], lo: number, hi: number): strin
   const inBand = rows
     .filter(r => r.origin === "legacy" && r.bestImportedMatch && r.bestImportedMatch.containment >= lo && r.bestImportedMatch.containment < hi)
     .sort((a, b) => b.bestImportedMatch!.containment - a.bestImportedMatch!.containment);
-  const out = [`${inBand.length} legacy bullet(s) with ${lo.toFixed(2)} <= overlap < ${hi.toFixed(2)}:`];
+  const out = [`${inBand.length} legacy bullet(s) with overlap ${lo.toFixed(2)} to ${(hi - 0.01).toFixed(2)}:`];
   for (const r of inBand) {
     const flags = [...r.toolViolations.map(v => `TOOL-PLACEMENT (${v.belongsTo})`), ...r.forbiddenTerms.map(t => `FORBIDDEN "${t}"`)];
     out.push(`\n[${r.id}] ${r.company}  overlap ${r.bestImportedMatch!.containment.toFixed(2)}${flags.length ? "  " + flags.join(" | ") : ""}`);
@@ -202,6 +202,16 @@ export function formatAudit(rows: AuditedBullet[], duplicateEntries: string[][] 
   return out.join("\n");
 }
 
+export const DEFAULT_BAND: [number, number] = [0.5, 0.8];
+
+/** Band bounds from CLI args; a missing or non-numeric value falls back to the default 0.50-0.79 (upper bound exclusive). */
+export function parseBand(lo?: string, hi?: string): [number, number] {
+  const num = (v?: string) => (v !== undefined && v.trim() !== "" && !v.startsWith("--") && Number.isFinite(Number(v)) ? Number(v) : undefined);
+  const l = num(lo) ?? DEFAULT_BAND[0];
+  const h = num(hi) ?? DEFAULT_BAND[1];
+  return l < h ? [l, h] : DEFAULT_BAND;
+}
+
 function arg(name: string, offset = 1): string | undefined {
   const i = process.argv.indexOf(name);
   return i === -1 ? undefined : process.argv[i + offset];
@@ -221,7 +231,8 @@ function main() {
   const rows = auditProfile(profile);
 
   if (process.argv.includes("--band")) {
-    console.log(formatBand(rows, Number(arg("--band", 1)), Number(arg("--band", 2))));
+    const [lo, hi] = parseBand(arg("--band", 1), arg("--band", 2));
+    console.log(formatBand(rows, lo, hi));
     return;
   }
 
