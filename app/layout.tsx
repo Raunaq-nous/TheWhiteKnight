@@ -5,7 +5,7 @@ import ToastHost from "./toast-host";
 
 export const metadata: Metadata = {
   title: "CareerOS",
-  description: "AI-powered job application command center",
+  description: "The operating system for your next career move.",
   manifest: "/TheWhiteKnight/manifest.json",
   appleWebApp: {
     capable: true,
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
-    { media: "(prefers-color-scheme: dark)", color: "#0A0A0A" },
+    { media: "(prefers-color-scheme: light)", color: "#070809" },
+    { media: "(prefers-color-scheme: dark)", color: "#070809" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -28,11 +28,12 @@ export const viewport: Viewport = {
 };
 
 // Runs before first paint to avoid theme flash
-const setInitialTheme = `(function(){try{var t=localStorage.getItem('careeros-theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
+// Black is the default; light is an explicit choice that persists.
+const setInitialTheme = `(function(){try{var t=localStorage.getItem('careeros-theme');if(t!=='light'&&t!=='dark'){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="light">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <link rel="apple-touch-icon" href="/TheWhiteKnight/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: setInitialTheme }} />

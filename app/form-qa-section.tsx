@@ -238,7 +238,7 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className="label">FORM QUESTION ANSWERER</span>
           {qa.length > 0 && (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", padding: "2px 8px", background: "rgba(50,200,100,0.12)", border: "1px solid var(--success)", borderRadius: 2, color: "var(--success)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", padding: "2px 8px", background: "color-mix(in srgb, var(--success) 12%, transparent)", border: "1px solid var(--success)", borderRadius: 2, color: "var(--success)" }}>
               {qa.length} ANSWERS SAVED
             </span>
           )}
@@ -253,7 +253,7 @@ export function FormQASection({ jdRaw, companyName, roleTitle, savedAnswers, onS
           </p>
 
           {error && (
-            <div style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", padding: "8px 12px", background: "rgba(255,50,50,0.08)", border: "1px solid var(--error)", borderRadius: "var(--radius)" }}>
+            <div style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", padding: "8px 12px", background: "color-mix(in srgb, var(--error) 8%, transparent)", border: "1px solid var(--error)", borderRadius: "var(--radius)" }}>
               {error}
             </div>
           )}

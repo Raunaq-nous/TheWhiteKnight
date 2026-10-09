@@ -44,7 +44,7 @@ export default function AdminSetupPage() {
             </div>
           )}
           {result?.error && (
-            <div style={{ background: "rgba(255,50,50,0.1)", border: "1px solid var(--error)", padding: "12px 16px", borderRadius: "var(--radius)", marginBottom: 20, fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--error)" }}>
+            <div style={{ background: "color-mix(in srgb, var(--error) 10%, transparent)", border: "1px solid var(--error)", padding: "12px 16px", borderRadius: "var(--radius)", marginBottom: 20, fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--error)" }}>
               {result.error}
             </div>
           )}

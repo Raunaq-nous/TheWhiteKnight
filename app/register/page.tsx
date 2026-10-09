@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import CodeBrain from "../code-brain";
+import { Logo, ThemeToggle } from "../components";
 import { Suspense } from "react";
 
 function RegisterForm() {
@@ -41,81 +43,56 @@ function RegisterForm() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-primary)", padding: "24px" }}>
-      <div style={{ width: "100%", maxWidth: 400 }}>
-        <div style={{ marginBottom: 32, textAlign: "center" }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.25rem", fontWeight: 700, color: "var(--accent)", letterSpacing: "0.1em", marginBottom: 8 }}>
-            CAREEROS
-          </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-            Create your account
-          </div>
-        </div>
-
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 32 }}>
-          <div style={{ background: "rgba(255,165,0,0.06)", border: "1px solid rgba(255,165,0,0.2)", padding: "10px 14px", borderRadius: "var(--radius)", marginBottom: 20, fontSize: "0.75rem", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", lineHeight: 1.5 }}>
-            This app is invite-only. You need an invite code from Raunaq to create an account.
-          </div>
-
-          {error && (
-            <div style={{ background: "rgba(255,50,50,0.1)", border: "1px solid var(--error)", padding: "10px 14px", borderRadius: "var(--radius)", marginBottom: 20, fontSize: "0.8rem", color: "var(--error)", fontFamily: "var(--font-mono)" }}>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div>
-              <label className="label" style={{ display: "block", marginBottom: 6 }}>INVITE CODE</label>
-              <input
-                type="text"
-                value={inviteCode}
-                onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                required
-                placeholder="XXXXXXXX"
-                style={{ width: "100%", padding: "10px 12px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem", borderRadius: "var(--radius)", letterSpacing: "0.15em" }}
-              />
-            </div>
-            <div>
-              <label className="label" style={{ display: "block", marginBottom: 6 }}>EMAIL</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                style={{ width: "100%", padding: "10px 12px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem", borderRadius: "var(--radius)" }}
-              />
-            </div>
-            <div>
-              <label className="label" style={{ display: "block", marginBottom: 6 }}>PASSWORD <span style={{ color: "var(--text-tertiary)" }}>(min 8 chars)</span></label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete="new-password"
-                style={{ width: "100%", padding: "10px 12px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.875rem", borderRadius: "var(--radius)" }}
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn btn-primary"
-              style={{ width: "100%", padding: "12px", justifyContent: "center", marginTop: 8 }}
-            >
-              {loading ? "CREATING ACCOUNT..." : "CREATE ACCOUNT"}
-            </button>
-          </form>
-
-          <div style={{ marginTop: 20, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
-            Already have an account?{" "}
-            <Link href="/login" style={{ color: "var(--accent)", textDecoration: "none" }}>
-              Sign in
-            </Link>
-          </div>
-        </div>
+    <div className="landing" style={{ minHeight: "100vh" }}>
+      <div className="landing-canvas" aria-hidden="true">
+        <CodeBrain phase={1.25} focusX={0.7} focusY={0.5} scale={0.34} reach={0.9} />
       </div>
+      <div className="landing-veil" />
+      <header className="container" style={{ position: "relative", zIndex: 3, maxWidth: "none", display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 22, paddingBottom: 22 }}>
+        <Link href="/login" style={{ color: "inherit", textDecoration: "none" }}><Logo /></Link>
+        <ThemeToggle />
+      </header>
+      <main className="landing-content">
+        <section className="landing-section" style={{ minHeight: "calc(100vh - 80px)", paddingTop: 40 }}>
+          <div className="container" style={{ maxWidth: "none" }}>
+            <div className="eyebrow">Create account / invite only</div>
+            <h1 className="display-md" style={{ marginTop: 24, maxWidth: "8ch" }}>
+              Join the <span className="em">system.</span>
+            </h1>
+            <p className="lede" style={{ marginTop: 24 }}>
+              CareerOS is invite-only. You need an invite code from Raunaq to create an account.
+            </p>
+
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 360, marginTop: 40 }} aria-label="Create account">
+              {error && (
+                <div role="alert" style={{ borderLeft: "1px solid var(--error)", padding: "4px 0 4px 12px", fontSize: "0.8125rem", color: "var(--error)", fontFamily: "var(--font-mono)" }}>
+                  {error}
+                </div>
+              )}
+              <label style={{ display: "block" }}>
+                <span className="label" style={{ display: "block" }}>Invite code</span>
+                <input className="field" type="text" value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} required placeholder="XXXXXXXX" style={{ letterSpacing: "0.15em" }} />
+              </label>
+              <label style={{ display: "block" }}>
+                <span className="label" style={{ display: "block" }}>Email</span>
+                <input className="field" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoComplete="email" />
+              </label>
+              <label style={{ display: "block" }}>
+                <span className="label" style={{ display: "block" }}>Password <span style={{ opacity: 0.7 }}>(min 8 chars)</span></span>
+                <input className="field" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+              </label>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 6, flexWrap: "wrap" }}>
+                <button type="submit" disabled={loading} className="btn btn-primary btn-arrow">
+                  {loading ? "Creating account" : "Create account"}
+                </button>
+                <Link href="/login" className="label" style={{ textDecoration: "none", color: "var(--text-secondary)" }}>
+                  Have an account? <span style={{ color: "var(--text-primary)" }}>Sign in</span>
+                </Link>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

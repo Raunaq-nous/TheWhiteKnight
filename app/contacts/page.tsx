@@ -16,9 +16,9 @@ const ROLE_LABELS: Record<ContactRole, string> = {
 
 const ROLE_COLORS: Record<ContactRole, string> = {
   hiring_manager: "var(--accent)",
-  referral_candidate: "#60a5fa",
+  referral_candidate: "var(--ice)",
   ceo: "var(--error)",
-  executive: "#a78bfa",
+  executive: "var(--champagne)",
   recruiter: "var(--text-secondary)",
   other: "var(--text-tertiary)",
 };

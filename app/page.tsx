@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { STATUSES } from "./data";
 import { ScoreBar, StatusPill, Header, Footer } from "./components";
+import CodeBrain from "./code-brain";
 import { getApplications, deleteApplication, Application } from "../lib/store";
 import { hasProfile } from "../lib/profile";
 
@@ -31,24 +32,7 @@ function AppCard({ app, onDelete }: { app: Application; onDelete: (id: string, l
         onClick={e => { e.preventDefault(); e.stopPropagation(); if (app.id) onDelete(app.id, `${app.company} — ${app.role}`); }}
         aria-label="Delete application"
         title="Delete"
-        style={{
-          position: "absolute",
-          top: 8,
-          right: 8,
-          width: 24,
-          height: 24,
-          padding: 0,
-          background: "transparent",
-          border: "1px solid var(--border-light)",
-          borderRadius: 4,
-          color: "var(--text-tertiary)",
-          cursor: "pointer",
-          fontSize: "0.875rem",
-          lineHeight: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
+        className="card-delete"
       >
         ×
       </button>
@@ -83,26 +67,53 @@ export default function Dashboard() {
   const avgScore = apps.length > 0 ? (apps.reduce((sum, a) => sum + a.score, 0) / apps.length).toFixed(1) : "0.0";
   const interviewRate = apps.length > 0 ? Math.round((apps.filter(a => ["interview", "offer"].includes(a.status)).length / apps.length) * 100) : 0;
 
+  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
+  const inFlight = counts.applied + counts.interview;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <Header />
-      <main className="container" style={{ paddingTop: 24, paddingBottom: 64, flex: 1 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: "var(--radius)", marginBottom: 24, overflow: "hidden" }}>
-          <div className="stat">
-            <div className="stat-value" style={{ color: "var(--accent)" }}>{totalActive}</div>
-            <div className="stat-label">ACTIVE</div>
+      <section className="dash-hero">
+        <div className="container dash-hero-inner">
+          <div className="dash-hero-copy">
+            <div>
+              <div className="eyebrow">Pipeline / 01 · {today}</div>
+              <h1 className="display-sm" style={{ marginTop: 22, maxWidth: "12ch" }}>
+                Your search, <span className="em">in motion.</span>
+              </h1>
+              <p className="lede" style={{ marginTop: 18, maxWidth: "40ch", fontSize: "0.9375rem" }}>
+                {apps.length === 0
+                  ? "Nothing in the pipeline yet. Ingest a job description or scan the portals to start."
+                  : `${totalActive} active ${totalActive === 1 ? "role" : "roles"}, ${inFlight} in flight. Every application waits for your approval before anything is sent.`}
+              </p>
+            </div>
+            <div className="kpis">
+              <div>
+                <div className="kpi-value">{totalActive}</div>
+                <div className="kpi-label">Active</div>
+              </div>
+              <div>
+                <div className="kpi-value">{avgScore}</div>
+                <div className="kpi-label">Avg score</div>
+              </div>
+              <div>
+                <div className="kpi-value" style={{ color: "var(--status-offer)" }}>{interviewRate}%</div>
+                <div className="kpi-label">Interview rate</div>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+                <Link href="/batch/" className="btn">Scan portals</Link>
+                <Link href="/ingest" className="btn btn-primary">+ Ingest JD</Link>
+              </div>
+            </div>
           </div>
-          <div className="stat">
-            <div className="stat-value">{avgScore}</div>
-            <div className="stat-label">AVG SCORE</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value" style={{ color: "var(--success)" }}>{interviewRate}%</div>
-            <div className="stat-label">INTERVIEW RATE</div>
+          <div className="dash-brain" aria-hidden="true">
+            <CodeBrain phase={2.35} focusX={0.52} focusY={0.52} scale={0.46} reach={0.45} labels="hover" />
           </div>
         </div>
+      </section>
 
-        <div className="stats-bar">
+      <main className="container" style={{ paddingTop: 28, paddingBottom: 72, flex: 1 }}>
+        <div className="stats-bar" style={{ marginTop: 0 }}>
           {STATUSES.map(s => (
             <div className="stat" key={s}>
               <div className="stat-value" style={{ color: `var(--status-${s})` }}>{counts[s]}</div>
@@ -111,12 +122,9 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="section-header">
-          <span className="section-title">APPLICATION PIPELINE</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Link href="/batch/" className="btn" style={{ textDecoration: "none" }}>SCAN PORTALS</Link>
-            <Link href="/ingest" className="btn btn-primary" style={{ textDecoration: "none" }}>+ INGEST JD</Link>
-          </div>
+        <div className="section-header" style={{ marginTop: 40 }}>
+          <span className="section-title">Application pipeline</span>
+          <span className="label">{apps.length} total</span>
         </div>
 
         <div className="pipeline">
@@ -124,14 +132,14 @@ export default function Dashboard() {
             <div className="column" key={status}>
               <div className="column-header">
                 <span className="column-title" style={{ color: `var(--status-${status})` }}>{status}</span>
-                <span className="column-count">{counts[status]}</span>
+                <span className="column-count">{String(counts[status]).padStart(2, "0")}</span>
               </div>
               <div className="column-body">
                 {apps.filter(a => a.status === status).map((app, i) => (
                   <AppCard app={app} key={i} onDelete={handleDelete} />
                 ))}
                 {counts[status] === 0 && (
-                  <div className="empty-state"><p>NO APPLICATIONS</p></div>
+                  <div className="empty-state"><p>Empty</p></div>
                 )}
               </div>
             </div>

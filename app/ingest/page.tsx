@@ -377,7 +377,7 @@ export default function IngestPage() {
         </div>
 
         {errorMsg && (
-          <div style={{ background: "rgba(255,50,50,0.1)", border: "1px solid var(--error)", padding: 16, borderRadius: "var(--radius)", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ background: "color-mix(in srgb, var(--error) 10%, transparent)", border: "1px solid var(--error)", padding: 16, borderRadius: "var(--radius)", marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>{errorMsg}</span>
             {errorMsg.includes("Settings") && (
               <Link href="/settings/" className="btn" style={{ borderColor: "var(--error)", color: "var(--error)", textDecoration: "none" }}>GO TO SETTINGS</Link>
@@ -386,7 +386,7 @@ export default function IngestPage() {
         )}
 
         {autoPopulated && (
-          <div style={{ background: "rgba(50,200,100,0.1)", border: "1px solid var(--success)", padding: 12, borderRadius: "var(--radius)", marginBottom: 16, fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--success)" }}>
+          <div style={{ background: "color-mix(in srgb, var(--success) 10%, transparent)", border: "1px solid var(--success)", padding: 12, borderRadius: "var(--radius)", marginBottom: 16, fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--success)" }}>
             FIELDS AUTO-POPULATED FROM JD. Review and correct as needed.
           </div>
         )}
