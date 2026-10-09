@@ -70,7 +70,7 @@ export default function ProfilePage() {
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 32, marginBottom: 24 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <h1 style={{ fontFamily: "var(--font-mono)", fontSize: "1.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "-0.02em", marginBottom: 8 }}>
+              <h1 className="page-title" style={{ marginBottom: 10 }}>
                 {profile.name}
               </h1>
               <p style={{ fontSize: "1rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 16, maxWidth: 680 }}>

@@ -16,10 +16,10 @@ import { showToast } from "../lib/toast";
 
 const TYPE_COLORS: Record<string, string> = {
   pending_dm: "var(--accent)",
-  pending_referral_dm: "#60a5fa",
+  pending_referral_dm: "var(--ice)",
   pending_outreach: "var(--accent)",
-  pending_ceo_email: "#a78bfa",
-  followup_reminder: "#60a5fa",
+  pending_ceo_email: "var(--champagne)",
+  followup_reminder: "var(--ice)",
   interview_reminder: "var(--success)",
   offer_deadline: "var(--error)",
   info: "var(--text-secondary)",
@@ -155,26 +155,26 @@ export function NotificationBell() {
     <div style={{ position: "relative" }}>
       <button
         onClick={() => setOpen(o => !o)}
+        aria-label={count > 0 ? `Inbox, ${count} pending` : "Inbox"}
         style={{
           background: "none",
-          border: "1px solid var(--border)",
-          color: count > 0 ? "var(--accent)" : "var(--text-tertiary)",
+          border: "none",
+          color: count > 0 ? "var(--text-primary)" : "var(--text-tertiary)",
           fontFamily: "var(--font-mono)",
-          fontSize: "0.625rem",
-          padding: "3px 8px",
+          fontSize: "0.6875rem",
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          padding: "4px 0",
           cursor: "pointer",
-          borderRadius: "var(--radius)",
           display: "flex",
           alignItems: "center",
-          gap: 4,
+          gap: 8,
         }}
       >
-        {count > 0 && (
-          <span style={{ background: "var(--accent)", color: "#fff", borderRadius: "50%", width: 14, height: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.5rem", fontWeight: 700 }}>
-            {count > 9 ? "9+" : count}
-          </span>
-        )}
-        INBOX
+        Inbox
+        <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, border: "1px solid", borderColor: count > 0 ? "var(--champagne)" : "var(--border)", color: count > 0 ? "var(--champagne)" : "var(--text-tertiary)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.5625rem", letterSpacing: 0, boxShadow: count > 0 ? "0 0 12px color-mix(in srgb, var(--champagne) 35%, transparent)" : "none" }}>
+          {count > 9 ? "9+" : count}
+        </span>
       </button>
 
       {open && (

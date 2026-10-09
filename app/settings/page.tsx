@@ -210,7 +210,7 @@ export default function SettingsPage() {
                     borderRadius: "var(--radius)",
                     padding: 16,
                     cursor: "pointer",
-                    background: isSelected ? "rgba(255,165,0,0.04)" : "var(--bg-primary)",
+                    background: isSelected ? "color-mix(in srgb, var(--champagne) 4%, transparent)" : "var(--bg-primary)",
                     transition: "border-color 0.15s",
                   }}
                 >
@@ -514,7 +514,7 @@ export default function SettingsPage() {
               Last export: {new Date(lastBackup).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
             </div>
           ) : (
-            <div style={{ background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.3)", borderRadius: "var(--radius)", padding: "8px 12px", marginBottom: 12, fontSize: "0.625rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+            <div style={{ background: "color-mix(in srgb, var(--champagne) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--champagne) 30%, transparent)", borderRadius: "var(--radius)", padding: "8px 12px", marginBottom: 12, fontSize: "0.625rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
               No export on record. Export a backup so you can restore data if needed.
             </div>
           )}

@@ -79,7 +79,7 @@ export function ProfileEnrichmentBanner({ suggestions, onDismiss }: Props) {
 
   return (
     <div style={{
-      background: "rgba(50,200,100,0.07)",
+      background: "color-mix(in srgb, var(--success) 7%, transparent)",
       border: "1px solid var(--success)",
       borderRadius: "var(--radius)",
       padding: "14px 18px",
@@ -106,7 +106,7 @@ export function ProfileEnrichmentBanner({ suggestions, onDismiss }: Props) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={{
                   fontFamily: "var(--font-mono)", fontSize: "0.5rem", padding: "2px 6px",
-                  background: "rgba(50,200,100,0.15)", border: "1px solid var(--success)",
+                  background: "color-mix(in srgb, var(--success) 15%, transparent)", border: "1px solid var(--success)",
                   borderRadius: 2, color: "var(--success)", marginRight: 8, whiteSpace: "nowrap",
                 }}>
                   {typeLabel(s.type)}

@@ -573,7 +573,7 @@ window.addEventListener('load', function() {
       <div style={{ borderBottom: "1px solid var(--border)", paddingBottom: 24, marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
-            <h1 style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 600, letterSpacing: "-0.01em", textTransform: "uppercase", marginBottom: 4 }}>
+            <h1 className="page-title" style={{ marginBottom: 6 }}>
               {app.company}
             </h1>
             <p style={{ fontSize: "1.125rem", color: "var(--text-secondary)", marginBottom: 12 }}>
@@ -846,7 +846,7 @@ window.addEventListener('load', function() {
               <button className="btn" onClick={() => handleGenerate("linkedin-dm")} disabled={!!generating}>
                 {generating === "linkedin-dm" ? "GENERATING..." : "LINKEDIN DM"}
               </button>
-              <button className="btn" style={{ borderColor: "#a78bfa", color: "#a78bfa" }} onClick={() => handleGenerate("ceo-cold-email")} disabled={!!generating}>
+              <button className="btn" style={{ borderColor: "var(--champagne)", color: "var(--champagne)" }} onClick={() => handleGenerate("ceo-cold-email")} disabled={!!generating}>
                 {generating === "ceo-cold-email" ? "GENERATING..." : "CEO COLD EMAIL"}
               </button>
               <button className="btn" style={{ borderColor: "var(--accent)", color: "var(--accent)" }} onClick={() => setShowContacts(s => !s)}>
@@ -1306,7 +1306,7 @@ window.addEventListener('load', function() {
                       <span
                         key={i}
                         onClick={() => navigator.clipboard.writeText(kw)}
-                        style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", padding: "3px 8px", background: "rgba(255,165,0,0.08)", border: "1px solid rgba(255,165,0,0.3)", borderRadius: 2, color: "var(--text-primary)", cursor: "pointer", userSelect: "none" }}
+                        style={{ fontFamily: "var(--font-mono)", fontSize: "0.6875rem", padding: "3px 8px", background: "color-mix(in srgb, var(--champagne) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--champagne) 30%, transparent)", borderRadius: 2, color: "var(--text-primary)", cursor: "pointer", userSelect: "none" }}
                         title="Click to copy"
                       >{kw}</span>
                     ))}
@@ -1352,7 +1352,7 @@ window.addEventListener('load', function() {
 
               {/* Red flags */}
               {app.jdParsed.redFlags?.length > 0 && (
-                <div style={{ padding: "10px 14px", background: "rgba(255,50,50,0.06)", border: "1px solid rgba(255,50,50,0.2)", borderRadius: "var(--radius)" }}>
+                <div style={{ padding: "10px 14px", background: "color-mix(in srgb, var(--error) 6%, transparent)", border: "1px solid color-mix(in srgb, var(--error) 20%, transparent)", borderRadius: "var(--radius)" }}>
                   <div className="label" style={{ fontSize: "0.625rem", color: "var(--error)", marginBottom: 6 }}>RED FLAGS</div>
                   <ul style={{ margin: 0, paddingLeft: 20, fontSize: "0.8125rem", color: "var(--error)", lineHeight: 1.6, opacity: 0.85 }}>
                     {app.jdParsed.redFlags.map((r: string, i: number) => <li key={i}>{r}</li>)}

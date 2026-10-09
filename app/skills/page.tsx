@@ -157,7 +157,7 @@ export default function SkillBuilderPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 24 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
               <div className="label" style={{ marginBottom: 8 }}>SKILL PROGRESSION SYSTEM</div>
-              <h1 style={{ fontFamily: "var(--font-mono)", fontSize: "2.25rem", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 12 }}>
+              <h1 className="page-title" style={{ marginBottom: 12 }}>
                 BUILD WHAT THE MARKET WANTS
               </h1>
               <p style={{ fontSize: "1rem", color: "var(--text-secondary)", lineHeight: 1.5, maxWidth: 720 }}>
@@ -177,7 +177,7 @@ export default function SkillBuilderPage() {
           </div>
 
           {error && (
-            <div style={{ background: "rgba(255,50,50,0.1)", border: "1px solid var(--error)", padding: 16, borderRadius: "var(--radius)", marginBottom: 24, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>
+            <div style={{ background: "color-mix(in srgb, var(--error) 10%, transparent)", border: "1px solid var(--error)", padding: 16, borderRadius: "var(--radius)", marginBottom: 24, color: "var(--error)", fontFamily: "var(--font-mono)", fontSize: "0.875rem" }}>
               {error}
             </div>
           )}

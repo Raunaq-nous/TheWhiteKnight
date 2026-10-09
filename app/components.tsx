@@ -1,13 +1,36 @@
 "use client";
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { NotificationBell } from "./notifications";
 
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+export function LogoMark({ className = "logo-mark" }: { className?: string }) {
+  // Code brackets with dendrites converging on a single node: code -> neuron.
+  return (
+    <svg className={className} viewBox="0 0 26 18" fill="none" aria-hidden="true">
+      <path d="M6 1.5C3 3.5 1.5 6 1.5 9s1.5 5.5 4.5 7.5M20 1.5c3 2 4.5 4.5 4.5 7.5s-1.5 5.5-4.5 7.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M6.5 5.5 11 9l-4.5 3.5M19.5 5.5 15 9l4.5 3.5M7 9h12" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.75" />
+      <circle cx="13" cy="9" r="1.9" fill="currentColor" />
+    </svg>
+  );
+}
+
+export function Logo() {
+  return (
+    <span className="logo">
+      <LogoMark />
+      <span style={{ fontFamily: "var(--font-sans)", fontStyle: "normal", fontWeight: 500, letterSpacing: "-0.04em" }}>career</span>
+      <span style={{ marginLeft: -9 }}>OS</span>
+    </span>
+  );
+}
+
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+  const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
-    const current = (document.documentElement.getAttribute("data-theme") as "light" | "dark") ?? "light";
+    const current = (document.documentElement.getAttribute("data-theme") as "light" | "dark") ?? "dark";
     setTheme(current);
   }, []);
 
@@ -21,11 +44,16 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="btn"
-      style={{ fontSize: "0.625rem", padding: "3px 10px" }}
+      className="btn btn-ghost"
+      style={{ gap: 8, fontSize: "0.625rem" }}
       title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+      aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
     >
-      {theme === "light" ? "◑ DARK" : "◐ LIGHT"}
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <circle cx="6" cy="6" r="5.25" fill="none" stroke="currentColor" strokeWidth="1" />
+        <path d="M6 .75a5.25 5.25 0 0 1 0 10.5z" fill="currentColor" />
+      </svg>
+      {!compact && (theme === "light" ? "Dark" : "Light")}
     </button>
   );
 }
@@ -65,10 +93,27 @@ const NAV_LINKS = [
   { href: "/settings/", label: "Settings" },
 ];
 
+const PRIMARY_LINKS = NAV_LINKS.slice(0, 4);
+
+function isActive(pathname: string | null, href: string) {
+  if (!pathname) return false;
+  const norm = (p: string) => (p.length > 1 ? p.replace(/\/$/, "") : p);
+  const p = norm(pathname), h = norm(href);
+  return h === "/" ? p === "/" : p === h || p.startsWith(`${h}/`);
+}
+
+function MenuGlyph() {
+  return (
+    <svg viewBox="0 0 18 10" fill="none" aria-hidden="true">
+      <path d="M1 3c2.5 0 3.5-2 6-2s3.5 2 6 2 2.5-1 4-1M1 8c2.5 0 3.5-2 6-2s3.5 2 6 2 2.5-1 4-1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function Header() {
+  const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.json()).then(d => {
@@ -76,17 +121,16 @@ export function Header() {
     }).catch(() => {});
   }, []);
 
-  // Close menu on outside click
   useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
   }, [menuOpen]);
+
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -95,89 +139,82 @@ export function Header() {
 
   return (
     <header className="header">
-      <div className="container header-inner" ref={menuRef}>
-        {/* Logo */}
-        <div className="logo">
-          <Link href="/" style={{ color: "inherit", textDecoration: "none" }}>
-            CAREER<span>OS</span>
-          </Link>
-        </div>
+      <div className="container header-inner">
+        <Link href="/" style={{ color: "inherit", textDecoration: "none" }} aria-label="CareerOS pipeline">
+          <Logo />
+        </Link>
 
-        {/* Desktop nav */}
-        <nav className="desktop-nav">
+        <nav className="desktop-nav" aria-label="Primary">
           <ul className="nav">
-            {NAV_LINKS.map(l => (
+            {PRIMARY_LINKS.map(l => (
               <li key={l.href}>
-                <Link href={l.href} style={l.href === "/settings/" ? { color: "var(--accent)" } : {}}>
-                  {l.label.toUpperCase()}
-                </Link>
+                <Link href={l.href} className={isActive(pathname, l.href) ? "active" : undefined}>{l.label}</Link>
               </li>
             ))}
-            <li><ThemeToggle /></li>
-            <li><NotificationBell /></li>
-            {userEmail && (
-              <li style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 8, paddingLeft: 8, borderLeft: "1px solid var(--border)" }}>
-                <span style={{ fontSize: "0.625rem", color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                  {userEmail.split("@")[0].toUpperCase()}
-                </span>
-                <button onClick={handleLogout} className="btn" style={{ fontSize: "0.625rem", padding: "3px 8px" }}>
-                  OUT
-                </button>
-              </li>
-            )}
           </ul>
         </nav>
 
-        {/* Mobile right side: theme + bell + hamburger */}
-        <div className="mobile-nav-controls">
-          <ThemeToggle />
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <NotificationBell />
-          <button
-            className="hamburger-btn"
-            onClick={() => setMenuOpen(o => !o)}
-            aria-label="Toggle menu"
-            aria-expanded={menuOpen}
-          >
-            <span className="hamburger-line" />
-            <span className="hamburger-line" />
-            <span className="hamburger-line" />
+          <button className="menu-trigger" onClick={() => setMenuOpen(true)} aria-haspopup="dialog" aria-expanded={menuOpen}>
+            <MenuGlyph /> Main Menu
           </button>
         </div>
-
-        {/* Mobile dropdown */}
-        {menuOpen && (
-          <div className="mobile-menu">
-            {NAV_LINKS.map(l => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="mobile-menu-item"
-                onClick={() => setMenuOpen(false)}
-              >
-                {l.label}
-              </Link>
-            ))}
-            {userEmail && (
-              <div className="mobile-menu-footer">
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
-                  {userEmail.split("@")[0].toUpperCase()}
-                </span>
-                <button onClick={handleLogout} className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }}>
-                  SIGN OUT
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Portalled to <body>: the header's backdrop-filter would otherwise become
+          the containing block for this fixed overlay and clip it to the header. */}
+      {menuOpen && createPortal(
+        <div className="menu-overlay" role="dialog" aria-modal="true" aria-label="Main menu">
+          <div className="container menu-overlay-head">
+            <Link href="/" style={{ color: "inherit", textDecoration: "none" }} onClick={() => setMenuOpen(false)}>
+              <Logo />
+            </Link>
+            <button className="menu-trigger" onClick={() => setMenuOpen(false)} autoFocus>
+              Close <span aria-hidden="true" style={{ fontSize: "1.1rem", lineHeight: 1 }}>×</span>
+            </button>
+          </div>
+
+          <div className="container" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
+            <div className="eyebrow" style={{ marginBottom: 16 }}>Career operating system / index</div>
+            <ul className="menu-list">
+              {NAV_LINKS.map((l, i) => (
+                <li key={l.href}>
+                  <Link href={l.href} className={isActive(pathname, l.href) ? "active" : undefined} onClick={() => setMenuOpen(false)}>
+                    <span className="menu-index">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="menu-word">{l.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="container">
+            <div className="menu-overlay-foot">
+              <span className="label">{userEmail ? `Signed in · ${userEmail}` : "CareerOS"}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                <ThemeToggle />
+                {userEmail && <button onClick={handleLogout} className="btn">Sign out</button>}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </header>
   );
 }
 
 export function Footer() {
   return (
-    <footer style={{ borderTop: "1px solid var(--border)", padding: "16px 0", textAlign: "center", marginTop: "auto" }}>
-      <span className="label">CAREEROS v0.1.0 {"·"} SERVERLESS EDITION</span>
+    <footer style={{ borderTop: "1px solid var(--border-light)", marginTop: "auto" }}>
+      <div className="container" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, padding: "22px 48px", flexWrap: "wrap" }}>
+        <span className="label">CareerOS v0.2</span>
+        <span style={{ fontSize: "0.9375rem", color: "var(--text-secondary)", letterSpacing: "-0.02em" }}>
+          signal. score. <span className="em" style={{ color: "var(--text-primary)" }}>send.</span>
+        </span>
+        <span className="label">Local-first · nothing sent without your approval</span>
+      </div>
     </footer>
   );
 }

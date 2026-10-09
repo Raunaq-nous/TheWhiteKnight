@@ -343,7 +343,7 @@ export default function OnboardPage() {
                       onClick={() => up("roleType", r.id)}
                       style={{
                         textAlign: "left",
-                        background: sel ? "rgba(255,165,0,0.06)" : "var(--bg-primary)",
+                        background: sel ? "color-mix(in srgb, var(--champagne) 6%, transparent)" : "var(--bg-primary)",
                         border: `1px solid ${sel ? "var(--accent)" : "var(--border)"}`,
                         borderRadius: "var(--radius)",
                         padding: "12px 14px",
@@ -509,7 +509,7 @@ export default function OnboardPage() {
                 {resumeFiles.length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                     {resumeFiles.map((n, i) => (
-                      <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--accent)", background: "rgba(255,165,0,0.08)", padding: "3px 8px", borderRadius: 3 }}>{n}</span>
+                      <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "0.625rem", color: "var(--accent)", background: "color-mix(in srgb, var(--champagne) 8%, transparent)", padding: "3px 8px", borderRadius: 3 }}>{n}</span>
                     ))}
                   </div>
                 )}
