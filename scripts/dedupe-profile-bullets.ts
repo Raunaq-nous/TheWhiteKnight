@@ -27,8 +27,9 @@
 // survivor has none.
 //
 // USAGE:
-//   npx tsx scripts/dedupe-profile-bullets.ts <userEmail>            # dry run — prints found duplicates, writes nothing
-//   npx tsx scripts/dedupe-profile-bullets.ts <userEmail> --apply    # prints AND applies the dedupe
+//   npx tsx scripts/dedupe-profile-bullets.ts <userEmail>                          # dry run — prints found duplicates, writes nothing
+//   npx tsx scripts/dedupe-profile-bullets.ts <userEmail> --except <dropIds>       # veto pairs: those DROP bullets are kept
+//   npx tsx scripts/dedupe-profile-bullets.ts <userEmail> [--except ...] --apply   # prints AND applies the dedupe
 //
 // Reads/writes the same SQLite DB the app itself uses (CAREEROS_DB_PATH /
 // CAREEROS_PRIVATE_DIR env vars, same resolution as lib/server/db.ts).
@@ -37,7 +38,7 @@ import { profileRepo } from "../lib/server/repositories";
 import { getSeedProfile } from "../lib/profile";
 import { textSimilarity, splitBullets } from "../lib/profile-merge";
 import { sameEngagement, engagementContainment } from "../lib/resume-dedupe";
-import { outcomeBucket, impactDensity } from "../lib/resume-bullet-relevance";
+import { impactDensity } from "../lib/resume-bullet-relevance";
 import { bulletId } from "../lib/profile-bullets";
 import { EXPERIENCE_CANDIDATES } from "./import-master-profile";
 import type { Profile, ExperienceEntry, BulletCategory } from "../lib/profile";
@@ -67,11 +68,32 @@ const ACTION_VERBS = new Set([
   "crafted", "pioneered", "headed", "championed", "streamlined", "optimized", "optimised", "originated",
 ]);
 
+function opensWithVerb(sentence: string): boolean {
+  const word = sentence.trim().split(/\s+/)[0] ?? "";
+  const first = word.toLowerCase().replace(/[^a-z-]/g, "");
+  if (!first) return false;
+  return ACTION_VERBS.has(first) || (/^[a-z-]{4,}ed$/.test(first) && !/:$/.test(word));
+}
+
 /** A full sentence opens with an action verb; a fragment opens with a noun phrase, a figure, or a client name. */
 export function isVerbLed(text: string): boolean {
-  const first = text.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z-]/g, "") ?? "";
-  if (!first) return false;
-  return ACTION_VERBS.has(first) || (/^[a-z-]{4,}ed$/.test(first) && !/:$/.test(text.trim().split(/\s+/)[0]));
+  return opensWithVerb(text);
+}
+
+// An OUTCOME is what the work produced or changed: a number/scope marker, a
+// consequence ("pinpointing high-value growth opportunities", "unlocking
+// investment"), or a named decision. Deliberately NOT the format gate's
+// broader hasIdentifiableOutcome, whose "delivered artifact" family counts
+// "Built ... framework" / "Developed ... strategy" / "Structured ...
+// analysis" as an outcome. For a consulting bullet that phrase is the
+// activity itself, so it let legacy fragments beat fuller sentences.
+const RESULT_CONSEQUENCE =
+  /\b(enabling|enabled|resulting in|which led to|leading to|led to|used for|adopted by|driving|drove|informing|informed|guiding|guided|shaping|shaped|pinpointing|pinpointed|identifying|unlocking|unlocked|securing|secured|lifting|lifted|cutting|reducing|reduced|increasing|increased|improving|improved|contributing to|winning|won|closing|closed|that unlocked|that lifted|that informed)\b/i;
+const RESULT_DECISION =
+  /\bboard[- ]level (recommendation|decision)\b|\binvestment commitment\b|\bc-suite (decision|decision document|recommendation)\b|\binvestment-committee\b/i;
+
+export function hasResultClause(text: string): boolean {
+  return impactDensity(text) > 0 || RESULT_CONSEQUENCE.test(text) || RESULT_DECISION.test(text);
 }
 
 const IMPORTED_TEXTS = new Set(EXPERIENCE_CANDIDATES.flatMap(c => c.bullets));
@@ -79,7 +101,7 @@ const IMPORTED_TEXTS = new Set(EXPERIENCE_CANDIDATES.flatMap(c => c.bullets));
 type Ranked = { text: string; verbLed: boolean; hasOutcome: boolean; density: number; imported: boolean };
 
 function rankOf(text: string): Ranked {
-  return { text, verbLed: isVerbLed(text), hasOutcome: outcomeBucket(text) > 0, density: impactDensity(text), imported: IMPORTED_TEXTS.has(text) };
+  return { text, verbLed: isVerbLed(text), hasOutcome: hasResultClause(text), density: impactDensity(text), imported: IMPORTED_TEXTS.has(text) };
 }
 
 /** Negative when a should survive over b. */
@@ -124,7 +146,7 @@ function isDuplicatePair(a: string, b: string): DuplicatePair["reason"] | null {
  * order, the updated bulletTags, and one pair per dropped bullet naming the
  * survivor it duplicates.
  */
-export function dedupeExperienceEntry(entry: ExperienceEntry): {
+export function dedupeExperienceEntry(entry: ExperienceEntry, except: Set<string> = new Set()): {
   bullets: string[];
   bulletTags: Record<string, BulletCategory> | undefined;
   pairs: DuplicatePair[];
@@ -138,7 +160,8 @@ export function dedupeExperienceEntry(entry: ExperienceEntry): {
   const id = (t: string) => bulletId("experience", entry.company, t);
 
   for (const i of order) {
-    const survivor = kept.find(k => isDuplicatePair(bullets[k], bullets[i]));
+    // A vetoed bullet (--except) is never dropped, whatever it duplicates.
+    const survivor = except.has(id(bullets[i])) ? undefined : kept.find(k => isDuplicatePair(bullets[k], bullets[i]));
     if (survivor === undefined) { kept.push(i); continue; }
     dropped.add(i);
     const keptText = bullets[survivor], droppedText = bullets[i];
@@ -157,10 +180,10 @@ export function dedupeExperienceEntry(entry: ExperienceEntry): {
   return { bullets: survivors, bulletTags: Object.keys(tags).length > 0 ? tags : undefined, pairs };
 }
 
-export function dedupeProfile(profile: Profile): { profile: Profile; pairs: DuplicatePair[] } {
+export function dedupeProfile(profile: Profile, except: Set<string> = new Set()): { profile: Profile; pairs: DuplicatePair[] } {
   const allPairs: DuplicatePair[] = [];
   const experience = profile.experience.map(e => {
-    const { bullets, bulletTags, pairs } = dedupeExperienceEntry(e);
+    const { bullets, bulletTags, pairs } = dedupeExperienceEntry(e, except);
     allPairs.push(...pairs);
     if (pairs.length === 0) return e;
     return { ...e, bullets: bullets.join("\n"), bulletTags };
@@ -181,15 +204,26 @@ export function formatPairs(pairs: DuplicatePair[]): string {
 
 function main() {
   const userEmail = process.argv[2] || process.env.ADMIN_EMAIL;
-  const apply = process.argv[3] === "--apply";
-  if (!userEmail) {
-    console.error("Usage: npx tsx scripts/dedupe-profile-bullets.ts <userEmail> [--apply]");
+  const apply = process.argv.includes("--apply");
+  if (!userEmail || userEmail.startsWith("--")) {
+    console.error("Usage: npx tsx scripts/dedupe-profile-bullets.ts <userEmail> [--except id,id,...] [--apply]");
     process.exit(1);
   }
+  const exceptIdx = process.argv.indexOf("--except");
+  const except = new Set(exceptIdx === -1 ? [] : (process.argv[exceptIdx + 1] ?? "").split(",").map(x => x.trim()).filter(Boolean));
 
   const existing = profileRepo.get(userEmail) ?? getSeedProfile();
-  const { profile: deduped, pairs } = dedupeProfile(existing);
+  const { profile: deduped, pairs } = dedupeProfile(existing, except);
 
+  if (except.size > 0) {
+    const known = new Set(existing.experience.flatMap(e => splitBullets(e.bullets).map(t => bulletId("experience", e.company, t))));
+    const unknown = [...except].filter(x => !known.has(x));
+    console.log(`Vetoed ${except.size - unknown.length} pair(s) via --except (those bullets are kept).`);
+    if (unknown.length > 0) {
+      console.error(`--except ids not found in the live profile: ${unknown.join(", ")}. Nothing written.`);
+      process.exit(1);
+    }
+  }
   console.log(formatPairs(pairs));
 
   if (!apply) {

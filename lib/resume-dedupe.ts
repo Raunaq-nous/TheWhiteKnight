@@ -26,6 +26,14 @@ const GENERIC_RESUME_WORDS = new Set([
   "delivering", "across", "using", "and", "for", "an", "a", "the", "with", "to",
   "of", "in", "on", "at", "by", "as", "from", "new", "team", "teams", "role",
   "work", "project", "projects", "client", "clients", "company", "via", "into",
+  // Geography and scope words describe WHERE or HOW MUCH, never WHICH
+  // engagement: "12+ mandates across EMEA and North America" and "three
+  // years of growth advisory mandates across EMEA, North America, and APAC"
+  // share these words but are different facts (scope vs tenure).
+  "emea", "apac", "latam", "north", "south", "america", "americas", "europe", "european",
+  "africa", "asia", "middle", "east", "india", "indian", "global", "worldwide",
+  "mandate", "mandates", "engagement", "engagements", "years", "year", "months",
+  "multiple", "scope", "wide", "primary", "firm", "firms",
 ]);
 
 function engagementTokens(text: string): Set<string> {

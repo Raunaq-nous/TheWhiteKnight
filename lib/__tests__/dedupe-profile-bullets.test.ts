@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { dedupeExperienceEntry, dedupeProfile, compareSurvivor, isVerbLed } from "../../scripts/dedupe-profile-bullets";
+import { dedupeExperienceEntry, dedupeProfile, compareSurvivor, isVerbLed, hasResultClause } from "../../scripts/dedupe-profile-bullets";
+import { EXPERIENCE_CANDIDATES } from "../../scripts/import-master-profile";
+import { bulletId } from "../profile-bullets";
 import { getSeedProfile } from "../profile";
 import type { ExperienceEntry, Profile } from "../profile";
 
@@ -136,5 +138,79 @@ describe("survivor rule — which duplicate is kept", () => {
     const { pairs } = dedupeExperienceEntry(entry({ company: "Evalueserve", bullets: `${E_FRAG}\nLed competitive intelligence and market analysis for Fortune 1000 technology clients, translating multi-source data into executive-actionable insights that shaped 3 product roadmaps.` }));
     expect(pairs).toHaveLength(1);
     expect(pairs[0].droppedText).toBe(E_FRAG);
+  });
+});
+
+describe("survivor rule — live-scan misjudgements (delivered-artifact phrasing is not an outcome)", () => {
+  const imp = (c: string, start: string) => EXPERIENCE_CANDIDATES.find(x => x.company === c)!.bullets.find(b => b.startsWith(start))!;
+  const keptText = (company: string, a: string, b: string) => {
+    const r = dedupeExperienceEntry(entry({ company, bullets: `${a}\n${b}` }));
+    expect(r.pairs).toHaveLength(1);
+    return r.pairs[0].keptText;
+  };
+
+  it("'Built/Structured/Developed ... framework/analysis/strategy' is activity, not a result clause", () => {
+    expect(hasResultClause("Structured commercial framework and return analysis for global port operator")).toBe(false);
+    expect(hasResultClause("Built strategic growth framework integrating demand forecasting")).toBe(false);
+    expect(hasResultClause("Developed turnaround strategy for a German auto parts manufacturer in India")).toBe(false);
+    expect(hasResultClause("Executed market attractiveness analysis for an EMEA logistics firm, pinpointing high-value growth opportunities")).toBe(true);
+    expect(hasResultClause("authoring the C-suite decision document that unlocked investment")).toBe(true);
+    expect(hasResultClause("lifted project IRR from 6% to the 10% hurdle rate")).toBe(true);
+  });
+
+  it("pair 6: keeps the imported port-operator sentence over the terse legacy framework line", () => {
+    const legacy = "Structured commercial framework and return analysis for global port operator across APAC, Europe, and Africa bid advisory";
+    expect(keptText("Aranca", legacy, imp("Aranca", "Led bid advisory"))).toBe(imp("Aranca", "Led bid advisory"));
+  });
+
+  it("pair 7: keeps the imported EMEA ecommerce bullet over the generic legacy one", () => {
+    const legacy = "Built market sizing, competitive dynamics, and operational feasibility analysis across multiple expansion directions for leadership decision-making";
+    expect(keptText("Aranca", legacy, imp("Aranca", "Led an EMEA ecommerce"))).toBe(imp("Aranca", "Led an EMEA ecommerce"));
+  });
+
+  it("pair 8: a named-client bullet with a real result outranks a generic framework line and the result-less imported one", () => {
+    const generic = "Built strategic growth framework integrating demand forecasting";
+    const withResult = "Executed market attractiveness analysis for an EMEA logistics firm, pinpointing high-value growth opportunities";
+    expect(compareSurvivor(withResult, generic)).toBeLessThan(0);
+    expect(compareSurvivor(withResult, imp("Aranca", "Led a market attractiveness"))).toBeLessThan(0);
+  });
+
+  it("pair 13: scope ('12+ mandates') and tenure/breadth ('three years ... mandates') are different facts and do not pair", () => {
+    const scope = "Primary client interface across 12+ mandates for Fortune 500 and PE-backed clients across EMEA and North America";
+    const tenure = "Three years leading growth advisory mandates across EMEA, North America, and APAC, wide scope by design";
+    expect(dedupeExperienceEntry(entry({ bullets: `${scope}\n${tenure}` })).pairs).toHaveLength(0);
+  });
+
+  it("pair 21: a noun-phrase bullet with no result clause is a fragment with no outcome", () => {
+    const t = "Competitive intelligence and market analysis for Fortune 1000 technology clients. Dense, deadline-driven work translating complex multi-source data into executive-actionable insights";
+    expect(isVerbLed(t)).toBe(false);
+    expect(hasResultClause(t)).toBe(false);
+    expect(compareSurvivor("Led competitive intelligence and market analysis for Fortune 1000 technology clients, translating multi-source data into executive insights.", t)).toBeLessThan(0);
+  });
+
+  it("pair 22: 'Developed turnaround strategy' no longer counts as a result, so the imported sentence wins the tiebreak", () => {
+    const legacy = "Developed turnaround strategy for a German auto parts manufacturer in India. Voice of Customer analysis and operational diagnostic";
+    expect(hasResultClause(legacy)).toBe(false);
+    const r = dedupeExperienceEntry(entry({ company: "Tecnova India", bullets: `${legacy}\n${imp("Tecnova India", "Led a turnaround")}` }));
+    expect(r.pairs[0]).toMatchObject({ keptText: imp("Tecnova India", "Led a turnaround"), droppedText: legacy, whyKept: "imported (tiebreak)" });
+  });
+});
+
+describe("--except veto", () => {
+  it("never drops a vetoed bullet, and leaves other pairs alone", () => {
+    const legacy = "Developed turnaround strategy for a German auto parts manufacturer in India. Voice of Customer analysis and operational diagnostic";
+    const imported = EXPERIENCE_CANDIDATES.find(x => x.company === "Tecnova India")!.bullets.find(b => b.startsWith("Led a turnaround"))!;
+    const e = entry({ company: "Tecnova India", bullets: `${legacy}\n${imported}` });
+    expect(dedupeExperienceEntry(e).pairs).toHaveLength(1);
+    const vetoed = dedupeExperienceEntry(e, new Set([bulletId("experience", "Tecnova India", legacy)]));
+    expect(vetoed.pairs).toHaveLength(0);
+    expect(vetoed.bullets).toEqual([legacy, imported]);
+  });
+
+  it("dedupeProfile passes the veto through to every employer", () => {
+    const legacy = "Developed turnaround strategy for a German auto parts manufacturer in India. Voice of Customer analysis and operational diagnostic";
+    const imported = EXPERIENCE_CANDIDATES.find(x => x.company === "Tecnova India")!.bullets.find(b => b.startsWith("Led a turnaround"))!;
+    const profile = { ...getSeedProfile(), experience: [entry({ company: "Tecnova India", bullets: `${legacy}\n${imported}` })] };
+    expect(dedupeProfile(profile, new Set([bulletId("experience", "Tecnova India", legacy)])).pairs).toHaveLength(0);
   });
 });
