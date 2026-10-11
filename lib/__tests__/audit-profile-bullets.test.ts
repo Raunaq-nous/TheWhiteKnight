@@ -42,10 +42,34 @@ describe("audit-profile-bullets", () => {
     expect(row.toolViolations).toEqual([{ tool: "Document intelligence engine", belongsTo: "Aranca" }]);
   });
 
-  it("flags a legacy bullet superseded by an imported one, even across the '&' vs 'and' entry split", () => {
+  it("does NOT flag a bullet superseded by an imported bullet that lives in a different entry", () => {
     const row = auditProfile(mixedProfile()).find(r => r.text === LEGACY_OG)!;
+    expect(row.superseded).toBe(false);
+  });
+
+  it("flags a legacy bullet superseded only when the imported version is present in the SAME live entry", () => {
+    const profile = mixedProfile();
+    profile.experience[0] = { ...profile.experience[0], bullets: [LEGACY_AI_PLATFORM, LEGACY_OG, ...importedBain].join("\n") };
+    profile.experience = [profile.experience[0]];
+    const row = auditProfile(profile).find(r => r.text === LEGACY_OG)!;
     expect(row.superseded).toBe(true);
     expect(row.bestImportedMatch!.text).toMatch(/^Led a concept selection study for a national oil and gas company/);
+  });
+
+  it("never flags a bullet's only copy as superseded just because the master spec has a similar line", () => {
+    // Real reported case: the sole Series A bullet under Aranca, with no imported version present.
+    const seriesA = "Built Series A financial model and investor business plan for EMEA B2B marketplace, contributing to a closed multi-million-dollar raise";
+    const profile = { ...getSeedProfile(), experience: [{ id: "a", company: "Aranca", role: "Lead", tenure: "2022 - 2025", location: "Mumbai", current: false, bullets: seriesA }] } as Profile;
+    const row = auditProfile(profile)[0];
+    expect(row.origin).toBe("legacy");
+    expect(row.superseded).toBe(false);
+    expect(row.bestImportedMatch).toBeNull();
+  });
+
+  it("treats a bullet recorded in importedBullets as imported even when its text differs from the current spec", () => {
+    const edited = "Led a concept selection study for a national O&G company, authoring the C-suite decision document that unlocked investment.";
+    const profile = { ...getSeedProfile(), experience: [{ id: "b", company: "Bain & Company", role: "PL", tenure: "2025 - Present", location: "", current: true, bullets: edited, importedBullets: [edited] }] } as Profile;
+    expect(auditProfile(profile)[0].origin).toBe("imported");
   });
 
   it("never flags an imported bullet as superseded", () => {

@@ -16,12 +16,13 @@
 import { profileRepo } from "../lib/server/repositories";
 import { namesMatch, splitBullets } from "../lib/profile-merge";
 import { employerCounts, formatCounts } from "./audit-profile-bullets";
+import { EXPERIENCE_CANDIDATES, specTagsFor } from "./import-master-profile";
 import type { Profile, ExperienceEntry } from "../lib/profile";
 
 export type MergePreview = {
   kept: Pick<ExperienceEntry, "company" | "role" | "tenure" | "location" | "current">;
   deleted: Pick<ExperienceEntry, "company" | "role" | "tenure" | "location" | "current">;
-  folded: { text: string; category?: string }[];
+  folded: { text: string; category?: string; imported: boolean }[];
   alreadyPresent: string[];
   bulletCountAfter: number;
 };
@@ -41,18 +42,26 @@ export function mergeEmployerEntries(profile: Profile, keepCompany: string, from
   const folded: MergePreview["folded"] = [];
   const alreadyPresent: string[] = [];
   const tags = { ...(keep.bulletTags ?? {}) };
+  const imported = new Set(keep.importedBullets ?? []);
+  // Master-spec text for this employer: a folded bullet whose text IS the
+  // spec text is imported even if the source entry never recorded it.
+  const specTexts = new Set(EXPERIENCE_CANDIDATES.filter(c => namesMatch(c.company, from.company)).flatMap(c => c.bullets));
+  const specTags = specTagsFor(from.company) ?? {};
   for (const text of splitBullets(from.bullets)) {
     if (existing.has(text)) { alreadyPresent.push(text); continue; }
     existing.add(text);
-    const category = from.bulletTags?.[text];
+    const category = from.bulletTags?.[text] ?? specTags[text];
     if (category && !tags[text]) tags[text] = category;
-    folded.push({ text, category });
+    const isImported = (from.importedBullets ?? []).includes(text) || specTexts.has(text);
+    if (isImported) imported.add(text);
+    folded.push({ text, category, imported: isImported });
   }
 
   const merged: ExperienceEntry = {
     ...keep,
     bullets: [...keptBullets, ...folded.map(f => f.text)].join("\n"),
     bulletTags: Object.keys(tags).length > 0 ? tags : undefined,
+    importedBullets: imported.size > 0 ? [...imported] : undefined,
   };
   const experience = profile.experience.filter(e => e !== from).map(e => (e === keep ? merged : e));
   const pick = (e: ExperienceEntry) => ({ company: e.company, role: e.role, tenure: e.tenure, location: e.location, current: e.current });
@@ -69,7 +78,7 @@ export function formatMergePreview(p: MergePreview): string {
     `KEEP (unchanged fields):  ${fmt(p.kept)}`,
     `DELETE entry:             ${fmt(p.deleted)}`,
     `FOLD ${p.folded.length} bullet(s) into the kept entry:`,
-    ...p.folded.map(f => `  + [${f.category ?? "untagged"}] ${f.text}`),
+    ...p.folded.map(f => `  + [${f.imported ? "imported" : "legacy"} · ${f.category ?? "untagged"}] ${f.text}`),
     ...(p.alreadyPresent.length ? [`SKIP ${p.alreadyPresent.length} already present`] : []),
     `Kept entry will have ${p.bulletCountAfter} bullet(s).`,
   ].join("\n");

@@ -35,7 +35,7 @@
 import { profileRepo } from "../lib/server/repositories";
 import { getSeedProfile } from "../lib/profile";
 import {
-  diffExtractionAgainstProfile, applyMergeDiffItem, ExtractedProfileData,
+  diffExtractionAgainstProfile, applyMergeDiffItem, ExtractedProfileData, namesMatch,
   CandidateExperience, CandidateEducation, CandidatePublication, CandidateCertification, CandidateSkillGroup,
 } from "../lib/profile-merge";
 import type { Profile, BulletCategory } from "../lib/profile";
@@ -228,20 +228,30 @@ export function buildExtraction(): ExtractedProfileData {
 }
 
 /** Applies bulletTags for a freshly-added experience entry (the diff engine's applyMergeDiffItem has no concept of tags — this is the one piece of glue this script itself owns). */
+/** The master-spec tags for an employer, matched by name ("Bain & Company" finds "Bain and Company"). */
+export function specTagsFor(company: string): Record<string, BulletCategory> | undefined {
+  const key = Object.keys(BULLET_TAGS_BY_COMPANY).find(k => namesMatch(k, company));
+  return key ? BULLET_TAGS_BY_COMPANY[key] : undefined;
+}
+
 export function applyBulletTags(profile: Profile): Profile {
   return {
     ...profile,
     experience: profile.experience.map(e => {
-      const tags = BULLET_TAGS_BY_COMPANY[e.company];
+      // Matched by name, not exact string: after the "&"/"and" matcher fix an
+      // import can enrich "Bain & Company" with "Bain and Company" bullets,
+      // and an exact lookup would silently tag none of them.
+      const tags = specTagsFor(e.company);
       if (!tags) return e;
       // Only tag bullets that are ACTUALLY present in this entry's text —
       // never invents a tag for text that isn't there.
       const present = new Set(e.bullets.split("\n").map(b => b.trim()).filter(Boolean));
       const merged: Record<string, BulletCategory> = { ...e.bulletTags };
+      const imported = new Set(e.importedBullets ?? []);
       for (const [text, category] of Object.entries(tags)) {
-        if (present.has(text)) merged[text] = category;
+        if (present.has(text)) { merged[text] = category; imported.add(text); }
       }
-      return { ...e, bulletTags: merged };
+      return { ...e, bulletTags: merged, importedBullets: [...imported] };
     }),
   };
 }

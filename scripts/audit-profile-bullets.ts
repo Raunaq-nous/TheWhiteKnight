@@ -72,16 +72,24 @@ function toolViolations(text: string, company: string): AuditedBullet["toolViola
   return out;
 }
 
+/** Imported = recorded by the import/merge (importedBullets) OR identical to this employer's master-spec text. */
+export function isImportedBullet(entry: Profile["experience"][number], text: string): boolean {
+  return (entry.importedBullets ?? []).includes(text) || importedTextsFor(entry.company).includes(text);
+}
+
 export function auditProfile(profile: Profile): AuditedBullet[] {
   const rows: AuditedBullet[] = [];
   for (const e of profile.experience) {
-    const imported = importedTextsFor(e.company);
-    const importedSet = new Set(imported);
-    for (const text of splitBullets(e.bullets)) {
-      const origin = importedSet.has(text) ? "imported" : "legacy";
+    const texts = splitBullets(e.bullets);
+    // Superseded is judged ONLY against imported bullets actually present in
+    // this live entry. Comparing against master-spec candidates flagged a
+    // bullet's only copy as "superseded" by text that isn't in the profile.
+    const presentImported = texts.filter(t => isImportedBullet(e, t));
+    for (const text of texts) {
+      const origin = isImportedBullet(e, text) ? "imported" : "legacy";
       let best: AuditedBullet["bestImportedMatch"] = null;
       if (origin === "legacy") {
-        for (const cand of imported) {
+        for (const cand of presentImported) {
           const c = engagementContainment(text, cand);
           if (!best || c > best.containment) best = { text: cand, containment: c };
         }
@@ -153,7 +161,8 @@ export function removeBullets(profile: Profile, ids: Set<string>): { profile: Pr
     });
     if (keep.length === lines.length) return e;
     const bulletTags = e.bulletTags ? Object.fromEntries(Object.entries(e.bulletTags).filter(([t]) => keep.includes(t))) : e.bulletTags;
-    return { ...e, bullets: keep.join("\n"), bulletTags };
+    const importedBullets = e.importedBullets ? e.importedBullets.filter(t => keep.includes(t)) : e.importedBullets;
+    return { ...e, bullets: keep.join("\n"), bulletTags, importedBullets };
   });
   return { profile: { ...profile, experience }, removed };
 }

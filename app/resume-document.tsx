@@ -285,6 +285,7 @@ export function ResumeExportView({
   archetype,
   app,
   onClose,
+  onExported,
 }: {
   content: ResumeContent;
   archetype?: ResumeArchetype | null;
@@ -293,6 +294,8 @@ export function ResumeExportView({
   // export falls back to the archetype's own base maxPages server-side.
   app?: Application | null;
   onClose: () => void;
+  // Called after a successful export with what the extraction gate measured.
+  onExported?: (m: { pageCount: number; pageTwoFillPercent: number | null; maxPages: number | null }) => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "error">("idle");
@@ -321,6 +324,7 @@ export function ResumeExportView({
       downloadResumeExport(result, filename);
       setPageCount(result.pageCount);
       setPageTwoFillPercent(result.pageTwoFillPercent);
+      onExported?.({ pageCount: result.pageCount, pageTwoFillPercent: result.pageTwoFillPercent ?? null, maxPages: maxPages ?? null });
       setWarnings(result.warnings);
       setOutcomeWarnings(result.outcomeWarnings);
       setExportState("done");

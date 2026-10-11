@@ -244,6 +244,12 @@ describe("detectResumeArchetype", () => {
     expect(detectResumeArchetype(profile, app)).toBe("consulting");
   });
 
+  it("detects consulting from the agent noun 'management consultant' (and plural) in the role title", () => {
+    const profile = baseProfile();
+    expect(detectResumeArchetype(profile, baseApp({ role: "Senior Management Consultant", company: "Accenture" }))).toBe("consulting");
+    expect(detectResumeArchetype(profile, baseApp({ role: "Manager", company: "Acme", jdParsed: { keyRequirements: ["Ex-strategy consultants preferred"] } }))).toBe("consulting");
+  });
+
   it("detects consulting from 'consulting services' in a JD requirement", () => {
     const profile = baseProfile();
     const app = baseApp({
@@ -426,9 +432,23 @@ describe("resolveConfiguredMaxPages — config wins over the generic engine defa
     expect(resolveConfiguredMaxPages(baseProfile({ yearsOfExperience: "3" }), startupApp, "product")).toBe(1);
   });
 
-  it("keeps MBB consulting at 1 page even for a 10-year candidate", () => {
-    const profile = baseProfile({ yearsOfExperience: "10" });
-    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "McKinsey & Company" }), "consulting")).toBe(1);
+  it("gives a 10-year candidate 2 pages for EVERY archetype and every target archetype, including MBB, startup, chief of staff, finance and general", () => {
+    const tenYears = baseProfile({ yearsOfExperience: "10" });
+    const cases: [ResumeArchetype, Partial<Application>][] = [
+      ["consulting", { company: "McKinsey & Company" }],          // consulting_mbb
+      ["consulting", { company: "Bain & Company" }],              // consulting_mbb
+      ["consulting", { company: "Accenture" }],                   // consulting_senior
+      ["consulting", { role: "Chief of Staff" }],                 // chief_of_staff
+      ["vc_investing", { role: "Venture Capital Associate" }],    // vc_investing
+      ["product", { role: "Senior Product Manager" }],            // ai_product
+      ["product", { role: "Founding PM", company: "Seed startup" }], // startup
+      ["ai_ml_engineering", { role: "Machine Learning Engineer" }], // ai_product
+      ["finance_ib", { role: "IB Analyst" }],                     // plain archetype key
+      ["general", { role: "Operations Lead" }],                   // plain archetype key
+    ];
+    for (const [archetype, app] of cases) {
+      expect(resolveConfiguredMaxPages(tenYears, baseApp(app), archetype), `${archetype} ${JSON.stringify(app)}`).toBe(2);
+    }
   });
 
   it("gives anyone under 5 years exactly 1 page, overriding every configured 2-page archetype", () => {
@@ -443,14 +463,10 @@ describe("resolveConfiguredMaxPages — config wins over the generic engine defa
     expect(resolveConfiguredMaxPages(baseProfile({ yearsOfExperience: "" }), baseApp({ company: "Accenture" }), "consulting")).toBe(1);
   });
 
-  it("matches the generic engine default when the configured value agrees with it", () => {
-    const profile = baseProfile({ yearsOfExperience: "10" });
-    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "Bain & Company" }), "consulting")).toBe(1);
-    expect(resolveConfiguredMaxPages(profile, baseApp({ company: "Accenture" }), "consulting")).toBe(2);
-  });
-
-  it("falls back to the generic engine when no target mapping applies", () => {
-    const profile = baseProfile({ yearsOfExperience: "3" });
-    expect(resolveConfiguredMaxPages(profile, baseApp({ role: "IB Analyst" }), "finance_ib")).toBe(1);
+  it("the under-5-years rule is checked before the config, for every archetype", () => {
+    const threeYears = baseProfile({ yearsOfExperience: "3" });
+    for (const archetype of ["consulting", "vc_investing", "product", "ai_ml_engineering", "finance_ib", "general"] as ResumeArchetype[]) {
+      expect(resolveConfiguredMaxPages(threeYears, baseApp({ company: "McKinsey & Company" }), archetype)).toBe(1);
+    }
   });
 });
