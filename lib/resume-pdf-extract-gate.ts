@@ -142,6 +142,10 @@ export function runPdfExtractionGate(
   content: ResumeContent,
   archetype?: ResumeArchetype,
   maxPages: number = 1,
+  // Set only by measure-and-fill when it ran out of iterations with unused
+  // bullets still in reserve: under-fill must never block export while the
+  // fill could still have added content. The value is still reported.
+  opts: { allowUnderfilledPageTwo?: boolean } = {},
 ): PdfExtractionResult {
   const errors: string[] = [];
   const text = extracted.text ?? "";
@@ -161,7 +165,7 @@ export function runPdfExtractionGate(
   let pageTwoFillPercent: number | null = null;
   if (pageCount === 2) {
     pageTwoFillPercent = estimatePageTwoFillPercent(extracted.pageTexts);
-    if (pageTwoFillPercent !== null && pageTwoFillPercent < PAGE_TWO_MIN_FILL_PERCENT) {
+    if (pageTwoFillPercent !== null && pageTwoFillPercent < PAGE_TWO_MIN_FILL_PERCENT && !opts.allowUnderfilledPageTwo) {
       errors.push(
         `Page two is only ~${pageTwoFillPercent}% full (minimum ${PAGE_TWO_MIN_FILL_PERCENT}%) — this content should fit on one page rather than trail onto a nearly-empty second page.`,
       );

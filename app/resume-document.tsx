@@ -1,5 +1,6 @@
 "use client";
 
+import { usesSubLabels, groupBulletsBySubLabel } from "../lib/resume-sublabels";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence, formatDegreeLine } from "../lib/resume-schema";
@@ -79,13 +80,20 @@ function ResumePage({
   content,
   scale,
   sequence,
+  archetype,
   contentRef,
 }: {
   content: ResumeContent;
   scale: number;
   sequence: ResumeSectionKey[];
+  archetype?: ResumeArchetype | null;
   contentRef?: React.Ref<HTMLDivElement>;
 }) {
+  const subLabels = usesSubLabels(content, archetype);
+  const subLabelStyle: React.CSSProperties = {
+    fontFamily: "Arial, Helvetica, sans-serif", fontSize: "8pt", fontWeight: 700, letterSpacing: "0.06em",
+    textTransform: "uppercase", color: "#666", margin: `${4 * scale}px 0 ${2 * scale}px`,
+  };
   const bodyPt = 10.8 * scale;
   const lineHeight = 1.34;
   const sectionGap = 15 * scale;
@@ -183,11 +191,22 @@ function ResumePage({
                 <span style={{ fontWeight: 400, fontStyle: "italic" }}>{e.tenure}</span>
               </div>
               {e.location && <div style={{ fontSize: "9pt", fontStyle: "italic", color: "#444", marginBottom: 2 }}>{e.location}</div>}
-              <ul style={{ margin: `${bulletGap}px 0 0`, paddingLeft: 18 }}>
-                {sortedBullets(e.bullets).map((b, j) => (
-                  <li key={j} style={{ marginBottom: bulletGap }}>{b.text}</li>
-                ))}
-              </ul>
+              {subLabels
+                ? groupBulletsBySubLabel(e.bullets).map(group => (
+                    <div key={group.label} data-sublabel={group.label}>
+                      <div style={subLabelStyle}>{group.label}</div>
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {group.bullets.map((b, j) => <li key={j} style={{ marginBottom: bulletGap }}>{b.text}</li>)}
+                      </ul>
+                    </div>
+                  ))
+                : (
+                  <ul style={{ margin: `${bulletGap}px 0 0`, paddingLeft: 18 }}>
+                    {sortedBullets(e.bullets).map((b, j) => (
+                      <li key={j} style={{ marginBottom: bulletGap }}>{b.text}</li>
+                    ))}
+                  </ul>
+                )}
             </div>
           ))}
         </>)
@@ -295,7 +314,9 @@ export function ResumeExportView({
   app?: Application | null;
   onClose: () => void;
   // Called after a successful export with what the extraction gate measured.
-  onExported?: (m: { pageCount: number; pageTwoFillPercent: number | null; maxPages: number | null }) => void;
+  // `content` is what was actually exported (measure-and-fill may have added
+  // or dropped bullets), so the caller can persist exactly that.
+  onExported?: (m: { pageCount: number; pageTwoFillPercent: number | null; maxPages: number | null; content: ResumeContent }) => void;
 }) {
   const [mounted, setMounted] = useState(false);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "error">("idle");
@@ -324,7 +345,12 @@ export function ResumeExportView({
       downloadResumeExport(result, filename);
       setPageCount(result.pageCount);
       setPageTwoFillPercent(result.pageTwoFillPercent);
-      onExported?.({ pageCount: result.pageCount, pageTwoFillPercent: result.pageTwoFillPercent ?? null, maxPages: maxPages ?? null });
+      onExported?.({
+        pageCount: result.pageCount,
+        pageTwoFillPercent: result.pageTwoFillPercent ?? null,
+        maxPages: result.maxPages ?? maxPages ?? null,
+        content: result.resumeContent ?? content,
+      });
       setWarnings(result.warnings);
       setOutcomeWarnings(result.outcomeWarnings);
       setExportState("done");
@@ -446,7 +472,7 @@ export function ResumeExportView({
 
       <div className="resume-export-scroll" style={{ display: "flex", justifyContent: "center", padding: "24px 0 48px" }}>
         <div className="resume-page-frame" style={{ boxShadow: "0 0 12px rgba(0,0,0,0.4)" }}>
-          <ResumePage content={content} scale={1} sequence={sequence} />
+          <ResumePage content={content} scale={1} sequence={sequence} archetype={archetype} />
         </div>
       </div>
     </div>,

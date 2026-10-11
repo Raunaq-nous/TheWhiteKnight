@@ -1485,10 +1485,15 @@ window.addEventListener('load', function() {
         archetype={resumeArchetypeUsed}
         app={app}
         onClose={() => setShowResumeExport(false)}
-        onExported={m => {
+        onExported={({ content: exported, ...m }) => {
           const resumeExport = { ...m, archetype: resumeArchetypeUsed ?? null, exportedAt: new Date().toISOString() };
-          setApp(prev => prev ? { ...prev, resumeExport } : prev);
-          updateApplication(app.id, { resumeExport });
+          // Persist the content that was actually exported together with its
+          // measurement in ONE write, so the measurement is never cleared.
+          const md = resumeContentToMarkdown(exported, resumeArchetypeUsed ?? undefined);
+          setResumeContent(exported);
+          setSavedResume(md);
+          setApp(prev => prev ? { ...prev, resumeContent: exported, resumeMarkdown: md, resumeExport } : prev);
+          updateApplication(app.id, { resumeContent: exported, resumeMarkdown: md, resumeExport });
         }}
       />
     )}

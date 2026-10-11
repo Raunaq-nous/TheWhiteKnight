@@ -19,7 +19,7 @@ import { Profile } from "./profile";
 import { namesMatch } from "./profile-merge";
 import { ResumeContent, ResumeBullet, ResumeProject } from "./resume-schema";
 import { ProfileBulletRef, profileBulletIndex } from "./profile-bullets";
-import { clampBulletPreservingOutcome, ONE_PAGE_BUDGET } from "./resume-budget";
+import { clampBulletPreservingOutcome, budgetForMaxPages } from "./resume-budget";
 
 /**
  * Resolves a single bullet id to real profile text. Returns null — never a
@@ -44,15 +44,19 @@ export function resolveBulletText(id: string | undefined | null, index: Map<stri
  * profile text or a deterministic compression of it, tagged with the
  * profile bullet id it came from.
  */
-export function resolveResumeSelections(raw: ResumeContent, profile: Profile): ResumeContent {
+export function resolveResumeSelections(raw: ResumeContent, profile: Profile, maxPages: number = 1): ResumeContent {
   const index = profileBulletIndex(profile);
+  // The character cap follows the page ceiling: on two pages bullets keep
+  // their full text instead of being compressed to the one-page 240 chars.
+  const bulletMaxChars = budgetForMaxPages(maxPages).bulletMaxChars;
+  const keyImpactMaxChars = budgetForMaxPages(maxPages).keyImpactItemMaxChars;
 
   const experience = raw.experience
     .map(e => ({
       ...e,
       bullets: e.bullets
         .map((b): ResumeBullet | null => {
-          const text = resolveBulletText(b.sourceBulletId, index, ONE_PAGE_BUDGET.bulletMaxChars);
+          const text = resolveBulletText(b.sourceBulletId, index, bulletMaxChars);
           if (!text) return null;
           const ref = b.sourceBulletId ? index.get(b.sourceBulletId) : undefined;
           return { sourceBulletId: b.sourceBulletId, text, priority: b.priority, category: ref?.category ?? null };
@@ -69,7 +73,7 @@ export function resolveResumeSelections(raw: ResumeContent, profile: Profile): R
     .map((p): ResumeProject | null => {
       const ref = p.sourceBulletId ? index.get(p.sourceBulletId) : undefined;
       if (!ref || ref.sourceType !== "project") return null;
-      const text = resolveBulletText(p.sourceBulletId, index, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+      const text = resolveBulletText(p.sourceBulletId, index, keyImpactMaxChars);
       if (!text) return null;
       const match = profile.projects?.find(pp => namesMatch(pp.name, ref.sourceId));
       return {
@@ -84,7 +88,7 @@ export function resolveResumeSelections(raw: ResumeContent, profile: Profile): R
   const keyWinIds: string[] = [];
   const keyWins: string[] = [];
   for (const id of raw.keyWinIds ?? []) {
-    const text = resolveBulletText(id, index, ONE_PAGE_BUDGET.keyImpactItemMaxChars);
+    const text = resolveBulletText(id, index, keyImpactMaxChars);
     if (text) { keyWinIds.push(id); keyWins.push(text); }
   }
 

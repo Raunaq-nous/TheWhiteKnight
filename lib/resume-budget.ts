@@ -55,13 +55,42 @@ export const TWO_PAGE_BUDGET = {
   // sectors — which does not fit in the 1-page format's 2-line/~200-char
   // summary. A 2-page resume has the room for it.
   summaryMaxChars: 600,
-  keyImpactMaxItems: 5,
-  bulletsPerRoleMax: 4,
-  experienceMaxRoles: 6,
-  totalExperienceBulletsMax: 18,
+  // CEILINGS only. What actually fills two pages is FILL_TARGETS below
+  // (lib/resume-fill.ts) plus measure-and-fill on export. These used to be
+  // the only numbers, and they summed to ~1.1 pages in the spec's 9pt
+  // two-page format, so a light model selection always under-filled.
+  keyImpactMaxItems: 4,
+  bulletsPerRoleMax: 6,
+  experienceMaxRoles: 8,
+  totalExperienceBulletsMax: 30,
+  // Full-length bullets on two pages: the 240-char one-page cap compressed
+  // or dropped most master-spec Bain bullets (243-364 chars), shrinking the
+  // content that should have filled page two.
+  bulletMaxChars: 400,
+  keyImpactItemMaxChars: 400,
   skillsMaxCategories: 4,
   skillsMaxItemsPerCategory: 8,
   educationMaxEntries: 2,
+} as const;
+
+// FLOORS and targets for the two-page fill (lib/resume-fill.ts). The fill
+// stops adding once the estimated layout reaches targetLines, but never
+// before every floor is met.
+export const FILL_TARGETS = {
+  keyImpactMin: 3,
+  keyImpactMax: 4,
+  perEmployerMin: 2,
+  perRoleTarget: 4,
+  totalMin: 16,
+  totalTarget: 20,
+  // Estimated DOCX lines (estimateDocxLines), calibrated against real
+  // renders: one page of the two-page format is ~78 estimated lines, so page
+  // two at least 50% full needs ~117; 123 leaves margin, under the ~156-line
+  // third page. The count targets above usually bind first; export's
+  // measure-and-fill tops up the rest against the real PDF.
+  linesPerPage: 78,
+  targetLines: 123,
+  maxLines: 152,
 } as const;
 
 export type ResumeBudget = {

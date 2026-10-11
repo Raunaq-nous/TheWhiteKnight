@@ -232,25 +232,28 @@ describe("prompt builder snapshots", () => {
     expect(consulting).not.toContain("RELEVANT PROJECTS:");
   });
 
-  it("resumePrompt enforces the one-page content budget structurally, not via post-hoc trimming (BUG: 2-page exports)", () => {
-    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("ONE-PAGE CONTENT BUDGET");
-    expect(consulting).toMatch(/2-3 bullets/);
-    expect(consulting).toMatch(/exactly 3 items/);
-    expect(consulting).toMatch(/at most 4 roles/);
+  it("resumePrompt states the page budget for the fields the model writes, and leaves bullet counts to code", () => {
+    const onePage = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 1);
+    expect(onePage).toContain("ONE-PAGE CONTENT BUDGET");
+    const twoPage = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 2);
+    expect(twoPage).toContain("TWO-PAGE CONTENT BUDGET");
+    // The model never sizes the resume: code fills to the page target.
+    expect(twoPage).toContain("a short or partial ranking does not shrink the resume");
+    expect(twoPage).toContain("16-20 in total");
   });
 
-  it("resumePrompt requires 2-3 SEPARATE bullet ids per distinct engagement, not one generic bullet per role", () => {
+  it("resumePrompt ranks each engagement as ONE fact rather than selecting duplicates", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("THE CRITICAL RULE ON MULTI-ENGAGEMENT ROLES");
-    expect(consulting).toContain("NEVER select a single generic \"summary of the role\" bullet");
+    expect(consulting).toContain("Each engagement is ONE fact");
   });
 
-  it("resumePrompt selects bullets by id rather than writing them, and its selection formula still protects the outcome (BUG B architecture: selection, not rewriting)", () => {
+  it("resumePrompt RANKS every bullet id rather than selecting or writing them (rank, don't select)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("SELECTION, NOT WRITING");
-    expect(consulting).toContain("BULLET SELECTION FORMULA");
-    expect(consulting).toContain("a bullet that loses its outcome is a failed pick");
+    expect(consulting).toContain("RANK, DON'T SELECT");
+    expect(consulting).toContain("RANKING RULES");
+    expect(consulting).toContain('"bulletRanking"');
+    expect(consulting).toContain("leave EMPTY");
+    expect(consulting).toContain("Text is never yours to write");
     expect(consulting).toContain("AVAILABLE BULLETS");
     expect(consulting).toMatch(/\[e_\w+\]/); // at least one real bullet id rendered into the prompt
   });
@@ -262,15 +265,10 @@ describe("prompt builder snapshots", () => {
     }
   });
 
-  it("resumePrompt's dedupe rule is id-based (BUG C architecture: selection, not rewriting)", () => {
+  it("resumePrompt leaves Key Projects & Impact to the system and bans the model from emitting keyWinIds", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("NO REPETITION");
-    expect(consulting).toContain("pick each engagement's id for exactly ONE slot");
-  });
-
-  it("resumePrompt's Key Projects & Impact instruction says it renders immediately after the summary, before experience", () => {
-    const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("renders as a HIGHLIGHTED block immediately after the summary, before experience");
+    expect(consulting).toContain("Your single highest-ranked id leads Key Projects & Impact");
+    expect(consulting).toContain('Do NOT output a "sectionSequence", "keyWinIds" or "reserve" field');
   });
 
   it("resumePrompt's summary instructions ban meta-commentary about firm fit and generic consulting filler (BUG: fluffy summary)", () => {
@@ -289,17 +287,16 @@ describe("prompt builder snapshots", () => {
     expect(consulting).toContain("A summary with no named target role and no number is a FAILED summary");
   });
 
-  it("resumePrompt bans repeating the same bullet id across Key Projects & Impact and experience bullets (BUG: repeated content)", () => {
+  it("resumePrompt bans the summary repeating the top Key Projects proof point (BUG: repeated 80% figure)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("NO REPETITION");
-    expect(consulting).toContain("do not also select that SAME id for an experience entry's bullets");
+    expect(consulting).toContain("The summary must use a DIFFERENT proof point from that bullet");
   });
 
   it("resumePrompt requires JD priority extraction before writing", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(output).toContain("TARGET PRIORITIES");
     expect(output).toContain("targetPriorities");
-    expect(output).toContain("SELECT AND FOREGROUND");
+    expect(output).toContain("RANK AND FOREGROUND");
   });
 
   it("resumePrompt puts links in a links array, not the contact line, and bans location from the header", () => {
@@ -310,10 +307,10 @@ describe("prompt builder snapshots", () => {
     expect(output).toContain("NEVER put location");
   });
 
-  it("resumePrompt instructs JSON output with bullet priority ranking", () => {
+  it("resumePrompt instructs JSON output with a relevance-scored ranking of every bullet", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "ai_ml_engineering");
-    expect(output).toContain("BULLET PRIORITY");
-    expect(output).toContain('"priority": number');
+    expect(output).toContain('"bulletRanking": [ { "sourceBulletId": string, "relevance": number } ]');
+    expect(output).toContain("each exactly once, most relevant first");
   });
 
   it("coverLetterPrompt includes no em dashes rule", () => {

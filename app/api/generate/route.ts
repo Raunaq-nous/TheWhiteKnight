@@ -8,7 +8,8 @@ import {
 } from "../../../lib/resume-archetype";
 import { clampToOnePageBudget } from "../../../lib/resume-budget";
 import { resolveResumeSelections } from "../../../lib/resume-selection";
-import { enforceEmployerLocations } from "../../../lib/resume-confidentiality";
+import { enforceEmployerLocations, applyConfidentialitySubstitutionsToResumeContent } from "../../../lib/resume-confidentiality";
+import { separateSummaryProofPoint } from "../../../lib/resume-fill";
 import { suppressSideBuilds } from "../../../lib/resume-tool-placement";
 import { generateResumeContent } from "../../../lib/server/services/resume-generation-service";
 import {
@@ -96,13 +97,19 @@ export async function POST(req: NextRequest) {
         providerSettings,
         ResumeContentSchema,
       );
-      const resolved = resolveResumeSelections(data, profile);
-      const normalized = normalizeResumeContent(resolved);
+      const resolved = resolveResumeSelections(data, profile, maxPages);
+      // The reserve export fills from survives a refine, minus anything the
+      // refined resume now uses.
+      const used = new Set([...resolved.experience.flatMap(e => e.bullets.map(b => b.sourceBulletId)), ...(resolved.keyWinIds ?? [])]);
+      const withReserve = { ...resolved, reserve: (parsedCurrent.reserve ?? []).filter(r => !used.has(r.sourceBulletId)) };
+      const normalized = normalizeResumeContent(withReserve);
       const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
+      const clean = applyConfidentialitySubstitutionsToResumeContent(withCanonicalLocations, undefined, archetype);
       const targetKey = resolveTargetArchetypeKey(app, archetype);
-      const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
+      const withSideBuildsResolved = suppressSideBuilds(clean, targetKey);
+      const clamped = withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype);
       return NextResponse.json({
-        data: withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype),
+        data: separateSummaryProofPoint(clamped).content,
         archetype,
         maxPages,
       });
