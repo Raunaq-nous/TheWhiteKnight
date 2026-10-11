@@ -30,13 +30,16 @@ export function injectGapAnswerIntoResume(
   targetType: GapFillTargetType,
   targetId: string,
   newBulletText: string,
+  // The same write-time category stored on the profile bullet, so this
+  // resume's sub-label matches the profile from the start.
+  category?: "consulting_engagement" | "ai_build" | null,
 ): { content: ResumeContent; applied: boolean } {
   if (targetType === "experience") {
     let applied = false;
     const experience = content.experience.map(e => {
       if (applied || !namesMatch(e.company, targetId)) return e;
       applied = true;
-      return { ...e, bullets: [...e.bullets, { sourceBulletId: bulletId("experience", targetId, newBulletText), text: newBulletText, priority: 1 }] };
+      return { ...e, bullets: [...e.bullets, { sourceBulletId: bulletId("experience", targetId, newBulletText), text: newBulletText, priority: 1, category: category ?? "consulting_engagement" }] };
     });
     return { content: { ...content, experience }, applied };
   }

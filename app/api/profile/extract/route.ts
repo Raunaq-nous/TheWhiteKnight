@@ -5,6 +5,7 @@ import { ProfileExtractionResultSchema } from "../../../../lib/schemas";
 import { profileExtractionPrompt } from "../../../../lib/prompts";
 import { ExtractedProfileData } from "../../../../lib/profile-merge";
 import type { Profile } from "../../../../lib/profile";
+import { attachBulletCategories } from "../../../../lib/server/bullet-classifier";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -45,7 +46,10 @@ export async function POST(req: NextRequest) {
       ProfileExtractionResultSchema,
     );
 
-    return NextResponse.json({ data });
+    // Classify each extracted experience bullet ONCE, now, so it is stored
+    // with its category when accepted (never guessed at render time).
+    const experience = data.experience?.length ? await attachBulletCategories(data.experience, providerSettings) : data.experience;
+    return NextResponse.json({ data: { ...data, experience } });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Extraction failed" }, { status: 500 });
   }

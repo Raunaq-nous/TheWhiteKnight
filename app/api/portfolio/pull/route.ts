@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { ProviderSettings } from "../../../../lib/ai-client";
+import { attachBulletCategories } from "../../../../lib/server/bullet-classifier";
 import { checkRateLimit } from "../../../../lib/rate-limit";
 import { getFileContent } from "../../../../lib/server/github-client";
 import { parseExportedArray, parseExportedObject } from "../../../../lib/portfolio-parser";
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { profile, githubToken } = await req.json() as { profile: Profile; githubToken?: string };
+    const { profile, githubToken, providerSettings } = await req.json() as { profile: Profile; githubToken?: string; providerSettings?: ProviderSettings };
     if (!profile) return NextResponse.json({ error: "Missing profile" }, { status: 400 });
     if (!githubToken) return NextResponse.json({ error: "No portfolio GitHub token configured — add one in Settings." }, { status: 400 });
 
@@ -44,8 +46,11 @@ export async function POST(req: NextRequest) {
     const education = parseExportedObject(battlesFile.content, "education") ?? parseExportedArray(battlesFile.content, "education");
 
     const candidates = buildPortfolioCandidates(builds, battles, education, profile);
+    // Battles become experience bullets: classify each ONCE, now, so it is
+    // stored with its category when accepted.
+    const experience = await attachBulletCategories(candidates.experience, providerSettings);
     const items = diffExtractionAgainstProfile(
-      { experience: candidates.experience, education: candidates.education, projects: candidates.projects },
+      { experience, education: candidates.education, projects: candidates.projects },
       profile,
     );
 

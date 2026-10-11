@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { measureAndFill, addFromReserve, dropLowestRanked, MAX_FILL_ITERATIONS, type MeasureFn } from "../resume-measure-fill";
 import { separateSummaryProofPoint } from "../resume-fill";
 import { canAddToRole, roleShareCap, balanceViolations } from "../resume-balance";
-import { usesSubLabels, groupBulletsBySubLabel, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL } from "../resume-sublabels";
+import { roleSubLabelGroups, anyRoleUsesSubLabels, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL } from "../resume-sublabels";
 import { buildDocxPlan } from "../resume-docx";
 import { runPdfExtractionGate } from "../resume-pdf-extract-gate";
 import { resolveResumeSelections } from "../resume-selection";
@@ -143,17 +143,13 @@ describe("sub-labels render from bullet category tags", () => {
     return c;
   };
 
-  it("tags switch sub-labels on even for a non-consulting archetype", () => {
-    expect(usesSubLabels(tagged(), "product")).toBe(true);
-    expect(usesSubLabels(content(2, 0), "product")).toBe(false);
-    expect(usesSubLabels(content(2, 0), "consulting")).toBe(true);
-  });
-
-  it("groups Consulting first, then AI builds, omitting empty bands (preview helper)", () => {
-    const groups = groupBulletsBySubLabel(tagged().experience[0].bullets);
+  it("labels only a role with both categories (preview helper), consulting first", () => {
+    const groups = roleSubLabelGroups(tagged().experience[0])!;
     expect(groups.map(g => g.label)).toEqual([CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL]);
     expect(groups[0].bullets[0].sourceBulletId).toBe("e_b");
-    expect(groupBulletsBySubLabel([{ text: "Led a study.", priority: 1, category: "consulting_engagement" }]).map(g => g.label)).toEqual([CONSULTING_ENGAGEMENTS_LABEL]);
+    expect(roleSubLabelGroups({ role: "Manager", bullets: [{ text: "Led a study.", priority: 1, category: "consulting_engagement" }] })).toBeNull();
+    expect(anyRoleUsesSubLabels(content(2, 0).experience)).toBe(false);
+    expect(anyRoleUsesSubLabels(tagged().experience)).toBe(true);
   });
 
   it("the DOCX plan emits both sub-labels for tagged bullets under a non-consulting archetype", () => {

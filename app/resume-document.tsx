@@ -1,6 +1,6 @@
 "use client";
 
-import { usesSubLabels, groupBulletsBySubLabel } from "../lib/resume-sublabels";
+import { roleSubLabelGroups } from "../lib/resume-sublabels";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ResumeContent, ResumeSectionKey, resolveSectionSequence, formatDegreeLine } from "../lib/resume-schema";
@@ -89,7 +89,6 @@ function ResumePage({
   archetype?: ResumeArchetype | null;
   contentRef?: React.Ref<HTMLDivElement>;
 }) {
-  const subLabels = usesSubLabels(content, archetype);
   const subLabelStyle: React.CSSProperties = {
     fontFamily: "Arial, Helvetica, sans-serif", fontSize: "8pt", fontWeight: 700, letterSpacing: "0.06em",
     textTransform: "uppercase", color: "#666", margin: `${4 * scale}px 0 ${2 * scale}px`,
@@ -191,8 +190,8 @@ function ResumePage({
                 <span style={{ fontWeight: 400, fontStyle: "italic" }}>{e.tenure}</span>
               </div>
               {e.location && <div style={{ fontSize: "9pt", fontStyle: "italic", color: "#444", marginBottom: 2 }}>{e.location}</div>}
-              {subLabels
-                ? groupBulletsBySubLabel(e.bullets).map(group => (
+              {roleSubLabelGroups(e)
+                ? roleSubLabelGroups(e)!.map(group => (
                     <div key={group.label} data-sublabel={group.label}>
                       <div style={subLabelStyle}>{group.label}</div>
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -376,9 +375,9 @@ export function ResumeExportView({
     setSubmittingKey(key);
     try {
       const question = buildOutcomeGapQuestion(w);
-      const newText = await rewriteBulletFromAnswer(profile, w.company, w.text, question, answer);
+      const { text: newText, category } = await rewriteBulletFromAnswer(profile, w.company, w.text, question, answer);
       if (!newText.trim()) { showToast("No usable outcome found in that answer.", "error"); return; }
-      const nextProfile = replaceBulletInProfile(profile, "experience", w.company, w.text, newText);
+      const nextProfile = replaceBulletInProfile(profile, "experience", w.company, w.text, newText, category);
       const ok = await saveProfile(nextProfile);
       if (!ok) { showToast("Rewrite failed to save to your profile.", "error"); return; }
       setResolvedKeys(prev => new Set(prev).add(key));

@@ -39,6 +39,8 @@ describe("injectGapAnswerIntoResume — experience", () => {
       sourceBulletId: bulletId("experience", "Bain & Company", "Delivered $12M in cost savings across 3 capital programs"),
       text: "Delivered $12M in cost savings across 3 capital programs",
       priority: 1,
+      // No category given: stored meaning of an untagged bullet.
+      category: "consulting_engagement",
     });
     // Existing bullet is untouched.
     expect(next.experience[0].bullets[0].text).toBe("Led capital project reviews");

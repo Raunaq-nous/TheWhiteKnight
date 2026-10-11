@@ -85,7 +85,7 @@ export function ResumeGapFillBox({
     setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: true } : it)));
 
     try {
-      const newBulletText = await answerResumeGapQuestion(
+      const { text: newBulletText, category } = await answerResumeGapQuestion(
         profile, item.q.targetLabel, item.q.priority, item.q.question, item.answer.trim(),
       );
 
@@ -99,7 +99,7 @@ export function ResumeGapFillBox({
       // (c) inject into THIS resume, immediately — and await the caller's
       // persistence so we never report success before the write actually lands.
       const { content: nextResume, applied: appliedToResume } = injectGapAnswerIntoResume(
-        resumeContent, item.q.targetType, item.q.targetId, newBulletText,
+        resumeContent, item.q.targetType, item.q.targetId, newBulletText, category,
       );
       let resumePersisted = false;
       if (appliedToResume) {
@@ -109,7 +109,7 @@ export function ResumeGapFillBox({
 
       // (d) write the SAME fact back to the canonical profile, non-destructively.
       const { profile: nextProfile, applied: appliedToProfile, summary } = appendGapAnswerToProfile(
-        profile, item.q.targetType, item.q.targetId, newBulletText,
+        profile, item.q.targetType, item.q.targetId, newBulletText, category,
       );
       if (appliedToProfile) {
         const ok = await saveProfile(nextProfile);

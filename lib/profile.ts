@@ -1,12 +1,10 @@
 import { getCache, wt_saveProfile } from "./data-cache";
 import { showToast } from "./toast";
 
-// Groups a bullet under the "consulting" archetype's two experience
-// sub-labels (see lib/resume-docx.ts's CONSULTING_ENGAGEMENTS_LABEL /
-// AI_BUILDS_LABEL). Optional and explicit — when absent, the renderer
-// falls back to its own keyword heuristic (classifyExperienceBulletLabel);
-// an explicit tag here always wins, since it's a real fact about the
-// bullet the profile owner or an import already knows, not a guess.
+// A bullet's experience sub-label category (lib/resume-sublabels.ts),
+// stored in ExperienceEntry.bulletTags when the bullet is written (see
+// lib/bullet-category.ts). Never guessed at render time: an untagged bullet
+// is treated as a consulting engagement.
 export type BulletCategory = "consulting_engagement" | "ai_build";
 
 export type ExperienceEntry = {

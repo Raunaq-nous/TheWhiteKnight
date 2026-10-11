@@ -2,7 +2,8 @@
 // plus the job-scoped gap-fill flow). All AI calls go through server routes
 // so API keys stay server-side.
 
-import { Profile } from "./profile";
+import { Profile, type BulletCategory } from "./profile";
+import { storeBulletCategories, carryBulletCategory, parseBulletCategory } from "./bullet-category";
 import type { Application } from "./store";
 import { getModelSettings } from "./model-settings";
 import { ExtractedProfileData, namesMatch, isNewBullet, splitBullets } from "./profile-merge";
@@ -55,11 +56,11 @@ export async function rewriteBulletFromAnswer(
   currentText: string,
   question: string,
   answer: string,
-): Promise<string> {
-  const { rewrittenText } = await postJson<{ rewrittenText: string }>("/api/profile/rewrite-bullet", {
+): Promise<{ text: string; category: BulletCategory }> {
+  const { rewrittenText, category } = await postJson<{ rewrittenText: string; category?: string }>("/api/profile/rewrite-bullet", {
     profile, providerSettings: providerSettings(), targetLabel, currentText, question, answer,
   });
-  return rewrittenText;
+  return { text: rewrittenText, category: parseBulletCategory(category) };
 }
 
 /**
@@ -67,6 +68,10 @@ export async function rewriteBulletFromAnswer(
  * profile with the AI-rewritten text. Falls back to appending rather than
  * silently dropping the answer if the original bullet text has drifted
  * (e.g. the user already hand-edited it since the question was generated).
+ *
+ * The rewritten bullet's category is stored now: it keeps the old bullet's
+ * stored category (same engagement, rewritten), else takes `category` (the
+ * rewrite route's classification), else consulting engagement.
  */
 export function replaceBulletInProfile(
   profile: Profile,
@@ -74,6 +79,7 @@ export function replaceBulletInProfile(
   targetId: string,
   currentText: string,
   newText: string,
+  category?: BulletCategory | null,
 ): Profile {
   if (targetType === "experience") {
     return {
@@ -83,11 +89,11 @@ export function replaceBulletInProfile(
         const lines = e.bullets.split("\n");
         const idx = lines.findIndex(l => l.trim() === currentText.trim());
         if (idx === -1) {
-          return { ...e, bullets: [...lines.filter(l => l.trim()), newText].join("\n") };
+          return storeBulletCategories({ ...e, bullets: [...lines.filter(l => l.trim()), newText].join("\n") }, [[newText, category]]);
         }
         const next = [...lines];
         next[idx] = newText;
-        return { ...e, bullets: next.join("\n") };
+        return carryBulletCategory({ ...e, bullets: next.join("\n") }, currentText, newText, category);
       }),
     };
   }
@@ -126,11 +132,11 @@ export async function answerResumeGapQuestion(
   priority: string,
   question: string,
   answer: string,
-): Promise<string> {
-  const { newBulletText } = await postJson<{ newBulletText: string }>("/api/resume/gap-answer", {
+): Promise<{ text: string; category: BulletCategory }> {
+  const { newBulletText, category } = await postJson<{ newBulletText: string; category?: string }>("/api/resume/gap-answer", {
     profile, providerSettings: providerSettings(), targetLabel, priority, question, answer,
   });
-  return newBulletText;
+  return { text: newBulletText, category: parseBulletCategory(category) };
 }
 
 export type GapWriteBackResult = { profile: Profile; applied: boolean; summary: string };
@@ -147,6 +153,9 @@ export function appendGapAnswerToProfile(
   targetType: "experience" | "project",
   targetId: string,
   newBulletText: string,
+  // Stored with the bullet now (from the gap-answer route's classification);
+  // absent means consulting engagement.
+  category?: BulletCategory | null,
 ): GapWriteBackResult {
   if (targetType === "experience") {
     const match = profile.experience.find(e => namesMatch(e.company, targetId));
@@ -156,7 +165,7 @@ export function appendGapAnswerToProfile(
       return { profile, applied: false, summary: `Already on file for ${match.company} — skipped as a duplicate.` };
     }
     const experience = profile.experience.map(e =>
-      e.id === match.id ? { ...e, bullets: [...existingBullets, newBulletText].join("\n") } : e
+      e.id === match.id ? storeBulletCategories({ ...e, bullets: [...existingBullets, newBulletText].join("\n") }, [[newBulletText, category]]) : e
     );
     return { profile: { ...profile, experience }, applied: true, summary: `Added to ${match.company}: "${newBulletText}"` };
   }

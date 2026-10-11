@@ -5,6 +5,7 @@ import { normalizeTextForATS } from "../../../../lib/ats";
 import { ResumeGapAnswerResultSchema } from "../../../../lib/schemas";
 import { resumeGapAnswerPrompt } from "../../../../lib/prompts";
 import type { Profile } from "../../../../lib/profile";
+import { classifyBulletCategories } from "../../../../lib/server/bullet-classifier";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -40,7 +41,11 @@ export async function POST(req: NextRequest) {
       ResumeGapAnswerResultSchema,
     );
 
-    return NextResponse.json({ newBulletText: normalizeTextForATS(data.newBulletText) });
+    const text = normalizeTextForATS(data.newBulletText);
+    // The bullet's sub-label category is classified ONCE, here, and stored
+    // with it by the client (lib/bullet-category.ts).
+    const [category] = await classifyBulletCategories([{ company: targetLabel, text }], providerSettings);
+    return NextResponse.json({ newBulletText: text, category });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Answer processing failed" }, { status: 500 });
   }

@@ -6,7 +6,7 @@
 
 import type { ResumeContent } from "./resume-schema";
 import { RESUME_SPECS, type ResumeArchetype } from "./resume-archetype";
-import { usesSubLabels, groupBulletsBySubLabel } from "./resume-sublabels";
+import { roleSubLabelGroups } from "./resume-sublabels";
 
 type Metrics = { bulletChars: number; bodyChars: number; linesPerPage: number };
 
@@ -40,10 +40,9 @@ export function estimateDocxLines(content: ResumeContent, archetype: ResumeArche
       if (items.length) total += SECTION_HEADER + items.reduce((n, t) => n + lines(t, m.bulletChars), 0);
     } else if (key === "experience" && content.experience.length) {
       total += SECTION_HEADER;
-      const grouped = usesSubLabels(content, archetype);
       for (const e of content.experience) {
         total += 1.5 + 1; // company header row + role line
-        if (grouped) total += groupBulletsBySubLabel(e.bullets).length * 1.1;
+        total += (roleSubLabelGroups(e)?.length ?? 0) * 1.1;
         total += e.bullets.reduce((n, b) => n + lines(b.text, m.bulletChars) + 0.05, 0);
       }
     } else if (key === "education" && content.education.length) {

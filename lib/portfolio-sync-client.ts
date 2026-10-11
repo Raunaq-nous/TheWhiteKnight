@@ -24,7 +24,7 @@ export function hasPortfolioToken(): boolean {
 
 export async function pullFromPortfolio(profile: Profile): Promise<MergeDiffItem[]> {
   const { items } = await postJson<{ items: MergeDiffItem[] }>("/api/portfolio/pull", {
-    profile, githubToken: getIntegrationSettings().portfolioGithubToken,
+    profile, githubToken: getIntegrationSettings().portfolioGithubToken, providerSettings: providerSettings(),
   });
   return items;
 }
