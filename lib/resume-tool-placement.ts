@@ -98,6 +98,11 @@ export function runToolPlacementGate(content: ResumeContent): ToolPlacementGateR
   return { ok: violations.length === 0, violations };
 }
 
+/** True when `text` names a build that config.toolPlacement assigns to an employer other than `company`. */
+export function violatesToolPlacement(text: string, company: string): boolean {
+  return !runToolPlacementGate({ experience: [{ company, role: "", tenure: "", bullets: [{ sourceBulletId: "", text, priority: 1 }] }] } as unknown as ResumeContent).ok;
+}
+
 export function toolPlacementGateFailureMessage(result: ToolPlacementGateResult): string {
   return `TOOL PLACEMENT GATE FAILED — build rejected. ${result.violations
     .map(v => `"${v.tool}" belongs to ${v.expectedEmployer}, found under ${v.foundUnder}`)

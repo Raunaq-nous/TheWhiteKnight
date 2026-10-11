@@ -55,6 +55,26 @@ export const ResumeBulletSchema = z.object({
 // All consuming code already uses `?.`/`&&` truthiness checks, which treat
 // null and undefined identically, so no downstream changes were needed.
 
+// The model RANKS, it does not select: one entry per AVAILABLE BULLETS id
+// with a 0-100 relevance to the JD. Code builds the actual selection from
+// this ranking (lib/resume-fill.ts). Ids only; text always comes from the
+// profile.
+export const BulletRankingEntrySchema = z.object({
+  sourceBulletId: z.string(),
+  relevance: z.number(),
+});
+
+// Ranked, unused profile bullets kept with the resume so export can add
+// the next-best one when the measured PDF under-fills page two. Text is
+// real profile text (resolved server-side), never model-authored.
+export const ReserveBulletSchema = z.object({
+  sourceBulletId: z.string(),
+  company: z.string(),
+  text: z.string(),
+  category: z.enum(["consulting_engagement", "ai_build"]).nullable().optional(),
+  score: z.number(),
+});
+
 export const ResumeExperienceEntrySchema = z.object({
   company: z.string(),
   role: z.string(),
@@ -129,6 +149,8 @@ export const ResumeContentSchema = z.object({
   projects: z.array(ResumeProjectSchema).nullable().optional(),
   certifications: z.array(ResumeCertificationSchema).nullable().optional(),
   leadership: z.array(z.string()).nullable().optional().describe("Leadership & Activities bullets — kept for backward compatibility with earlier consulting resumes"),
+  bulletRanking: z.array(BulletRankingEntrySchema).nullable().optional().describe("EVERY available bullet id with a 0-100 relevance to this JD, most relevant first. The system builds the selection from this."),
+  reserve: z.array(ReserveBulletSchema).nullable().optional().describe("Set by the system, never the model."),
 });
 
 export type ResumeBullet = z.infer<typeof ResumeBulletSchema>;
@@ -138,6 +160,8 @@ export type ResumeSkillGroup = z.infer<typeof ResumeSkillGroupSchema>;
 export type ResumeProject = z.infer<typeof ResumeProjectSchema>;
 export type ResumeCertification = z.infer<typeof ResumeCertificationSchema>;
 export type ResumeContent = z.infer<typeof ResumeContentSchema>;
+export type BulletRankingEntry = z.infer<typeof BulletRankingEntrySchema>;
+export type ReserveBullet = z.infer<typeof ReserveBulletSchema>;
 
 // Recursively strip em/en dashes, smart quotes, and fancy bullets from every
 // string field — the prompt asks the model not to use them, but this is the
@@ -173,6 +197,7 @@ export function normalizeResumeContent(content: ResumeContent): ResumeContent {
     keyWins: content.keyWins?.map(clean),
     targetPriorities: content.targetPriorities?.map(clean),
     subFocus: content.subFocus ? clean(content.subFocus) : content.subFocus,
+    reserve: content.reserve?.map(r => ({ ...r, text: clean(r.text) })),
   };
 }
 

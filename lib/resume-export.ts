@@ -14,6 +14,12 @@ export type ResumeExportResult = {
   // null otherwise or when it couldn't be measured. See
   // lib/resume-pdf-extract-gate.ts.
   pageTwoFillPercent: number | null;
+  // The page ceiling actually rendered (measure-and-fill may fall back to 1).
+  maxPages: number;
+  // The content actually exported: measure-and-fill may have added reserve
+  // bullets or dropped the lowest-ranked one, so the client persists this.
+  resumeContent: ResumeContent;
+  fill: { steps: unknown[]; addedIds: string[]; droppedIds: string[]; underfilledWithReserve: boolean };
   // WARN-level format gate issues — export already succeeded; these are
   // shown, never blocking. outcomeWarnings is the subset routable into the
   // gap-fill/bullet-rewrite flow (app/resume-document.tsx).

@@ -133,6 +133,7 @@ export function applyConfidentialitySubstitutionsToResumeContent(
       ...ed,
       achievements: ed.achievements?.map(clean),
     })),
+    reserve: content.reserve?.map(r => ({ ...r, text: clean(r.text) })),
   };
 }
 
