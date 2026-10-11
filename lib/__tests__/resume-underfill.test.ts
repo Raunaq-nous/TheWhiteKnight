@@ -13,25 +13,17 @@ vi.mock("../ai-client", () => ({ chatJSON: vi.fn(), chat: vi.fn() }));
 
 import { chatJSON } from "../ai-client";
 import { generateResumeContent } from "../server/services/resume-generation-service";
-import { EXPERIENCE_CANDIDATES, applyBulletTags } from "../../scripts/import-master-profile";
-import { getSeedProfile, type Profile } from "../profile";
+import type { Profile } from "../profile";
 import { listProfileBullets } from "../profile-bullets";
 import { FILL_TARGETS } from "../resume-budget";
 import { proofFigures } from "../resume-fill";
+import { balanceViolations } from "../resume-balance";
+import { liveShapedProfile, LIVE_SHAPE } from "./fixtures/live-shaped-profile";
 import type { Application } from "../store";
 
-function masterProfile(): Profile {
-  return applyBulletTags({
-    ...getSeedProfile(),
-    name: "Test Candidate",
-    email: "candidate@example.com",
-    yearsOfExperience: "8+",
-    experience: EXPERIENCE_CANDIDATES.map((c, i) => ({
-      id: `x${i}`, company: c.company, role: c.role, tenure: c.tenure, location: c.location ?? "",
-      current: i === 0, bullets: c.bullets.join("\n"),
-    })),
-  });
-}
+// Shaped like the live profile (Bain 9, Aranca 20, Evalueserve 8, Tecnova 5,
+// Madcue 3), not the master-spec counts.
+const masterProfile = liveShapedProfile;
 
 const CONSULTING_APP: Application = {
   id: "app-c", slug: "acme-consulting-manager", company: "Acme Advisory", role: "Consulting Manager, Capital Excellence",
@@ -47,15 +39,24 @@ const CONSULTING_APP: Application = {
   createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
 } as Application;
 
+/** Bain has run out when every one of its profile bullets is on the page (Experience or Key Projects). */
+function bainExhausted(data: { experience: { company: string; bullets: unknown[] }[]; keyWinCompanies?: string[] | null }): boolean {
+  const bain = data.experience.find(e => e.company === "Bain and Company");
+  const used = (bain?.bullets.length ?? 0) + (data.keyWinCompanies ?? []).filter(c => c === "Bain and Company").length;
+  return used >= LIVE_SHAPE["Bain and Company"];
+}
+
 const MAIN_EMPLOYERS = ["Bain and Company", "Aranca", "Evalueserve", "Tecnova India", "Madcue"];
 
-/** A model that ranks only 10 ids, all from the first two employers. */
-function tenIdModel(profile: Profile, summary: string) {
+/** A model that ranks only 10 ids: by default 5 Bain + 5 Aranca, or all Aranca to stress balance. */
+function tenIdModel(profile: Profile, summary: string, arancaOnly = false) {
   const refs = listProfileBullets(profile).filter(r => r.sourceType === "experience");
-  const ten = [
-    ...refs.filter(r => r.sourceId === "Bain and Company").slice(0, 5),
-    ...refs.filter(r => r.sourceId === "Aranca").slice(0, 5),
-  ];
+  const ten = arancaOnly
+    ? refs.filter(r => r.sourceId === "Aranca").slice(0, 10)
+    : [
+      ...refs.filter(r => r.sourceId === "Bain and Company").slice(0, 5),
+      ...refs.filter(r => r.sourceId === "Aranca").slice(0, 5),
+    ];
   expect(ten).toHaveLength(10);
   return {
     name: "Test Candidate",
@@ -74,7 +75,7 @@ function tenIdModel(profile: Profile, summary: string) {
 describe("generation never trusts a short model selection (10 ids in, two full pages out)", () => {
   beforeEach(() => vi.mocked(chatJSON).mockReset());
 
-  it("fills to 16+ experience bullets, all 5 employers, 2+ bullets each, from only 10 model ids", async () => {
+  it("fills the full two-page target (26+ experience bullets), all 5 employers, 2+ each, from only 10 model ids", async () => {
     const profile = masterProfile();
     vi.mocked(chatJSON).mockResolvedValue(tenIdModel(profile, "Consulting manager for capital excellence roles.") as never);
 
@@ -92,8 +93,13 @@ describe("generation never trusts a short model selection (10 ids in, two full p
     for (const employer of MAIN_EMPLOYERS) expect(companies).toContain(employer);
     for (const e of data.experience.filter(x => MAIN_EMPLOYERS.includes(x.company))) {
       expect(e.bullets.length, e.company).toBeGreaterThanOrEqual(FILL_TARGETS.perEmployerMin);
-      expect(e.bullets.length, e.company).toBeLessThanOrEqual(FILL_TARGETS.perRoleTarget);
     }
+    // The preview IS the two-page resume: the estimate lands page two past half.
+    // (A real LibreOffice render of this output measured page two at ~59%.)
+    expect(fill.finalEstimatedLines).toBeGreaterThanOrEqual(FILL_TARGETS.linesPerPage * 1.4);
+    expect(fill.finalEstimatedLines).toBeLessThan(FILL_TARGETS.linesPerPage * 2);
+    // Balanced: Bain leads (counting Key Projects), no role over about a third.
+    expect(balanceViolations(data.experience, data.keyWinCompanies, bainExhausted(data))).toEqual([]);
 
     // Key Projects 3-4 items, disjoint from experience.
     expect(data.keyWins?.length ?? 0).toBeGreaterThanOrEqual(FILL_TARGETS.keyImpactMin);
@@ -107,6 +113,19 @@ describe("generation never trusts a short model selection (10 ids in, two full p
 
     // Export has candidates to fill with.
     expect(data.reserve?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("a model that ranks only Aranca still yields a Bain-led, balanced resume", async () => {
+    const profile = masterProfile();
+    vi.mocked(chatJSON).mockResolvedValue(tenIdModel(profile, "Consulting manager.", true) as never);
+    const { data } = await generateResumeContent(profile, CONSULTING_APP, undefined, "consulting");
+    expect(balanceViolations(data.experience, data.keyWinCompanies, bainExhausted(data))).toEqual([]);
+    const bain = data.experience.find(e => e.company === "Bain and Company")!;
+    const bainTotal = bain.bullets.length + (data.keyWinCompanies ?? []).filter(c => c === "Bain and Company").length;
+    const aranca = data.experience.find(e => e.company === "Aranca")!;
+    if (!bainExhausted(data)) expect(aranca.bullets.length).toBeLessThanOrEqual(bainTotal);
+    const total = data.experience.reduce((n, e) => n + e.bullets.length, 0);
+    expect(aranca.bullets.length).toBeLessThanOrEqual(Math.ceil(total / 3));
   });
 
   it("the summary never repeats the leading Key Projects item's figure", async () => {

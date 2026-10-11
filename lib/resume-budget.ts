@@ -60,9 +60,9 @@ export const TWO_PAGE_BUDGET = {
   // the only numbers, and they summed to ~1.1 pages in the spec's 9pt
   // two-page format, so a light model selection always under-filled.
   keyImpactMaxItems: 4,
-  bulletsPerRoleMax: 6,
+  bulletsPerRoleMax: 12,
   experienceMaxRoles: 8,
-  totalExperienceBulletsMax: 30,
+  totalExperienceBulletsMax: 36,
   // Full-length bullets on two pages: the 240-char one-page cap compressed
   // or dropped most master-spec Bain bullets (243-364 chars), shrinking the
   // content that should have filled page two.
@@ -73,23 +73,31 @@ export const TWO_PAGE_BUDGET = {
   educationMaxEntries: 2,
 } as const;
 
-// FLOORS and targets for the two-page fill (lib/resume-fill.ts). The fill
-// stops adding once the estimated layout reaches targetLines, but never
-// before every floor is met.
+// FLOORS and targets for the two-page fill (lib/resume-fill.ts), sized so
+// GENERATION already produces the full two-page resume and the preview
+// matches the export; export's measure-and-fill only fine-tunes.
+//
+// Calibrated against real LibreOffice renders (A4, Carlito as Calibri) of a
+// profile shaped like the live one (Bain 9, Aranca 20, Evalueserve 8,
+// Tecnova 5, Madcue 3; ~200-char bullets) with 4 Key Projects items:
+// page two reaches 50% at ~30 experience bullets / ~117 estimated lines.
+// The fill stops at targetLines once totalMin is met, or at totalTarget.
+//
+// Role balance (lib/resume-balance.ts): the current role carries the most
+// bullets counting its Key Projects items, no earlier role exceeds it unless
+// it has run out, and no role carries more than maxRoleShare of Experience.
 export const FILL_TARGETS = {
   keyImpactMin: 3,
   keyImpactMax: 4,
   perEmployerMin: 2,
-  perRoleTarget: 4,
-  totalMin: 16,
-  totalTarget: 20,
-  // Estimated DOCX lines (estimateDocxLines), calibrated against real
-  // renders: one page of the two-page format is ~78 estimated lines, so page
-  // two at least 50% full needs ~117; 123 leaves margin, under the ~156-line
-  // third page. The count targets above usually bind first; export's
-  // measure-and-fill tops up the rest against the real PDF.
+  totalMin: 26,
+  totalTarget: 32,
+  maxRoleShare: 1 / 3,
+  // Estimated DOCX lines (estimateDocxLines). One page of the two-page
+  // format is ~78 estimated lines; 121 lands page two at ~55%, leaving
+  // export room to fine-tune either way, under the ~156-line third page.
   linesPerPage: 78,
-  targetLines: 123,
+  targetLines: 121,
   maxLines: 152,
 } as const;
 
@@ -535,32 +543,37 @@ export function clampToOnePageBudget(content: ResumeContent, archetype: ResumeAr
   const clampKeyWins = (maxItems: number) => {
     const wins = (content.keyWins ?? []).slice(0, maxItems);
     const ids = (content.keyWinIds ?? []).slice(0, maxItems);
+    const companies = content.keyWinCompanies ?? null;
     const keptWins: string[] = [];
     const keptIds: string[] = [];
+    const keptCompanies: string[] = [];
     wins.forEach((w, i) => {
       const clamped = clampBulletText(w, budget.keyImpactItemMaxChars);
-      if (clamped !== null) { keptWins.push(clamped); keptIds.push(ids[i] ?? ""); }
+      if (clamped !== null) { keptWins.push(clamped); keptIds.push(ids[i] ?? ""); keptCompanies.push(companies?.[i] ?? ""); }
     });
-    return { keyWins: keptWins, keyWinIds: keptIds };
+    return { keyWins: keptWins, keyWinIds: keptIds, keyWinCompanies: companies ? keptCompanies : null };
   };
 
   if (usesSelectedImpact) {
     // Combined Key Projects & Impact band — the total item count across both
     // arrays is what's capped, since they render together as one list.
-    const { keyWins, keyWinIds } = clampKeyWins(budget.keyImpactMaxItems);
+    const { keyWins, keyWinIds, keyWinCompanies } = clampKeyWins(budget.keyImpactMaxItems);
     const remaining = budget.keyImpactMaxItems - keyWins.length;
     const keptProjects = remaining > 0 ? (content.projects ?? []).slice(0, remaining) : [];
     clamped.keyWins = keyWins;
     clamped.keyWinIds = keyWinIds;
+    clamped.keyWinCompanies = keyWinCompanies;
     clamped.projects = keptProjects.map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null);
   } else {
     if (seq.includes("keyWins")) {
-      const { keyWins, keyWinIds } = clampKeyWins(budget.keyImpactMaxItems);
+      const { keyWins, keyWinIds, keyWinCompanies } = clampKeyWins(budget.keyImpactMaxItems);
       clamped.keyWins = keyWins;
       clamped.keyWinIds = keyWinIds;
+      clamped.keyWinCompanies = keyWinCompanies;
     } else {
       clamped.keyWins = null;
       clamped.keyWinIds = null;
+      clamped.keyWinCompanies = null;
     }
     clamped.projects = seq.includes("projects")
       ? (content.projects ?? []).slice(0, budget.keyImpactMaxItems).map(clampProject).filter((p): p is NonNullable<typeof p> => p !== null)

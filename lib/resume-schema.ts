@@ -151,6 +151,7 @@ export const ResumeContentSchema = z.object({
   leadership: z.array(z.string()).nullable().optional().describe("Leadership & Activities bullets — kept for backward compatibility with earlier consulting resumes"),
   bulletRanking: z.array(BulletRankingEntrySchema).nullable().optional().describe("EVERY available bullet id with a 0-100 relevance to this JD, most relevant first. The system builds the selection from this."),
   reserve: z.array(ReserveBulletSchema).nullable().optional().describe("Set by the system, never the model."),
+  keyWinCompanies: z.array(z.string()).nullable().optional().describe("Set by the system, never the model: the employer behind each keyWins item, index-aligned, so role balance can count Key Projects items."),
 });
 
 export type ResumeBullet = z.infer<typeof ResumeBulletSchema>;

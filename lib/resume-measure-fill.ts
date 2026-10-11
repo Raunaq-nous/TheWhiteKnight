@@ -2,13 +2,15 @@
 // estimate; this loop corrects it against the REAL rendered PDF on export.
 //   2 pages, page two < 50% full  -> add the next-best reserve bullets, re-render
 //   3+ pages                      -> drop the lowest-ranked bullet(s), re-render
-// At most 8 measure/adjust iterations. Falls back to one page only when the
-// reserve is exhausted and page two is still under-filled. Under-fill never
+// At most 8 measure/adjust iterations. Additions and drops follow the
+// role-balance rule (lib/resume-balance.ts). Falls back to one page only
+// when the reserve is exhausted and page two is still under-filled. Under-fill never
 // blocks export while unused bullets exist.
 //
 // The measurement is injected so the loop is testable without LibreOffice.
 
-import type { ResumeContent } from "./resume-schema";
+import type { ResumeContent, ReserveBullet } from "./resume-schema";
+import { canAddToRole, spreadWeight, bandItemsFor, type BalanceState } from "./resume-balance";
 import type { ResumeArchetype } from "./resume-archetype";
 import { clampToOnePageBudget, FILL_TARGETS } from "./resume-budget";
 import { isSameEngagement } from "./resume-fill";
@@ -22,7 +24,7 @@ export type FillStep = {
   iteration: number;
   pageCount: number;
   pageTwoFillPercent: number | null;
-  action: "ok" | "added" | "dropped" | "fallback-one-page" | "iterations-exhausted" | "reserve-exhausted";
+  action: "ok" | "added" | "dropped" | "fallback-one-page" | "iterations-exhausted" | "reserve-exhausted" | "balance-limit";
   ids: string[];
 };
 
@@ -46,55 +48,76 @@ function allBulletTexts(c: ResumeContent): string[] {
   return [...c.experience.flatMap(e => e.bullets.map(b => b.text)), ...(c.keyWins ?? [])];
 }
 
+function balanceState(experience: ResumeContent["experience"], reserve: ReserveBullet[], bandCompanies: ResumeContent["keyWinCompanies"], sectionSize: number): BalanceState {
+  const current = experience[0]?.company ?? null;
+  return {
+    counts: new Map(experience.map(e => [e.company, e.bullets.length])),
+    currentRole: current,
+    currentBandItems: bandItemsFor(current, bandCompanies),
+    currentExhausted: !current || !reserve.some(r => r.company === current),
+    sectionSize,
+  };
+}
+
 /**
- * Adds reserve bullets worth about `deficitLines`, best-ranked first, while
- * keeping roles level: a per-role cap starts one above the smallest role and
- * rises a step at a time, so additions spread across employers instead of
- * all landing on the role with the deepest reserve. Returns the ids added.
+ * Adds reserve bullets worth about `deficitLines` under the role-balance
+ * rule (lib/resume-balance.ts): each pick is the best-ranked reserve bullet,
+ * discounted by how many bullets its role already has, among roles allowed
+ * one more. Spreads page two across roles; never stacks one employer.
+ * Returns the ids added (empty when no balanced addition exists).
  */
 export function addFromReserve(content: ResumeContent, deficitLines: number): { content: ResumeContent; ids: string[] } {
-  let reserve = [...(content.reserve ?? [])];
   const experience = content.experience.map(e => ({ ...e, bullets: [...e.bullets] }));
   let maxPriority = Math.max(0, ...experience.flatMap(e => e.bullets.map(b => b.priority)));
   const texts = allBulletTexts(content);
+  // Reserve bullets repeating an engagement already on the page never fit.
+  let reserve = (content.reserve ?? []).filter(r => !texts.some(t => isSameEngagement(t, r.text)));
   const ids: string[] = [];
   let gained = 0;
-  const done = () => gained >= deficitLines && ids.length > 0;
 
-  // Reserve bullets that repeat an engagement already on the page never fit.
-  reserve = reserve.filter(r => !texts.some(t => isSameEngagement(t, r.text)));
-  const hasEntry = (company: string) => experience.some(e => e.company === company);
-  const startCap = Math.max(FILL_TARGETS.perRoleTarget, Math.min(...experience.map(e => e.bullets.length))) + 1;
-  const topCap = Math.max(startCap, ...experience.map(e => e.bullets.length)) + reserve.length;
-
-  for (let cap = startCap; cap <= topCap && !done() && reserve.some(r => hasEntry(r.company)); cap++) {
-    for (const r of [...reserve]) {
-      if (done()) break;
+  while (!(gained >= deficitLines && ids.length > 0)) {
+    const total = experience.reduce((n, e) => n + e.bullets.length, 0);
+    const state = balanceState(experience, reserve, content.keyWinCompanies, Math.max(total + 1, FILL_TARGETS.totalMin));
+    let best: { r: ReserveBullet; w: number } | null = null;
+    reserve.forEach((r, i) => {
       const entry = experience.find(e => e.company === r.company);
-      if (!entry || entry.bullets.length >= cap) continue;
-      if (texts.some(t => isSameEngagement(t, r.text))) { reserve = reserve.filter(x => x !== r); continue; }
-      entry.bullets.push({ sourceBulletId: r.sourceBulletId, text: r.text, priority: ++maxPriority, category: r.category ?? null });
-      texts.push(r.text);
-      ids.push(r.sourceBulletId);
-      gained += bulletLines(r.text);
-      reserve = reserve.filter(x => x !== r);
-    }
+      if (!entry || !canAddToRole(entry.company, state)) return;
+      // Reserve order is rank order; score breaks nothing when absent.
+      const w = (r.score > 0 ? r.score : 1 / (i + 2)) * spreadWeight(entry.company, state.counts);
+      if (!best || w > best.w) best = { r, w };
+    });
+    if (!best) break;
+    const pick = (best as { r: ReserveBullet }).r;
+    const entry = experience.find(e => e.company === pick.company)!;
+    entry.bullets.push({ sourceBulletId: pick.sourceBulletId, text: pick.text, priority: ++maxPriority, category: pick.category ?? null });
+    texts.push(pick.text);
+    ids.push(pick.sourceBulletId);
+    gained += bulletLines(pick.text);
+    reserve = reserve.filter(x => x !== pick && !isSameEngagement(pick.text, x.text));
   }
   return { content: { ...content, experience, reserve }, ids };
 }
 
-/** Drops the lowest-ranked bullet, from a role that keeps at least the per-employer floor where possible. */
+/**
+ * Drops the lowest-ranked bullet. Keeps every role at the per-employer floor
+ * where possible, and never drops from the current role when that would
+ * leave an earlier role ahead of it.
+ */
 export function dropLowestRanked(content: ResumeContent): { content: ResumeContent; id: string | null } {
   const floor = FILL_TARGETS.perEmployerMin;
-  const pick = (minKeep: number) => {
+  const current = content.experience[0];
+  const currentTotal = current ? current.bullets.length + bandItemsFor(current.company, content.keyWinCompanies) : 0;
+  const maxOther = Math.max(0, ...content.experience.slice(1).map(e => e.bullets.length));
+  const pick = (minKeep: number, protectCurrent: boolean) => {
     let best: { ei: number; bi: number; priority: number } | null = null;
     content.experience.forEach((e, ei) => {
       if (e.bullets.length <= minKeep) return;
+      if (protectCurrent && ei === 0 && currentTotal - 1 < maxOther) return;
       e.bullets.forEach((b, bi) => { if (!best || b.priority > best.priority) best = { ei, bi, priority: b.priority }; });
     });
     return best as { ei: number; bi: number; priority: number } | null;
   };
-  const target = pick(floor) ?? pick(1);
+  const target = pick(floor, true) ?? pick(floor, false) ?? pick(1, false);
   if (!target) return { content, id: null };
   const removed = content.experience[target.ei].bullets[target.bi];
   const experience = content.experience.map((e, ei) => ei === target.ei ? { ...e, bullets: e.bullets.filter((_, bi) => bi !== target.bi) } : e);
@@ -149,6 +172,12 @@ export async function measureAndFill(
     const per = DOCX_METRICS[2].linesPerPage;
     const deficit = droppedIds.length > 0 ? 0 : Math.ceil(((PAGE_TWO_MIN_FILL_PERCENT + 8 - (m.pageTwoFillPercent ?? 0)) / 100) * per);
     const r = addFromReserve(content, deficit);
+    if (r.ids.length === 0 && (content.reserve?.length ?? 0) > 0) {
+      // Bullets remain but every one would break role balance: stop here.
+      // Under-fill does not block export in this case (underfilledWithReserve).
+      steps.push({ iteration: i, ...m, action: "balance-limit", ids: [] });
+      break;
+    }
     if (r.ids.length === 0) {
       // Candidates exhausted: the honest result is one page. Checked before
       // the iteration cap, so an empty reserve always falls back.

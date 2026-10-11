@@ -17,6 +17,7 @@ import { sameEngagement } from "./resume-dedupe";
 import { textSimilarity, namesMatch } from "./profile-merge";
 import { violatesToolPlacement } from "./resume-tool-placement";
 import { estimateDocxLines, DOCX_METRICS } from "./resume-layout-estimate";
+import { canAddToRole, spreadWeight, bandItemsFor } from "./resume-balance";
 
 export type FillCandidate = {
   id: string;
@@ -47,6 +48,7 @@ export type FillResult = {
   experience: ResumeExperienceEntry[];
   keyWinIds: string[];
   keyWins: string[];
+  keyWinCompanies: string[];
   reserve: ReserveBullet[];
   stats: FillStats;
 };
@@ -111,7 +113,7 @@ function targetsFor(maxPages: number) {
   if (maxPages >= 2) {
     return {
       keyImpactMin: FILL_TARGETS.keyImpactMin, keyImpactMax: FILL_TARGETS.keyImpactMax,
-      perEmployerMin: FILL_TARGETS.perEmployerMin, perRoleTarget: FILL_TARGETS.perRoleTarget,
+      perEmployerMin: FILL_TARGETS.perEmployerMin,
       totalMin: FILL_TARGETS.totalMin, totalTarget: FILL_TARGETS.totalTarget,
       targetLines: FILL_TARGETS.targetLines,
     };
@@ -119,7 +121,7 @@ function targetsFor(maxPages: number) {
   const per = DOCX_METRICS[1].linesPerPage;
   return {
     keyImpactMin: Math.min(3, budget.keyImpactMaxItems), keyImpactMax: budget.keyImpactMaxItems,
-    perEmployerMin: 2, perRoleTarget: budget.bulletsPerRoleMax,
+    perEmployerMin: 2,
     totalMin: Math.min(8, budget.totalExperienceBulletsMax), totalTarget: budget.totalExperienceBulletsMax,
     targetLines: Math.round(per * 0.92),
   };
@@ -175,6 +177,7 @@ export function buildFilledSelection(
       ...base,
       keyWinIds: band.map(c => c.id),
       keyWins: band.map(c => c.text),
+      keyWinCompanies: band.map(c => roleOf(c)?.company ?? c.company),
       experience: entries
         .filter(e => (roleBullets.get(e.company) ?? []).length > 0)
         .map(e => ({
@@ -192,22 +195,36 @@ export function buildFilledSelection(
       if (roleOf(c)?.company === e.company && usable(c)) add(c);
     }
   }
-  // 2b. Up to perRoleTarget per role, by score, until the bullet target and
-  //     the line target are both met (or totalTarget is reached).
-  for (const c of pool) {
-    if (total() >= t.totalTarget) break;
-    if (total() >= t.totalMin && lines() >= t.targetLines) break;
-    if (!usable(c) || roleBullets.get(roleOf(c)!.company)!.length >= t.perRoleTarget) continue;
-    add(c);
+  // 2b. Fill to the two-page target under the role-balance rule
+  //     (lib/resume-balance.ts): best score first, discounted by how many
+  //     bullets the role already has, among roles allowed one more. Stops
+  //     once the bullet floor AND the line target are met, at totalTarget,
+  //     or when no balanced addition is left.
+  const current = entries.find(e => e.current) ?? entries[0] ?? null;
+  const currentBandItems = bandItemsFor(current?.company ?? null, band.map(c => roleOf(c)?.company ?? c.company));
+  const counts = () => new Map([...roleBullets].map(([k, v]) => [k, v.length]));
+  const currentExhausted = () => !current || !pool.some(c => usable(c) && roleOf(c)?.company === current.company);
+  while (total() < t.totalTarget && !(total() >= t.totalMin && lines() >= t.targetLines)) {
+    const n = counts();
+    const state = { counts: n, currentRole: current?.company ?? null, currentBandItems, currentExhausted: currentExhausted(), sectionSize: Math.max(total() + 1, t.totalMin) };
+    let best: FillCandidate | null = null;
+    let bestWeight = -1;
+    for (const c of pool) {
+      if (!usable(c)) continue;
+      const role = roleOf(c)!.company;
+      if (!canAddToRole(role, state)) continue;
+      const w = c.score * spreadWeight(role, n);
+      if (w > bestWeight) { best = c; bestWeight = w; }
+    }
+    if (!best) break;
+    add(best);
   }
-  // Going past perRoleTarget/totalTarget is deliberately NOT done here:
-  // export measures the real PDF and adds from the reserve until page two
-  // is at least half full (lib/resume-measure-fill.ts).
+  // Export measures the real PDF and fine-tunes from the reserve under the
+  // same balance rule (lib/resume-measure-fill.ts).
 
   const content = assemble();
   const reserve: ReserveBullet[] = pool
     .filter(c => !chosen.includes(c) && !isDup(c) && roleOf(c))
-    .slice(0, 30)
     .map(c => ({ sourceBulletId: c.id, company: roleOf(c)!.company, text: c.text, category: c.category ?? null, score: Math.round(c.score * 1000) / 1000 }));
 
   const experienceIds = content.experience.flatMap(e => e.bullets.map(b => b.sourceBulletId));
@@ -217,6 +234,7 @@ export function buildFilledSelection(
     experience: content.experience,
     keyWinIds: content.keyWinIds ?? [],
     keyWins: content.keyWins ?? [],
+    keyWinCompanies: content.keyWinCompanies ?? [],
     reserve,
     stats: {
       modelRankedIds: ranking.size,
@@ -271,7 +289,9 @@ export function separateSummaryProofPoint(content: ResumeContent): { content: Re
   if (free > 0) {
     const order = [free, ...wins.map((_, i) => i).filter(i => i !== free)];
     const keyWinIds = ids.length === wins.length ? order.map(i => ids[i]) : ids;
-    return { content: { ...content, keyWins: order.map(i => wins[i]), keyWinIds }, changed: true };
+    const companies = content.keyWinCompanies ?? null;
+    const keyWinCompanies = companies && companies.length === wins.length ? order.map(i => companies[i]) : companies;
+    return { content: { ...content, keyWins: order.map(i => wins[i]), keyWinIds, keyWinCompanies }, changed: true };
   }
   const swap = (content.reserve ?? []).find(r => OUTCOME_MARKER_PATTERN.test(r.text) && !shareProofPoint(content.summary, r.text));
   if (!swap) return { content, changed: false };
@@ -280,6 +300,7 @@ export function separateSummaryProofPoint(content: ResumeContent): { content: Re
       ...content,
       keyWins: [swap.text, ...wins.slice(1)],
       keyWinIds: [swap.sourceBulletId, ...ids.slice(1)],
+      keyWinCompanies: content.keyWinCompanies ? [swap.company, ...content.keyWinCompanies.slice(1)] : content.keyWinCompanies,
       reserve: (content.reserve ?? []).filter(r => r !== swap),
     },
     changed: true,

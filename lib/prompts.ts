@@ -5,7 +5,7 @@ import { ResumeContent } from "./resume-schema";
 import { BulletCandidate } from "./profile-bullet-quality";
 import { computeBulletRelevanceHints, renderRelevanceHintsBlock, rankProfileForResume } from "./resume-bullet-relevance";
 import { renderAvailableBulletsBlock } from "./profile-bullets";
-import { budgetForMaxPages, ResumeBudget } from "./resume-budget";
+import { budgetForMaxPages, ResumeBudget, FILL_TARGETS } from "./resume-budget";
 
 export type GenerationAction = "resume" | "cover-letter" | "executive-summary" | "problem-solver" | "skill-gap" | "outreach-hm" | "linkedin-dm" | "ceo-cold-email" | "referral-dm" | "refine";
 
@@ -299,7 +299,7 @@ STEP 1 — JD ANALYSIS (do this BEFORE writing anything). Go deeper than the arc
 
 ${RESUME_BASE_RULES}
 
-RANK, DON'T SELECT — read this before Step 1. You do not choose which bullets appear, how many, or where. You RANK every id in AVAILABLE BULLETS by relevance to THIS JD and its sub-focus, in "bulletRanking". Code then builds Key Projects & Impact (3-4 items) and Experience (every employer, at least 2 bullets each, up to 4 per role, 16-20 in total) from your ranking and fills the page, so a short or partial ranking does not shrink the resume; it only loses your judgement. Text is never yours to write: the exact profile text behind each id is used. The ONLY field you write freely is "summary".
+RANK, DON'T SELECT — read this before Step 1. You do not choose which bullets appear, how many, or where. You RANK every id in AVAILABLE BULLETS by relevance to THIS JD and its sub-focus, in "bulletRanking". Code then builds Key Projects & Impact (3-4 items) and Experience (${isTwoPage ? `every employer at least 2 bullets, ${FILL_TARGETS.totalMin}-${FILL_TARGETS.totalTarget} in total, the current role carrying the most and no role more than about a third` : "every employer at least 2 bullets, within the one-page budget"}) from your ranking and fills the page, so a short or partial ranking does not shrink the resume; it only loses your judgement. Text is never yours to write: the exact profile text behind each id is used. The ONLY field you write freely is "summary".
 
 WHAT SCREENERS IN THIS FIELD ACTUALLY WANT: ${spec.whatScreenersWant}
 
