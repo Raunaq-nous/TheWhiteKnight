@@ -54,6 +54,8 @@ export type DuplicatePair = {
   reason: "text_similarity" | "same_engagement";
   overlap: number;
   whyKept: string;
+  keptOrigin: "imported" | "legacy";
+  droppedOrigin: "imported" | "legacy";
 };
 
 const ACTION_VERBS = new Set([
@@ -100,13 +102,13 @@ const IMPORTED_TEXTS = new Set(EXPERIENCE_CANDIDATES.flatMap(c => c.bullets));
 
 type Ranked = { text: string; verbLed: boolean; hasOutcome: boolean; density: number; imported: boolean };
 
-function rankOf(text: string): Ranked {
-  return { text, verbLed: isVerbLed(text), hasOutcome: hasResultClause(text), density: impactDensity(text), imported: IMPORTED_TEXTS.has(text) };
+function rankOf(text: string, imported: Set<string> = IMPORTED_TEXTS): Ranked {
+  return { text, verbLed: isVerbLed(text), hasOutcome: hasResultClause(text), density: impactDensity(text), imported: imported.has(text) };
 }
 
 /** Negative when a should survive over b. */
-export function compareSurvivor(a: string, b: string): number {
-  const ra = rankOf(a), rb = rankOf(b);
+export function compareSurvivor(a: string, b: string, imported: Set<string> = IMPORTED_TEXTS): number {
+  const ra = rankOf(a, imported), rb = rankOf(b, imported);
   return (Number(rb.verbLed) - Number(ra.verbLed))
     || (Number(rb.hasOutcome) - Number(ra.hasOutcome))
     || (rb.density - ra.density)
@@ -114,8 +116,8 @@ export function compareSurvivor(a: string, b: string): number {
     || (b.length - a.length);
 }
 
-function whyKept(kept: string, dropped: string): string {
-  const k = rankOf(kept), d = rankOf(dropped);
+function whyKept(kept: string, dropped: string, imported: Set<string> = IMPORTED_TEXTS): string {
+  const k = rankOf(kept, imported), d = rankOf(dropped, imported);
   if (k.verbLed !== d.verbLed) return "full sentence over fragment";
   if (k.hasOutcome !== d.hasOutcome) return "has an outcome clause";
   if (k.density !== d.density) return `impact density ${k.density} vs ${d.density}`;
@@ -149,10 +151,13 @@ function isDuplicatePair(a: string, b: string): DuplicatePair["reason"] | null {
 export function dedupeExperienceEntry(entry: ExperienceEntry, except: Set<string> = new Set()): {
   bullets: string[];
   bulletTags: Record<string, BulletCategory> | undefined;
+  importedBullets: string[] | undefined;
   pairs: DuplicatePair[];
 } {
   const bullets = splitBullets(entry.bullets);
-  const order = bullets.map((_, i) => i).sort((x, y) => compareSurvivor(bullets[x], bullets[y]) || x - y);
+  // Imported = master-spec text OR recorded on the entry by import/merge.
+  const importedSet = new Set([...IMPORTED_TEXTS, ...(entry.importedBullets ?? [])]);
+  const order = bullets.map((_, i) => i).sort((x, y) => compareSurvivor(bullets[x], bullets[y], importedSet) || x - y);
   const kept: number[] = [];
   const dropped = new Set<number>();
   const pairs: DuplicatePair[] = [];
@@ -169,7 +174,9 @@ export function dedupeExperienceEntry(entry: ExperienceEntry, except: Set<string
       company: entry.company, keptText, droppedText, keptId: id(keptText), droppedId: id(droppedText),
       reason: isDuplicatePair(keptText, droppedText)!,
       overlap: Math.max(engagementContainment(keptText, droppedText), textSimilarity(keptText, droppedText)),
-      whyKept: whyKept(keptText, droppedText),
+      whyKept: whyKept(keptText, droppedText, importedSet),
+      keptOrigin: importedSet.has(keptText) ? "imported" : "legacy",
+      droppedOrigin: importedSet.has(droppedText) ? "imported" : "legacy",
     });
     const droppedTag = tags[droppedText];
     if (droppedTag && !tags[keptText]) tags[keptText] = droppedTag;
@@ -177,16 +184,17 @@ export function dedupeExperienceEntry(entry: ExperienceEntry, except: Set<string
   }
 
   const survivors = bullets.filter((_, idx) => !dropped.has(idx));
-  return { bullets: survivors, bulletTags: Object.keys(tags).length > 0 ? tags : undefined, pairs };
+  const importedBullets = entry.importedBullets?.filter(t => survivors.includes(t));
+  return { bullets: survivors, bulletTags: Object.keys(tags).length > 0 ? tags : undefined, importedBullets, pairs };
 }
 
 export function dedupeProfile(profile: Profile, except: Set<string> = new Set()): { profile: Profile; pairs: DuplicatePair[] } {
   const allPairs: DuplicatePair[] = [];
   const experience = profile.experience.map(e => {
-    const { bullets, bulletTags, pairs } = dedupeExperienceEntry(e, except);
+    const { bullets, bulletTags, importedBullets, pairs } = dedupeExperienceEntry(e, except);
     allPairs.push(...pairs);
     if (pairs.length === 0) return e;
-    return { ...e, bullets: bullets.join("\n"), bulletTags };
+    return { ...e, bullets: bullets.join("\n"), bulletTags, importedBullets };
   });
   return { profile: { ...profile, experience }, pairs: allPairs };
 }
@@ -194,10 +202,9 @@ export function dedupeProfile(profile: Profile, except: Set<string> = new Set())
 export function formatPairs(pairs: DuplicatePair[]): string {
   const out = [`Found ${pairs.length} duplicate bullet pair${pairs.length === 1 ? "" : "s"} (one per bullet that would be dropped):`];
   pairs.forEach((p, n) => {
-    const tag = (t: string) => (IMPORTED_TEXTS.has(t) ? "imported" : "legacy");
     out.push(`\n${n + 1}. [${p.company}] ${p.reason} ${p.overlap.toFixed(2)}, kept because: ${p.whyKept}`);
-    out.push(`   KEEP [${p.keptId}] (${tag(p.keptText)}): ${p.keptText}`);
-    out.push(`   DROP [${p.droppedId}] (${tag(p.droppedText)}): ${p.droppedText}`);
+    out.push(`   KEEP [${p.keptId}] (${p.keptOrigin}): ${p.keptText}`);
+    out.push(`   DROP [${p.droppedId}] (${p.droppedOrigin}): ${p.droppedText}`);
   });
   return out.join("\n");
 }

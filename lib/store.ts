@@ -85,6 +85,18 @@ export type Application = {
   // stored alongside it (not just shown transiently in the builder) so
   // scores can be correlated against real response rates later.
   resumeAudit?: ResumeAuditResult & { scoredAt: string; atsReadable: boolean };
+  // What the extraction gate measured on the last successful export of the
+  // resume above, and the settings it was measured under. Cleared whenever
+  // the resume content changes, so a stale count is never shown.
+  resumeExport?: ResumeExportMeasurement | null;
+};
+
+export type ResumeExportMeasurement = {
+  pageCount: number;
+  pageTwoFillPercent: number | null;
+  maxPages: number | null;
+  archetype: string | null;
+  exportedAt: string;
 };
 
 export type TargetBucket = {

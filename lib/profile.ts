@@ -27,6 +27,10 @@ export type ExperienceEntry = {
   // lib/profile-bullets.ts hashes into a stable id) — a bullet not present
   // here has no explicit tag and falls back to the renderer's heuristic.
   bulletTags?: Record<string, BulletCategory>;
+  // Exact texts of bullets that came from the master-profile import. Stored,
+  // not inferred from text matching, so the marker survives merges between
+  // entries and later edits to the spec's wording.
+  importedBullets?: string[];
 };
 
 export type EducationEntry = {

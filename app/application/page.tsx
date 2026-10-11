@@ -15,7 +15,7 @@ import { ContactsPanel } from "../contacts-panel";
 import { FormQASection } from "../form-qa-section";
 import { ProfileEnrichmentBanner, ProfileSuggestion } from "../profile-enrichment-banner";
 import { ResumeContent, resumeContentToMarkdown } from "../../lib/resume-schema";
-import { ResumeArchetype, RESUME_ARCHETYPE_LABELS, withArchetypeSequence } from "../../lib/resume-archetype";
+import { ResumeArchetype, RESUME_ARCHETYPE_LABELS, withArchetypeSequence, resolveConfiguredMaxPages, resolveTargetArchetypeKey } from "../../lib/resume-archetype";
 import { ResumeExportView } from "../resume-document";
 import { extractProfileData } from "../../lib/profile-enrichment";
 import { diffExtractionAgainstProfile, MergeDiffItem } from "../../lib/profile-merge";
@@ -166,9 +166,10 @@ function ApplicationDetail() {
     setResumeContent(data);
     setResumeArchetypeUsed(archetype);
     setSavedResume(md);
-    const ok = await updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md, ...auditChange });
+    // New content invalidates the last export's measured page count.
+    const ok = await updateApplication(app.id, { resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md, resumeExport: null, ...auditChange });
     if (ok) {
-      setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md, ...auditChange } : prev);
+      setApp(prev => prev ? { ...prev, resumeContent: data, resumeArchetype: archetype, resumeMarkdown: md, resumeExport: null, ...auditChange } : prev);
     } else {
       showToast("Resume updated here, but saving it to the application failed. Reloading may lose this change.", "error");
     }
@@ -1058,10 +1059,11 @@ window.addEventListener('load', function() {
                 {resumeContent.summary && <p style={{ margin: "0 0 8px", fontStyle: "italic" }}>{resumeContent.summary}</p>}
                 <p style={{ margin: 0, color: "var(--text-tertiary)" }}>
                   {resumeContent.experience.length} experience entr{resumeContent.experience.length === 1 ? "y" : "ies"} ·{" "}
-                  {resumeContent.experience.reduce((n, e) => n + e.bullets.length, 0)} bullets ·{" "}
+                  {(() => { const n = resumeContent.experience.reduce((acc, e) => acc + e.bullets.length, 0); return `${n} bullet${n === 1 ? "" : "s"}`; })()} ·{" "}
                   {resumeContent.skills.length} skill categor{resumeContent.skills.length === 1 ? "y" : "ies"}
                   {resumeContent.certifications?.length ? ` · ${resumeContent.certifications.length} certification${resumeContent.certifications.length === 1 ? "" : "s"}` : ""}
                 </p>
+                <ResolvedResumeSettings app={app} archetype={resumeArchetypeUsed} />
                 {(resumeContent.subFocus || (resumeContent.targetPriorities && resumeContent.targetPriorities.length > 0)) && (
                   <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--bg-primary)", borderRadius: 4, border: "1px dashed var(--border)" }}>
                     <div style={{ fontSize: "0.625rem", color: "var(--accent)", marginBottom: 4 }}>WHAT THE ENGINE TARGETED THIS RESUME AT</div>
@@ -1478,7 +1480,17 @@ window.addEventListener('load', function() {
       </div>
     </main>
     {showResumeExport && resumeContent && (
-      <ResumeExportView content={resumeContent} archetype={resumeArchetypeUsed} app={app} onClose={() => setShowResumeExport(false)} />
+      <ResumeExportView
+        content={resumeContent}
+        archetype={resumeArchetypeUsed}
+        app={app}
+        onClose={() => setShowResumeExport(false)}
+        onExported={m => {
+          const resumeExport = { ...m, archetype: resumeArchetypeUsed ?? null, exportedAt: new Date().toISOString() };
+          setApp(prev => prev ? { ...prev, resumeExport } : prev);
+          updateApplication(app.id, { resumeExport });
+        }}
+      />
     )}
     {showResumeBuilder && app && (
       <ResumeBuilder
@@ -1504,5 +1516,33 @@ export default function ApplicationPage() {
       </Suspense>
       <Footer />
     </div>
+  );
+}
+
+// The settings that actually drove this resume, shown next to the counter so
+// a misclassification (wrong archetype, wrong page ceiling) is never silent.
+function ResolvedResumeSettings({ app, archetype }: { app: Application; archetype: ResumeArchetype | null }) {
+  if (!archetype) return null;
+  const profile = getProfile();
+  const targetKey = resolveTargetArchetypeKey(app, archetype);
+  const maxPages = profile ? resolveConfiguredMaxPages(profile, app, archetype) : null;
+  const exp = app.resumeExport;
+  const stale = exp && (exp.archetype !== archetype || (exp.maxPages !== null && maxPages !== null && exp.maxPages !== maxPages));
+  const item = (k: string, v: string, color?: string) => (
+    <span style={{ whiteSpace: "nowrap" }}><span style={{ color: "var(--text-tertiary)" }}>{k} </span><span style={{ color: color ?? "var(--text-primary)" }}>{v}</span></span>
+  );
+  return (
+    <p data-testid="resolved-resume-settings" style={{ margin: "6px 0 0", display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: "0.6875rem", letterSpacing: "0.04em" }}>
+      {item("archetype", archetype)}
+      {item("target", targetKey ?? "none")}
+      {item("maxPages", maxPages === null ? "?" : String(maxPages))}
+      {exp
+        ? item(
+            stale ? "measured (older settings)" : "measured",
+            `${exp.pageCount} page${exp.pageCount === 1 ? "" : "s"}${exp.pageCount === 2 && exp.pageTwoFillPercent !== null ? `, p2 ~${exp.pageTwoFillPercent}% full` : ""}`,
+            stale ? "var(--text-tertiary)" : maxPages !== null && exp.pageCount > maxPages ? "var(--error)" : exp.pageCount < (maxPages ?? 1) ? "var(--champagne)" : "var(--success)",
+          )
+        : item("measured", "not exported yet", "var(--text-tertiary)")}
+    </p>
   );
 }
