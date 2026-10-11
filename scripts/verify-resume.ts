@@ -11,6 +11,7 @@
 import { profileRepo, applicationRepo } from "../lib/server/repositories";
 import { generateResumeContent } from "../lib/server/services/resume-generation-service";
 import { runResumeExport } from "../lib/server/resume-export-pipeline";
+import { balanceViolations, bandItemsFor } from "../lib/resume-balance";
 import type { ResumeArchetype } from "../lib/resume-archetype";
 import { runConfidentialityGate } from "../lib/resume-confidentiality";
 import { auditProfile } from "./audit-profile-bullets";
@@ -28,7 +29,20 @@ export function renderedText(c: ResumeContent): string {
 }
 
 function perEmployer(c: ResumeContent): string {
-  return c.experience.map(e => `${e.company}=${e.bullets.length}`).join(", ");
+  return c.experience.map(e => {
+    const kp = bandItemsFor(e.company, c.keyWinCompanies);
+    return `${e.company}=${e.bullets.length}${kp ? ` (+${kp} in Key Projects)` : ""}`;
+  }).join(", ");
+}
+
+/** Balance check: the current role is "run out" when every one of its profile bullets is already shown. */
+function balanceReport(c: ResumeContent, profile: { experience: { company: string; bullets: string }[] }): string {
+  const current = c.experience[0];
+  const available = profile.experience.find(e => current && e.company === current.company)?.bullets.split("\n").filter(b => b.trim()).length ?? 0;
+  const used = current ? current.bullets.length + bandItemsFor(current.company, c.keyWinCompanies) : 0;
+  const exhausted = used >= available;
+  const v = balanceViolations(c.experience, c.keyWinCompanies, exhausted);
+  return `${v.length ? "VIOLATIONS: " + v.join("; ") : "ok"} (current role ${current?.company ?? "-"}: ${used} of ${available} bullets shown${exhausted ? ", run out" : ""})`;
 }
 
 async function main() {
@@ -59,6 +73,7 @@ async function main() {
   console.log(`key projects items: ${data.keyWins?.length ?? 0}`);
   console.log(`experience bullets: ${data.experience.reduce((n, e) => n + e.bullets.length, 0)}`);
   console.log(`bullets per employer: ${perEmployer(data)}`);
+  console.log(`role balance: ${balanceReport(data, profile)}`);
   console.log(`line budget used: ${fill.finalEstimatedLines} of ${fill.targetLines} target lines (estimate, ${maxPages}-page format)`);
   console.log(`reserve for export fill: ${data.reserve?.length ?? 0}`);
   console.log(`summary proof point moved off the lead Key Projects item: ${fill.summaryProofPointSwapped}`);
@@ -81,6 +96,7 @@ async function main() {
   console.log(`page-two fill: ${exported.pageTwoFillPercent ?? "n/a"}%`);
   console.log(`bullets added at export: ${exported.fill.addedIds.length}, dropped: ${exported.fill.droppedIds.length}`);
   console.log(`final bullets per employer: ${perEmployer(exported.resumeContent)}`);
+  console.log(`final role balance: ${balanceReport(exported.resumeContent, profile)}`);
   console.log(`sub-labels rendered: ${exported.subLabelsRendered ? "yes" : "no"}`);
   console.log(`confidentiality gate on DOCX and PDF text: passed (export would have been rejected otherwise)`);
 }

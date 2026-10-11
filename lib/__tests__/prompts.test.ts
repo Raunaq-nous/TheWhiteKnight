@@ -239,7 +239,7 @@ describe("prompt builder snapshots", () => {
     expect(twoPage).toContain("TWO-PAGE CONTENT BUDGET");
     // The model never sizes the resume: code fills to the page target.
     expect(twoPage).toContain("a short or partial ranking does not shrink the resume");
-    expect(twoPage).toContain("16-20 in total");
+    expect(twoPage).toContain("26-32 in total, the current role carrying the most and no role more than about a third");
   });
 
   it("resumePrompt ranks each engagement as ONE fact rather than selecting duplicates", () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { measureAndFill, addFromReserve, dropLowestRanked, MAX_FILL_ITERATIONS, type MeasureFn } from "../resume-measure-fill";
 import { separateSummaryProofPoint } from "../resume-fill";
+import { canAddToRole, roleShareCap, balanceViolations } from "../resume-balance";
 import { usesSubLabels, groupBulletsBySubLabel, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL } from "../resume-sublabels";
 import { buildDocxPlan } from "../resume-docx";
 import { runPdfExtractionGate } from "../resume-pdf-extract-gate";
@@ -191,5 +192,50 @@ describe("resolveResumeSelections uses the page ceiling's character cap", () => 
     expect(resolveResumeSelections(raw, profile, 2).experience[0].bullets[0].text).toBe(text);
     const one = resolveResumeSelections(raw, profile, 1).experience[0]?.bullets[0]?.text ?? "";
     expect(one.length).toBeLessThanOrEqual(240);
+  });
+});
+
+describe("role balance (current role leads, no role over about a third)", () => {
+  const counts = (o: Record<string, number>) => new Map(Object.entries(o));
+
+  it("an earlier role may not overtake the current role (counting its Key Projects) until it runs out", () => {
+    const state = { counts: counts({ Bain: 5, Aranca: 7 }), currentRole: "Bain", currentBandItems: 2, currentExhausted: false, sectionSize: 30 };
+    expect(canAddToRole("Aranca", state)).toBe(false); // 8 > 5 + 2
+    expect(canAddToRole("Bain", state)).toBe(true);
+    expect(canAddToRole("Aranca", { ...state, currentExhausted: true })).toBe(true);
+  });
+
+  it("no role exceeds about a third of the Experience section, even the current one", () => {
+    expect(roleShareCap(30)).toBe(10);
+    const state = { counts: counts({ Bain: 10, Aranca: 3 }), currentRole: "Bain", currentBandItems: 0, currentExhausted: false, sectionSize: 30 };
+    expect(canAddToRole("Bain", state)).toBe(false);
+  });
+
+  it("export additions grow the current role so others can follow, never stacking one employer", () => {
+    const c = content(4, 0); // Alpha is the current role (first entry)
+    const reserve: ReserveBullet[] = [
+      ...Array.from({ length: 8 }, (_, i): ReserveBullet => ({ sourceBulletId: `e_b${i}`, company: "Beta", text: LONG(200 + i), score: 0.9 - i / 100 })),
+      ...Array.from({ length: 3 }, (_, i): ReserveBullet => ({ sourceBulletId: `e_a${i}`, company: "Alpha", text: LONG(300 + i), score: 0.2 - i / 100 })),
+    ];
+    const r = addFromReserve({ ...c, reserve, keyWinCompanies: ["Alpha"] }, 1000);
+    const n = Object.fromEntries(r.content.experience.map(e => [e.company, e.bullets.length]));
+    // Alpha got its low-ranked bullets because Beta was otherwise blocked.
+    expect(n.Alpha).toBe(7);
+    const total = Object.values(n).reduce((a, b) => a + b, 0);
+    expect(n.Beta).toBeLessThanOrEqual(roleShareCap(Math.max(total, 26)));
+    expect(balanceViolations(r.content.experience, ["Alpha"], true)).toEqual([]);
+  });
+
+  it("measure-and-fill stops at the balance limit without blocking export or dropping to one page", async () => {
+    const c = content(2, 0);
+    // Alpha (current) already holds a third of a 26-bullet section; the only
+    // reserve left is Alpha's, so no balanced addition exists.
+    c.experience[0].bullets = Array.from({ length: 9 }, (_, i) => ({ sourceBulletId: `e_al${i}`, text: LONG(600 + i), priority: i + 1 }));
+    const withReserve = { ...c, reserve: [{ sourceBulletId: "e_al9", company: "Alpha", text: LONG(700), score: 1 }] } as ResumeContent;
+    const stuck: MeasureFn = async () => ({ pageCount: 2, pageTwoFillPercent: 20 });
+    const r = await measureAndFill(withReserve, "consulting", 2, stuck);
+    expect(r.steps.map(s => s.action)).toEqual(["balance-limit"]);
+    expect(r.maxPages).toBe(2);
+    expect(r.underfilledWithReserve).toBe(true);
   });
 });

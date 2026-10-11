@@ -94,7 +94,7 @@ export async function generateResumeContent(
   const isTextAllowed = (text: string) =>
     runConfidentialityGate(applyConfidentialitySubstitutions(text, undefined, archetype), undefined, archetype).ok;
   const fill = buildFilledSelection(effectiveProfile, withArchetypeSequence(data, archetype), archetype, maxPages, { isTextAllowed });
-  const filled: ResumeContent = { ...data, experience: fill.experience, keyWinIds: fill.keyWinIds, keyWins: fill.keyWins, reserve: fill.reserve };
+  const filled: ResumeContent = { ...data, experience: fill.experience, keyWinIds: fill.keyWinIds, keyWins: fill.keyWins, keyWinCompanies: fill.keyWinCompanies, reserve: fill.reserve };
 
   // Every experience/project/key-win text is re-resolved from the profile by
   // id (selection, not writing), at the page ceiling's character cap.
