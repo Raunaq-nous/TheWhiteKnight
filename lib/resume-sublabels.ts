@@ -1,45 +1,46 @@
 // Experience sub-labels (spec Part 8/9): CONSULTING ENGAGEMENTS, then AI
 // BUILDS AND PROCESS REINVENTION. Client-safe (no docx dependency), so the
-// on-screen preview and the DOCX builder group bullets with ONE rule.
+// on-screen preview, the DOCX builder and the layout estimate share ONE rule.
+//
+// Categories are STORED, never guessed: a bullet's category comes from its
+// profile entry's bulletTags, assigned once when the bullet is written
+// (lib/bullet-category.ts). An untagged bullet is a consulting engagement;
+// there is no keyword fallback, because keywords misfile real work (a
+// go-to-market engagement that mentions "AI-based" platforms is still an
+// engagement).
 
-import type { ResumeBullet, ResumeContent } from "./resume-schema";
-import type { ResumeArchetype } from "./resume-archetype";
+import type { ResumeBullet } from "./resume-schema";
 
 export const CONSULTING_ENGAGEMENTS_LABEL = "CONSULTING ENGAGEMENTS";
 export const AI_BUILDS_LABEL = "AI BUILDS AND PROCESS REINVENTION";
 export type SubLabel = typeof CONSULTING_ENGAGEMENTS_LABEL | typeof AI_BUILDS_LABEL;
 
-// Deterministic, content-derived fallback for bullets with no explicit tag:
-// a bullet naming a build/platform/tool reads as an AI build; anything else
-// reads as a client engagement. Never changes which bullets were selected.
-const AI_BUILD_PATTERN = /\b(ai|artificial intelligence|platform|toolkit|cockpit|studio|agent|agentic|algorithm|automat\w*|software|engine|dashboard|application|generative|machine learning|\bml\b|pipeline|knowledge graph)\b/i;
-
-export function classifyExperienceBulletLabel(text: string): SubLabel {
-  return AI_BUILD_PATTERN.test(text) ? AI_BUILDS_LABEL : CONSULTING_ENGAGEMENTS_LABEL;
+/** The stored category decides; untagged means consulting engagement. */
+export function resolveExperienceBulletLabel(bullet: Pick<ResumeBullet, "category"> & Partial<ResumeBullet>): SubLabel {
+  return bullet.category === "ai_build" ? AI_BUILDS_LABEL : CONSULTING_ENGAGEMENTS_LABEL;
 }
 
-/** An explicit category tag (from the profile's bulletTags) always wins over the keyword heuristic. */
-export function resolveExperienceBulletLabel(bullet: Pick<ResumeBullet, "text" | "category"> & Partial<ResumeBullet>): SubLabel {
-  if (bullet.category === "ai_build") return AI_BUILDS_LABEL;
-  if (bullet.category === "consulting_engagement") return CONSULTING_ENGAGEMENTS_LABEL;
-  return classifyExperienceBulletLabel(bullet.text);
-}
+// A founder/owner role is not a consulting engagement list, whatever its
+// bullets are tagged: it always renders flat.
+const FOUNDER_ROLE_PATTERN = /\b(co-?founder|founder|owner)\b/i;
+
+type Groupable = Pick<ResumeBullet, "text" | "category" | "priority">;
 
 /**
- * Sub-labels render for the consulting archetype, and for any resume whose
- * bullets carry explicit category tags (the tags are a real fact about the
- * bullet, so they shouldn't disappear just because detection picked a
- * different archetype).
+ * A role's bullets grouped under sub-labels, or null when the role renders a
+ * flat list. Sub-labels appear only on a role with bullets in BOTH
+ * categories (and never on a founder role); a single-category role is flat.
+ * Consulting first, then AI builds; priority order within each group.
  */
-export function usesSubLabels(content: Pick<ResumeContent, "experience">, archetype?: ResumeArchetype | null): boolean {
-  if (archetype === "consulting") return true;
-  return content.experience.some(e => e.bullets.some(b => b.category === "consulting_engagement" || b.category === "ai_build"));
+export function roleSubLabelGroups<B extends Groupable>(entry: { role?: string | null; bullets: B[] }): { label: SubLabel; bullets: B[] }[] | null {
+  if (FOUNDER_ROLE_PATTERN.test(entry.role ?? "")) return null;
+  const sorted = [...entry.bullets].sort((a, b) => a.priority - b.priority);
+  const groups = ([CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL] as SubLabel[])
+    .map(label => ({ label, bullets: sorted.filter(b => resolveExperienceBulletLabel(b) === label) }));
+  return groups.every(g => g.bullets.length > 0) ? groups : null;
 }
 
-/** A role's bullets in render order, grouped under sub-labels; a band with no bullets is omitted. */
-export function groupBulletsBySubLabel<B extends Pick<ResumeBullet, "text" | "category" | "priority">>(bullets: B[]): { label: SubLabel; bullets: B[] }[] {
-  const sorted = [...bullets].sort((a, b) => a.priority - b.priority);
-  return ([CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL] as SubLabel[])
-    .map(label => ({ label, bullets: sorted.filter(b => resolveExperienceBulletLabel(b) === label) }))
-    .filter(g => g.bullets.length > 0);
+/** True when at least one role in the content renders sub-labels. */
+export function anyRoleUsesSubLabels(experience: { role?: string | null; bullets: Groupable[] }[]): boolean {
+  return experience.some(e => roleSubLabelGroups(e) !== null);
 }

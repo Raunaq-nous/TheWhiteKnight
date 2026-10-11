@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildDocxPlan, generateResumeDocxBuffer, selectDocxFormat,
   TWO_PAGE_SENIOR_CONSULTING_FORMAT, ONE_PAGE_DENSE_FORMAT,
-  classifyExperienceBulletLabel, resolveExperienceBulletLabel, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL,
+  resolveExperienceBulletLabel, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL,
 } from "../resume-docx";
 import type { ResumeContent } from "../resume-schema";
 
@@ -170,8 +170,8 @@ describe("docs/MASTER-PROFILE-SPEC.md Part 9 — exact two-format typography spe
   });
 });
 
-describe("experience sub-labels (consulting archetype only) — spec Part 8/9", () => {
-  function consultingContent(bullets: { text: string; priority: number }[]): ResumeContent {
+describe("experience sub-labels: stored categories, only on roles with both: spec Part 8/9", () => {
+  function consultingContent(bullets: { text: string; priority: number; category?: "consulting_engagement" | "ai_build" }[]): ResumeContent {
     return baseContent({
       experience: [{
         company: "Bain & Company", role: "Project Leader", tenure: "2025 - Present", location: "",
@@ -180,56 +180,52 @@ describe("experience sub-labels (consulting archetype only) — spec Part 8/9", 
     });
   }
 
-  it("classifies a build/platform/tool bullet as an AI build", () => {
-    expect(classifyExperienceBulletLabel("Built an AI-first platform for document intelligence.")).toBe(AI_BUILDS_LABEL);
-    expect(classifyExperienceBulletLabel("Deployed a risk-analysis toolkit on Azure cloud.")).toBe(AI_BUILDS_LABEL);
-  });
+  const labels = (content: ResumeContent) => buildDocxPlan(content, "consulting").filter(n => n.kind === "subLabel").map(n => (n as { text: string }).text);
+  const GTM = "Led a go-to-market strategy for IT infrastructure and software solutions across India, covering AI-based product platform strategy and partner architecture.";
 
-  it("classifies an engagement/study/case bullet as a consulting engagement", () => {
-    expect(classifyExperienceBulletLabel("Led a concept selection study for a national oil and gas company.")).toBe(CONSULTING_ENGAGEMENTS_LABEL);
-    expect(classifyExperienceBulletLabel("Drove performance improvement on a utility-scale solar asset.")).toBe(CONSULTING_ENGAGEMENTS_LABEL);
-  });
-
-  it("resolveExperienceBulletLabel: an explicit category always wins over the text heuristic", () => {
-    // Text alone would heuristically read as a consulting engagement (no
-    // AI_BUILD_PATTERN keyword at all) — the explicit tag overrides that.
+  it("the stored category decides; an untagged bullet is a consulting engagement, never a keyword guess", () => {
     expect(resolveExperienceBulletLabel({ sourceBulletId: "x", text: "Led a client workshop series.", priority: 1, category: "ai_build" })).toBe(AI_BUILDS_LABEL);
-    // And the reverse: text alone would heuristically read as an AI build
-    // ("platform"), but an explicit consulting_engagement tag overrides it.
     expect(resolveExperienceBulletLabel({ sourceBulletId: "y", text: "Advised on a platform migration roadmap.", priority: 1, category: "consulting_engagement" })).toBe(CONSULTING_ENGAGEMENTS_LABEL);
+    // e_1i7pney's shape: an engagement that mentions "AI-based" stays an engagement.
+    expect(resolveExperienceBulletLabel({ sourceBulletId: "z", text: GTM, priority: 1 })).toBe(CONSULTING_ENGAGEMENTS_LABEL);
+    expect(resolveExperienceBulletLabel({ sourceBulletId: "w", text: "Built an AI-first platform for document intelligence.", priority: 1, category: null })).toBe(CONSULTING_ENGAGEMENTS_LABEL);
   });
 
-  it("resolveExperienceBulletLabel falls back to the text heuristic when no explicit category is set", () => {
-    expect(resolveExperienceBulletLabel({ sourceBulletId: "z", text: "Built an AI-first platform for document intelligence.", priority: 1 })).toBe(AI_BUILDS_LABEL);
-    expect(resolveExperienceBulletLabel({ sourceBulletId: "w", text: "Led a concept selection study for a national oil and gas company.", priority: 1, category: null })).toBe(CONSULTING_ENGAGEMENTS_LABEL);
-  });
-
-  it("groups a consulting archetype's bullets under both sub-labels, consulting engagements first", () => {
+  it("labels a role with bullets in BOTH categories, consulting engagements first", () => {
     const content = consultingContent([
-      { text: "Built an AI-first platform for document intelligence.", priority: 1 },
-      { text: "Led a concept selection study for a national oil and gas company.", priority: 2 },
+      { text: "Built an AI-first platform for document intelligence.", priority: 1, category: "ai_build" },
+      { text: GTM, priority: 2 },
     ]);
-    const plan = buildDocxPlan(content, "consulting");
-    const subLabels = plan.filter(n => n.kind === "subLabel").map(n => (n as any).text);
-    expect(subLabels).toEqual([CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL]);
+    expect(labels(content)).toEqual([CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL]);
+    const bullets = buildDocxPlan(content, "consulting").filter(n => n.kind === "bullet").map(n => (n as { text: string }).text);
+    expect(bullets[0]).toBe(GTM); // the untagged GTM engagement sits under CONSULTING ENGAGEMENTS
   });
 
-  it("omits a sub-label band entirely when a role has no bullets of that kind", () => {
-    const content = consultingContent([
+  it("renders a single-category role flat, with no sub-label at all", () => {
+    expect(labels(consultingContent([
       { text: "Led a concept selection study for a national oil and gas company.", priority: 1 },
-    ]);
-    const plan = buildDocxPlan(content, "consulting");
-    const subLabels = plan.filter(n => n.kind === "subLabel").map(n => (n as any).text);
-    expect(subLabels).toEqual([CONSULTING_ENGAGEMENTS_LABEL]);
+      { text: GTM, priority: 2 },
+    ]))).toEqual([]);
+    expect(labels(consultingContent([
+      { text: "Built an AI-first platform for document intelligence.", priority: 1, category: "ai_build" },
+    ]))).toEqual([]);
   });
 
-  it("does not sub-label bullets for a non-consulting archetype — flat bullet list, unchanged", () => {
+  it("never labels a founder role, even with both categories", () => {
     const content = consultingContent([
-      { text: "Built an AI-first platform for document intelligence.", priority: 1 },
-      { text: "Led a concept selection study for a national oil and gas company.", priority: 2 },
+      { text: "Built the publishing platform in-house.", priority: 1, category: "ai_build" },
+      { text: "Owned content strategy and creator acquisition end to end.", priority: 2 },
     ]);
-    const plan = buildDocxPlan(content, "product");
-    expect(plan.some(n => n.kind === "subLabel")).toBe(false);
+    content.experience[0] = { ...content.experience[0], company: "Madcue", role: "Co-founder" };
+    expect(labels(content)).toEqual([]);
+  });
+
+  it("applies per role, independent of archetype", () => {
+    const content = consultingContent([
+      { text: "Built an AI-first platform for document intelligence.", priority: 1, category: "ai_build" },
+      { text: GTM, priority: 2 },
+    ]);
+    expect(buildDocxPlan(content, "product").filter(n => n.kind === "subLabel")).toHaveLength(2);
   });
 });
 

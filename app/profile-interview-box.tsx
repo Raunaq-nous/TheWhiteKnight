@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getProfile, saveProfile } from "../lib/profile";
+import { getProfile, saveProfile, type BulletCategory } from "../lib/profile";
 import { generateProfileQuestions, rewriteBulletFromAnswer, replaceBulletInProfile } from "../lib/profile-enrichment";
 import { ProfileQuestion } from "../lib/schemas";
 import { showToast } from "../lib/toast";
@@ -11,6 +11,7 @@ type QuestionState = {
   answer: string;
   submitting: boolean;
   rewritten: string | null; // set once a rewrite preview is ready
+  category: BulletCategory | null; // its write-time category, stored on accept
   resolved: boolean;
 };
 
@@ -40,7 +41,7 @@ export function ProfileInterviewBox() {
           : "Your profile already looks well-quantified — no follow-up questions right now.");
         setItems([]);
       } else {
-        setItems(questions.map(q => ({ q, answer: "", submitting: false, rewritten: null, resolved: false })));
+        setItems(questions.map(q => ({ q, answer: "", submitting: false, rewritten: null, category: null, resolved: false })));
         setAskedTexts(prev => [...prev, ...questions.map(x => x.question)]);
       }
       setStarted(true);
@@ -62,8 +63,8 @@ export function ProfileInterviewBox() {
     if (!item || !item.answer.trim()) return;
     setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: true } : it)));
     try {
-      const rewrittenText = await rewriteBulletFromAnswer(profile, item.q.targetLabel, item.q.currentText, item.q.question, item.answer.trim());
-      setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false, rewritten: rewrittenText } : it)));
+      const { text: rewrittenText, category } = await rewriteBulletFromAnswer(profile, item.q.targetLabel, item.q.currentText, item.q.question, item.answer.trim());
+      setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false, rewritten: rewrittenText, category } : it)));
     } catch (e: any) {
       showToast(e.message || "Rewrite failed.", "error");
       setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false } : it)));
@@ -75,14 +76,14 @@ export function ProfileInterviewBox() {
     const item = items.find(it => it.q.id === id);
     if (!profile || !item || !item.rewritten) return;
     setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: true } : it)));
-    const next = replaceBulletInProfile(profile, item.q.targetType, item.q.targetId, item.q.currentText, item.rewritten);
+    const next = replaceBulletInProfile(profile, item.q.targetType, item.q.targetId, item.q.currentText, item.rewritten, item.category);
     const ok = await saveProfile(next);
     if (ok) showToast("Bullet updated.", "ok");
     setItems(prev => prev.map(it => (it.q.id === id ? { ...it, submitting: false, resolved: true } : it)));
   };
 
   const rejectRewrite = (id: string) => {
-    setItems(prev => prev.map(it => (it.q.id === id ? { ...it, rewritten: null, resolved: false } : it)));
+    setItems(prev => prev.map(it => (it.q.id === id ? { ...it, rewritten: null, category: null, resolved: false } : it)));
   };
 
   const skipQuestion = (id: string) => {

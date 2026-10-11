@@ -3,10 +3,14 @@
 // the existing profile and deciding add-vs-enrich-vs-nothing-to-do happens
 // here, not in the model — this is what's actually testable and reliable.
 
-import { Profile, ExperienceEntry, EducationEntry, ProjectEntry, Publication, Certification } from "./profile";
+import { Profile, ExperienceEntry, EducationEntry, ProjectEntry, Publication, Certification, type BulletCategory } from "./profile";
+import { storeBulletCategories } from "./bullet-category";
 import { sameEngagement } from "./resume-dedupe";
 
-export type CandidateExperience = { company: string; role: string; tenure: string; location?: string | null; bullets: string[] };
+// bulletCategories: the write-time sub-label category per bullet text,
+// classified server-side (lib/server/bullet-classifier.ts) and stored on
+// accept; a bullet missing from it is stored as a consulting engagement.
+export type CandidateExperience = { company: string; role: string; tenure: string; location?: string | null; bullets: string[]; bulletCategories?: Record<string, BulletCategory> | null };
 export type CandidateEducation = { institution: string; degree: string; field?: string | null; years: string; gpa?: string | null; achievements?: string[] | null };
 export type CandidateProject = { name: string; description: string; stack?: string | null; outcomes?: string | null; repoUrl?: string | null };
 export type CandidatePublication = { title: string; publication: string; year: string; url?: string | null };
@@ -154,7 +158,7 @@ function diffExperience(candidates: CandidateExperience[], existing: ExperienceE
       targetLabel: match.company,
       summary: `Add ${newBullets.length} bullet${newBullets.length === 1 ? "" : "s"} to ${match.role} at ${match.company}`,
       preview: newBullets.map(b => `+ ${b}`).join("\n"),
-      payload: { experienceId: match.id, newBullets },
+      payload: { experienceId: match.id, newBullets, categories: Object.fromEntries(newBullets.map(b => [b, cand.bulletCategories?.[b] ?? null])) },
     });
   }
   return items;
@@ -339,14 +343,21 @@ export function applyMergeDiffItem(profile: Profile, item: MergeDiffItem): Profi
           id: nanoid(), company: cand.company, role: cand.role, tenure: cand.tenure,
           location: cand.location ?? "", current: false, bullets: cand.bullets.join("\n"),
         };
-        return { ...profile, experience: [...profile.experience, entry] };
+        // Every new bullet's category is stored now, never guessed later.
+        const tagged = storeBulletCategories(entry, cand.bullets.map(b => [b, cand.bulletCategories?.[b]] as [string, BulletCategory | null | undefined]));
+        return { ...profile, experience: [...profile.experience, tagged] };
       }
-      const { experienceId, newBullets } = item.payload as { experienceId: string; newBullets: string[] };
+      const { experienceId, newBullets, categories } = item.payload as {
+        experienceId: string; newBullets: string[]; categories?: Record<string, BulletCategory | null> | null;
+      };
       return {
         ...profile,
         experience: profile.experience.map(e =>
           e.id === experienceId
-            ? { ...e, bullets: [...splitBullets(e.bullets), ...newBullets].join("\n") }
+            ? storeBulletCategories(
+                { ...e, bullets: [...splitBullets(e.bullets), ...newBullets].join("\n") },
+                newBullets.map(b => [b, categories?.[b]] as [string, BulletCategory | null | undefined]),
+              )
             : e
         ),
       };

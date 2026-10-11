@@ -167,14 +167,14 @@ export function ResumeBuilder({
     setSubmitting(req.requirement);
     try {
       const targetLabel = req.evidence?.sourceId ?? draft.experience[0]?.company ?? "";
-      const newBulletText = await answerResumeGapQuestion(profile, targetLabel || req.requirement, req.requirement, buildReactiveProbeQuestion(req, app.jdRaw), answer);
+      const { text: newBulletText, category } = await answerResumeGapQuestion(profile, targetLabel || req.requirement, req.requirement, buildReactiveProbeQuestion(req, app.jdRaw), answer);
       if (!newBulletText.trim()) {
         showToast("No usable detail found in that answer.", "error");
         return;
       }
 
       const targetId = req.evidence?.sourceId ?? draft.experience[0]?.company ?? "";
-      const { content: nextDraft, applied: appliedToDraft } = injectGapAnswerIntoResume(draft, "experience", targetId, newBulletText);
+      const { content: nextDraft, applied: appliedToDraft } = injectGapAnswerIntoResume(draft, "experience", targetId, newBulletText, category);
       if (appliedToDraft) {
         setDraft(nextDraft);
         // The new bullet lands at the end of its entry, already checked.
@@ -187,7 +187,7 @@ export function ResumeBuilder({
         }
       }
 
-      const { profile: nextProfile, applied: appliedToProfile, summary } = appendGapAnswerToProfile(profile, "experience", targetId, newBulletText);
+      const { profile: nextProfile, applied: appliedToProfile, summary } = appendGapAnswerToProfile(profile, "experience", targetId, newBulletText, category);
       if (appliedToProfile) {
         const ok = await saveProfile(nextProfile);
         if (!ok) showToast("Added to this resume, but saving to your profile failed.", "error");

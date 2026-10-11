@@ -5,6 +5,7 @@ import { normalizeTextForATS } from "../../../../lib/ats";
 import { BulletRewriteResultSchema } from "../../../../lib/schemas";
 import { bulletRewritePrompt } from "../../../../lib/prompts";
 import type { Profile } from "../../../../lib/profile";
+import { classifyBulletCategories } from "../../../../lib/server/bullet-classifier";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -40,7 +41,11 @@ export async function POST(req: NextRequest) {
       BulletRewriteResultSchema,
     );
 
-    return NextResponse.json({ rewrittenText: normalizeTextForATS(data.rewrittenText) });
+    const text = normalizeTextForATS(data.rewrittenText);
+    // The bullet's sub-label category is classified ONCE, here, and stored
+    // with it by the client (lib/bullet-category.ts).
+    const [category] = await classifyBulletCategories([{ company: targetLabel, text }], providerSettings);
+    return NextResponse.json({ rewrittenText: text, category });
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Rewrite failed" }, { status: 500 });
   }

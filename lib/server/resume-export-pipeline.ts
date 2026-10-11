@@ -20,8 +20,7 @@ import {
 } from "../resume-confidentiality";
 import { runToolPlacementGate, toolPlacementGateFailureMessage } from "../resume-tool-placement";
 import { measureAndFill, FillStep } from "../resume-measure-fill";
-import { usesSubLabels } from "../resume-sublabels";
-import { CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL } from "../resume-sublabels";
+import { CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL, anyRoleUsesSubLabels } from "../resume-sublabels";
 
 export type ExportFailure = { ok: false; status: number; body: Record<string, unknown> };
 export type ExportSuccess = {
@@ -115,6 +114,6 @@ export async function runResumeExport(input: {
     resumeContent: finalContent,
     warnings: finalFormat.warnings, outcomeWarnings: finalFormat.outcomeWarnings,
     fill: { steps: fill.steps, addedIds: fill.addedIds, droppedIds: fill.droppedIds, underfilledWithReserve: fill.underfilledWithReserve },
-    subLabelsRendered: usesSubLabels(finalContent, archetype) && (docxText.includes(CONSULTING_ENGAGEMENTS_LABEL) || docxText.includes(AI_BUILDS_LABEL)),
+    subLabelsRendered: anyRoleUsesSubLabels(finalContent.experience) && docxText.includes(CONSULTING_ENGAGEMENTS_LABEL) && docxText.includes(AI_BUILDS_LABEL),
   };
 }

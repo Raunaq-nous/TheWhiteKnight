@@ -130,10 +130,9 @@ const SECTION_LABELS: Partial<Record<ResumeSectionKey, string>> = {
 // Sub-label grouping lives in ./resume-sublabels (client-safe) so the on-screen
 // preview and this builder share one rule; re-exported for existing callers.
 import {
-  CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL, classifyExperienceBulletLabel, resolveExperienceBulletLabel,
-  usesSubLabels, groupBulletsBySubLabel,
+  CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL, resolveExperienceBulletLabel, roleSubLabelGroups,
 } from "./resume-sublabels";
-export { CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL, classifyExperienceBulletLabel, resolveExperienceBulletLabel };
+export { CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL, resolveExperienceBulletLabel };
 
 export type DocxPlanNode =
   | { kind: "header"; name: string; contactLine: string; links: { label: string; url: string }[] }
@@ -193,21 +192,18 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
     experience: () => {
       if (content.experience.length === 0) return;
       heading("experience");
-      // Sub-labeled grouping is specific to the "consulting" senior layout
-      // (spec Part 8's section-structure diagram) — every other archetype
-      // keeps the flat, priority-ordered bullet list unchanged.
-      const useSubLabels = usesSubLabels(content, archetype);
+      // Sub-labels only on a role with bullets in BOTH stored categories
+      // (lib/resume-sublabels.ts); every other role is a flat, priority-
+      // ordered list. Consulting always precedes AI builds.
       for (const e of content.experience) {
         plan.push({ kind: "entryHeader", left: e.company, right: e.tenure });
         plan.push({ kind: "entryRole", text: e.location ? `${e.role}, ${e.location}` : e.role });
-        const sorted = [...e.bullets].sort((a, b) => a.priority - b.priority);
-        if (!useSubLabels) {
-          for (const b of sorted) plan.push({ kind: "bullet", text: b.text });
+        const groups = roleSubLabelGroups(e);
+        if (!groups) {
+          for (const b of [...e.bullets].sort((a, b) => a.priority - b.priority)) plan.push({ kind: "bullet", text: b.text });
           continue;
         }
-        // CONSULTING ENGAGEMENTS always precedes AI BUILDS; a band with no
-        // bullets never gets an empty heading.
-        for (const group of groupBulletsBySubLabel(e.bullets)) {
+        for (const group of groups) {
           plan.push({ kind: "subLabel", text: group.label });
           for (const b of group.bullets) plan.push({ kind: "bullet", text: b.text });
         }
