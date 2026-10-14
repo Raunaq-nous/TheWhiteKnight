@@ -8,10 +8,11 @@ import {
 } from "../../../lib/resume-archetype";
 import { clampToOnePageBudget } from "../../../lib/resume-budget";
 import { resolveResumeSelections } from "../../../lib/resume-selection";
-import { enforceEmployerLocations, applyConfidentialitySubstitutionsToResumeContent } from "../../../lib/resume-confidentiality";
-import { separateSummaryProofPoint } from "../../../lib/resume-fill";
+import { enforceEmployerLocations } from "../../../lib/resume-confidentiality";
 import { suppressSideBuilds } from "../../../lib/resume-tool-placement";
-import { generateResumeContent } from "../../../lib/server/services/resume-generation-service";
+import { generateResumeContent, resumeSourceProfile } from "../../../lib/server/services/resume-generation-service";
+import { finalizeResumeContent } from "../../../lib/server/services/resume-finalize";
+import { isAiRelatedJd, isTechnicalJd, jdRelevanceTerms } from "../../../lib/resume-jd";
 import {
   GenerationAction,
   ContactProfile,
@@ -76,8 +77,9 @@ export async function POST(req: NextRequest) {
       // generation-service.ts) — shared with the automation autopilot's
       // draft-service.ts, so there is exactly one way a resume gets built
       // and resolveResumeSelections can never be forgotten on one path.
-      const { data, archetype, maxPages, formatGate, toolPlacementGate } = await generateResumeContent(profile, app, providerSettings, resumeArchetype);
-      return NextResponse.json({ data, archetype, maxPages, formatGate, toolPlacementGate });
+      const result = await generateResumeContent(profile, app, providerSettings, resumeArchetype);
+      const { data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport } = result;
+      return NextResponse.json({ data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
@@ -91,28 +93,37 @@ export async function POST(req: NextRequest) {
       } catch {
         return NextResponse.json({ error: "currentContent is not valid resume JSON" }, { status: 400 });
       }
+      // Same source as generation: never profile.projects.
+      const sourceProfile = resumeSourceProfile(profile, app, archetype);
       const data = await chatJSON<ResumeContent>(
-        [{ role: "user", content: resumeRefinePrompt(profile, app, archetype, parsedCurrent, instruction, maxPages) }],
+        [{ role: "user", content: resumeRefinePrompt(sourceProfile, app, archetype, parsedCurrent, instruction, maxPages) }],
         { temperature: 0.5, maxTokens: 4000, task: "resume_selection" },
         providerSettings,
         ResumeContentSchema,
       );
-      const resolved = resolveResumeSelections(data, profile, maxPages);
+      const resolved = resolveResumeSelections({ ...data, projects: [], keyWinIds: [] }, sourceProfile, maxPages);
       // The reserve export fills from survives a refine, minus anything the
-      // refined resume now uses.
-      const used = new Set([...resolved.experience.flatMap(e => e.bullets.map(b => b.sourceBulletId)), ...(resolved.keyWinIds ?? [])]);
-      const withReserve = { ...resolved, reserve: (parsedCurrent.reserve ?? []).filter(r => !used.has(r.sourceBulletId)) };
+      // refined resume now uses; scope lines carry over by company.
+      const used = new Set(resolved.experience.flatMap(e => e.bullets.map(b => b.sourceBulletId)));
+      const scopeByCompany = new Map(parsedCurrent.experience.map(e => [e.company, e.scope ?? null]));
+      const withReserve = {
+        ...resolved,
+        experience: resolved.experience.map(e => ({ ...e, scope: e.scope ?? scopeByCompany.get(e.company) ?? null })),
+        reserve: (parsedCurrent.reserve ?? []).filter(r => !used.has(r.sourceBulletId)),
+      };
       const normalized = normalizeResumeContent(withReserve);
       const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
-      const clean = applyConfidentialitySubstitutionsToResumeContent(withCanonicalLocations, undefined, archetype);
       const targetKey = resolveTargetArchetypeKey(app, archetype);
-      const withSideBuildsResolved = suppressSideBuilds(clean, targetKey);
+      const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
       const clamped = withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype);
-      return NextResponse.json({
-        data: separateSummaryProofPoint(clamped).content,
-        archetype,
-        maxPages,
+      const requirements: string[] = parsedCurrent.targetPriorities ?? app.jdParsed?.keyRequirements ?? [];
+      const { content: finalContent, confidentialityGate } = await finalizeResumeContent(clamped, {
+        profile: sourceProfile, app, archetype, requirements, jdTerms: jdRelevanceTerms(app, requirements),
+        aiJd: isAiRelatedJd(app, requirements), technicalJd: isTechnicalJd(app, archetype), providerSettings,
+        // A refine is user-directed: repair the summary deterministically, no extra model call.
+        allowSummaryRetry: false,
       });
+      return NextResponse.json({ data: finalContent, archetype, maxPages, confidentialityGate });
     }
 
     let prompt = "";

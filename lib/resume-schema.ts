@@ -80,6 +80,9 @@ export const ResumeExperienceEntrySchema = z.object({
   role: z.string(),
   tenure: z.string(),
   location: z.string().nullable().optional(),
+  // One scope line under the role title ("Primary client interface across
+  // 12+ mandates..."), never listed as an engagement. Set by the system.
+  scope: z.string().nullable().optional(),
   bullets: z.array(ResumeBulletSchema),
 });
 
@@ -152,6 +155,10 @@ export const ResumeContentSchema = z.object({
   bulletRanking: z.array(BulletRankingEntrySchema).nullable().optional().describe("EVERY available bullet id with a 0-100 relevance to this JD, most relevant first. The system builds the selection from this."),
   reserve: z.array(ReserveBulletSchema).nullable().optional().describe("Set by the system, never the model."),
   keyWinCompanies: z.array(z.string()).nullable().optional().describe("Set by the system, never the model: the employer behind each keyWins item, index-aligned, so role balance can count Key Projects items."),
+  requirementCoverage: z.array(z.object({
+    requirement: z.string(),
+    sourceBulletId: z.string().nullable().optional(),
+  })).nullable().optional().describe("For each of the JD's top requirements, the ONE bullet id that best evidences it (null when nothing does)."),
 });
 
 export type ResumeBullet = z.infer<typeof ResumeBulletSchema>;
@@ -180,6 +187,7 @@ export function normalizeResumeContent(content: ResumeContent): ResumeContent {
       role: clean(e.role),
       tenure: clean(e.tenure),
       location: e.location ? clean(e.location) : e.location,
+      scope: e.scope ? clean(e.scope) : e.scope,
       bullets: e.bullets.map(b => ({ ...b, text: clean(b.text) })),
     })),
     education: content.education.map(ed => ({

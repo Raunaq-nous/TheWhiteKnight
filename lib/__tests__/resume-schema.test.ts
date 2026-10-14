@@ -210,7 +210,7 @@ describe("resolveSectionSequence", () => {
   it("uses the CURRENT archetype spec (not the generic legacy order) when sectionSequence is missing but the archetype is known", () => {
     const r = { ...base(), sectionSequence: null as ResumeContent["sectionSequence"] };
     const seq = resolveSectionSequence(r, "consulting");
-    expect(seq).toEqual(["summary", "selectedImpact", "experience", "skills", "education"]);
+    expect(seq).toEqual(["summary", "experience", "skills", "education"]);
     // Consulting's real spec omits certifications/leadership entirely — the
     // generic legacy fallback used to include them regardless of archetype.
     expect(seq).not.toContain("certifications");
@@ -311,7 +311,7 @@ describe("resumeContentToMarkdown with the new sections", () => {
   // both "Key Projects & Impact" and "Relevant Projects", must NOT render
   // Certifications for consulting, and must render Education last, once the
   // archetype is passed through.
-  it("a legacy resume (no sectionSequence) with keyWins+projects+certifications renders correctly for consulting: one combined section, no certifications, education last", () => {
+  it("a legacy resume (no sectionSequence) with keyWins+projects+certifications renders company by company for consulting: no Key Projects, no projects, no certifications, education last", () => {
     const parsed = ResumeContentSchema.parse({
       ...(baseResumeContent() as any),
       sectionSequence: null,
@@ -323,10 +323,9 @@ describe("resumeContentToMarkdown with the new sections", () => {
 
     const md = resumeContentToMarkdown(parsed, "consulting");
 
-    expect(md).toContain("## Key Projects & Impact");
+    expect(md).not.toContain("## Key Projects & Impact");
     expect(md).not.toContain("## Relevant Projects");
     expect(md).not.toContain("## Certifications");
-    expect((md.match(/## Key Projects & Impact/g) ?? []).length).toBe(1);
 
     const headings = md.split("\n").filter(l => l.startsWith("## "));
     expect(headings[headings.length - 1]).toBe("## Education");

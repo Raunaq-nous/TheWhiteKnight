@@ -20,6 +20,8 @@ export type ResumeExportResult = {
   // bullets or dropped the lowest-ranked one, so the client persists this.
   resumeContent: ResumeContent;
   fill: { steps: unknown[]; addedIds: string[]; droppedIds: string[]; underfilledWithReserve: boolean };
+  // Page two under half full with no eligible content left: exported, not padded.
+  fillWarning?: string | null;
   // WARN-level format gate issues — export already succeeded; these are
   // shown, never blocking. outcomeWarnings is the subset routable into the
   // gap-fill/bullet-rewrite flow (app/resume-document.tsx).

@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { measureAndFill, addFromReserve, dropLowestRanked, MAX_FILL_ITERATIONS, type MeasureFn } from "../resume-measure-fill";
-import { separateSummaryProofPoint } from "../resume-fill";
-import { canAddToRole, roleShareCap, balanceViolations } from "../resume-balance";
+import { measureAndFill, addFromReserve, dropLowestRanked, MAX_FILL_ITERATIONS, UNDERFILL_WARNING, type MeasureFn } from "../resume-measure-fill";
+import { taperFor } from "../resume-budget";
 import { roleSubLabelGroups, anyRoleUsesSubLabels, CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL } from "../resume-sublabels";
 import { buildDocxPlan } from "../resume-docx";
 import { runPdfExtractionGate } from "../resume-pdf-extract-gate";
@@ -41,44 +40,45 @@ const fakeMeasure = (linesPerBullet = 4, fixed = 30): MeasureFn => async (c, pag
 };
 
 describe("measureAndFill (export, against a measured PDF)", () => {
-  it("adds reserve bullets until page two is at least 50% full", async () => {
+  it("adds eligible reserve bullets until page two is at least 50% full", async () => {
     const start = content(3, 12); // 9 bullets: 66 lines, page two ~6%
     const r = await measureAndFill(start, "consulting", 2, fakeMeasure());
     expect(r.steps[0].action).toBe("added");
     expect(r.steps.at(-1)!.action).toBe("ok");
     expect(r.measurement.pageCount).toBe(2);
     expect(r.measurement.pageTwoFillPercent!).toBeGreaterThanOrEqual(50);
-    expect(r.addedIds.length).toBeGreaterThan(0);
     expect(bullets(r.content)).toBe(9 + r.addedIds.length);
-    expect(r.underfilledWithReserve).toBe(false);
+    expect(r.warning).toBeNull();
   });
 
   it("drops the lowest-ranked bullet when the PDF reaches 3 pages", async () => {
-    const start = content(9, 0); // 27 bullets: 138 lines, 3 pages
+    const start = content(8, 0); // 24 bullets: 126 lines, 3 pages
     const r = await measureAndFill(start, "consulting", 2, fakeMeasure());
     expect(r.steps[0].action).toBe("dropped");
     expect(r.measurement.pageCount).toBe(2);
-    expect(r.droppedIds[0]).toBe("e_Gamma8"); // highest priority number = lowest ranked
+    expect(r.droppedIds[0]).toBe("e_Gamma7"); // highest priority number = lowest ranked
   });
 
-  it("falls back to one page only when the reserve is exhausted", async () => {
+  it("when eligible content runs out it stops and exports WITH A WARNING: no padding, no block, no one-page fallback", async () => {
     const start = content(3, 0);
     const r = await measureAndFill(start, "consulting", 2, fakeMeasure());
-    expect(r.steps.map(s => s.action)).toEqual(["reserve-exhausted", "fallback-one-page"]);
-    expect(r.maxPages).toBe(1);
+    expect(r.steps.map(s => s.action)).toEqual(["content-exhausted"]);
+    expect(r.maxPages).toBe(2);
+    expect(bullets(r.content)).toBe(9); // nothing padded in
+    expect(r.underfilledWithReserve).toBe(true);
+    expect(r.warning).toBe(UNDERFILL_WARNING);
   });
 
-  it("caps at 8 iterations and never blocks export while reserve bullets remain", async () => {
-    // A PDF that never fills: page two always 10%.
-    const stuck: MeasureFn = async () => ({ pageCount: 2, pageTwoFillPercent: 10 });
-    const r = await measureAndFill(content(3, 300), "consulting", 2, stuck);
+  it("caps at 8 iterations", async () => {
+    // A PDF that flips between overflowing and under-filled on every render.
+    let calls = 0;
+    const flaky: MeasureFn = async () => (++calls % 2 ? { pageCount: 3, pageTwoFillPercent: null } : { pageCount: 2, pageTwoFillPercent: 10 });
+    const r = await measureAndFill(content(6, 300), "consulting", 2, flaky);
     expect(r.steps).toHaveLength(MAX_FILL_ITERATIONS);
     expect(r.steps.at(-1)!.action).toBe("iterations-exhausted");
-    expect(r.underfilledWithReserve).toBe(true);
   });
 
   it("never re-adds a bullet it dropped for overflow", async () => {
-    // 2 bullets fit; anything more than 15 overflows, under 13 under-fills.
     const m: MeasureFn = async c => {
       const n = bullets(c);
       return n > 15 ? { pageCount: 3, pageTwoFillPercent: null } : { pageCount: 2, pageTwoFillPercent: n >= 13 ? 60 : 20 };
@@ -94,25 +94,34 @@ describe("measureAndFill (export, against a measured PDF)", () => {
     const withDup = { ...c, reserve: [{ sourceBulletId: "e_dup", company: "Alpha", text: dup.text, score: 1 }] };
     expect(addFromReserve(withDup, 5).ids).toEqual([]);
   });
+});
 
-  it("addFromReserve spreads additions across employers instead of draining the deepest reserve", () => {
-    const c = content(4, 0);
-    // 12 reserve bullets, best-ranked all for Alpha, then Beta and Gamma.
-    const reserve: ReserveBullet[] = Array.from({ length: 12 }, (_, i) => ({
-      sourceBulletId: `e_r${i}`, company: i < 8 ? "Alpha" : i < 10 ? "Beta" : "Gamma", text: LONG(100 + i), score: 1 - i / 100,
-    }));
-    const r = addFromReserve({ ...c, reserve }, 12); // ~12 lines: about 6 two-line bullets
-    const counts = Object.fromEntries(r.content.experience.map(e => [e.company, e.bullets.length]));
-    expect(r.ids.length).toBeGreaterThanOrEqual(6);
-    expect(counts.Beta).toBeGreaterThan(4);
-    expect(counts.Gamma).toBeGreaterThan(4);
-    expect(counts.Alpha - Math.min(counts.Beta, counts.Gamma)).toBeLessThanOrEqual(2);
+describe("taper by recency and seniority (export additions and drops)", () => {
+  it("caps: current role its full relevant set, next role next, then 3-4, then 2; founders 2", () => {
+    expect(taperFor(0).cap).toBeGreaterThan(taperFor(1).cap);
+    expect(taperFor(1).cap).toBeGreaterThan(taperFor(2).cap);
+    expect([taperFor(2), taperFor(3)].map(t => [t.floor, t.cap])).toEqual([[3, 4], [3, 4]]);
+    expect(taperFor(4).cap).toBe(2);
+    expect(taperFor(1, "Co-founder").cap).toBe(2);
   });
 
-  it("dropLowestRanked keeps every employer at 2+ bullets where possible", () => {
-    const c = content(2, 0);
-    c.experience[1].bullets.push({ sourceBulletId: "e_x", text: "Extra.", priority: 1 });
-    expect(dropLowestRanked(c).id).toBe("e_Beta1");
+  it("addFromReserve never takes an older role past its taper cap", () => {
+    const c = content(2, 0); // Gamma is index 2: cap 4
+    const reserve: ReserveBullet[] = Array.from({ length: 6 }, (_, i) => ({ sourceBulletId: `e_g${i}`, company: "Gamma", text: LONG(500 + i), score: 0.9 }));
+    // Alpha (current) has no reserve left: it has run out, so Gamma may pass it, up to its cap.
+    const r = addFromReserve({ ...c, reserve }, 1000);
+    expect(r.content.experience.find(e => e.company === "Gamma")!.bullets).toHaveLength(4);
+    // While Alpha still has relevant bullets, Gamma never outnumbers it.
+    const r2 = addFromReserve({ ...c, reserve: [...reserve, ...Array.from({ length: 4 }, (_, i) => ({ sourceBulletId: `e_a${i}`, company: "Alpha", text: LONG(600 + i), score: 0.2 }))] }, 1000);
+    const n = Object.fromEntries(r2.content.experience.map(e => [e.company, e.bullets.length]));
+    expect(n.Gamma).toBe(4); // capped at 4
+    expect(n.Alpha).toBeGreaterThanOrEqual(n.Gamma); // the current role leads
+  });
+
+  it("dropLowestRanked keeps every role at its taper floor where possible", () => {
+    const c = content(3, 0); // Gamma at its floor of 3
+    c.experience[0].bullets.push({ sourceBulletId: "e_x", text: "Extra.", priority: 99 });
+    expect(dropLowestRanked(c).id).toBe("e_x");
   });
 });
 
@@ -159,25 +168,6 @@ describe("sub-labels render from bullet category tags", () => {
   });
 });
 
-describe("summary never repeats the leading Key Projects figure", () => {
-  const base = (): ResumeContent => ({
-    ...content(2, 0),
-    summary: "Strategy manager who cut cycle time by 80% with an AI cockpit.",
-    keyWins: ["Built an AI cockpit that cut review cycle time by 80%.", "Led a $40M capital program across 6 sites."],
-    keyWinIds: ["e_k1", "e_k2"],
-  });
-  it("reorders the band so a non-colliding item leads", () => {
-    const r = separateSummaryProofPoint(base());
-    expect(r.changed).toBe(true);
-    expect(r.content.keyWins![0]).toMatch(/\$40M/);
-    expect(r.content.keyWinIds).toEqual(["e_k2", "e_k1"]);
-  });
-  it("leaves content alone when there is no collision", () => {
-    const c = { ...base(), summary: "Strategy manager with board-level delivery." };
-    expect(separateSummaryProofPoint(c).changed).toBe(false);
-  });
-});
-
 describe("resolveResumeSelections uses the page ceiling's character cap", () => {
   const text = "Led a concept selection study for a national oil and gas company, " + "structuring the options, the economics and the decision record for the board, ".repeat(3) + "saving 12% of capex.";
   const profile: Profile = { ...getSeedProfile(), experience: [{ id: "a", company: "Bain and Company", role: "PL", tenure: "2025", location: "", current: true, bullets: text }] };
@@ -188,50 +178,5 @@ describe("resolveResumeSelections uses the page ceiling's character cap", () => 
     expect(resolveResumeSelections(raw, profile, 2).experience[0].bullets[0].text).toBe(text);
     const one = resolveResumeSelections(raw, profile, 1).experience[0]?.bullets[0]?.text ?? "";
     expect(one.length).toBeLessThanOrEqual(240);
-  });
-});
-
-describe("role balance (current role leads, no role over about a third)", () => {
-  const counts = (o: Record<string, number>) => new Map(Object.entries(o));
-
-  it("an earlier role may not overtake the current role (counting its Key Projects) until it runs out", () => {
-    const state = { counts: counts({ Bain: 5, Aranca: 7 }), currentRole: "Bain", currentBandItems: 2, currentExhausted: false, sectionSize: 30 };
-    expect(canAddToRole("Aranca", state)).toBe(false); // 8 > 5 + 2
-    expect(canAddToRole("Bain", state)).toBe(true);
-    expect(canAddToRole("Aranca", { ...state, currentExhausted: true })).toBe(true);
-  });
-
-  it("no role exceeds about a third of the Experience section, even the current one", () => {
-    expect(roleShareCap(30)).toBe(10);
-    const state = { counts: counts({ Bain: 10, Aranca: 3 }), currentRole: "Bain", currentBandItems: 0, currentExhausted: false, sectionSize: 30 };
-    expect(canAddToRole("Bain", state)).toBe(false);
-  });
-
-  it("export additions grow the current role so others can follow, never stacking one employer", () => {
-    const c = content(4, 0); // Alpha is the current role (first entry)
-    const reserve: ReserveBullet[] = [
-      ...Array.from({ length: 8 }, (_, i): ReserveBullet => ({ sourceBulletId: `e_b${i}`, company: "Beta", text: LONG(200 + i), score: 0.9 - i / 100 })),
-      ...Array.from({ length: 3 }, (_, i): ReserveBullet => ({ sourceBulletId: `e_a${i}`, company: "Alpha", text: LONG(300 + i), score: 0.2 - i / 100 })),
-    ];
-    const r = addFromReserve({ ...c, reserve, keyWinCompanies: ["Alpha"] }, 1000);
-    const n = Object.fromEntries(r.content.experience.map(e => [e.company, e.bullets.length]));
-    // Alpha got its low-ranked bullets because Beta was otherwise blocked.
-    expect(n.Alpha).toBe(7);
-    const total = Object.values(n).reduce((a, b) => a + b, 0);
-    expect(n.Beta).toBeLessThanOrEqual(roleShareCap(Math.max(total, 26)));
-    expect(balanceViolations(r.content.experience, ["Alpha"], true)).toEqual([]);
-  });
-
-  it("measure-and-fill stops at the balance limit without blocking export or dropping to one page", async () => {
-    const c = content(2, 0);
-    // Alpha (current) already holds a third of a 26-bullet section; the only
-    // reserve left is Alpha's, so no balanced addition exists.
-    c.experience[0].bullets = Array.from({ length: 9 }, (_, i) => ({ sourceBulletId: `e_al${i}`, text: LONG(600 + i), priority: i + 1 }));
-    const withReserve = { ...c, reserve: [{ sourceBulletId: "e_al9", company: "Alpha", text: LONG(700), score: 1 }] } as ResumeContent;
-    const stuck: MeasureFn = async () => ({ pageCount: 2, pageTwoFillPercent: 20 });
-    const r = await measureAndFill(withReserve, "consulting", 2, stuck);
-    expect(r.steps.map(s => s.action)).toEqual(["balance-limit"]);
-    expect(r.maxPages).toBe(2);
-    expect(r.underfilledWithReserve).toBe(true);
   });
 });

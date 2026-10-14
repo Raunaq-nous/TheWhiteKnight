@@ -42,11 +42,13 @@ export function estimateDocxLines(content: ResumeContent, archetype: ResumeArche
       total += SECTION_HEADER;
       for (const e of content.experience) {
         total += 1.5 + 1; // company header row + role line
+        if (e.scope) total += lines(e.scope, m.bodyChars); // scope line
         total += (roleSubLabelGroups(e)?.length ?? 0) * 1.1;
         total += e.bullets.reduce((n, b) => n + lines(b.text, m.bulletChars) + 0.05, 0);
       }
     } else if (key === "education" && content.education.length) {
-      total += SECTION_HEADER + content.education.length * 2;
+      total += SECTION_HEADER + content.education.length * 2
+        + content.education.reduce((n, ed) => n + (ed.achievements ?? []).reduce((k, a) => k + lines(a, m.bulletChars), 0), 0);
     } else if (key === "skills" && content.skills.length) {
       total += SECTION_HEADER + content.skills.reduce((n, g) => n + lines(`${g.category}: ${g.items.join(", ")}`, m.bodyChars), 0);
     } else if (key === "leadership" && content.leadership?.length) {

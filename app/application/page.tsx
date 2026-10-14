@@ -184,8 +184,13 @@ function ApplicationDetail() {
     setResumeGenError("");
     try {
       const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
-      const { data, archetype } = await generateTailoredResume(profile, app, override);
+      const { data, archetype, jdWarning, confidentialityGate } = await generateTailoredResume(profile, app, override);
       await persistResumeContent(data, archetype);
+      // Thin JD: generation still ran, but say so rather than paper over it.
+      if (jdWarning) showToast(jdWarning, "error");
+      if (confidentialityGate && !confidentialityGate.ok) {
+        showToast(`Confidentiality gate: blocked term(s) ${confidentialityGate.blockedTerms.join(", ")}. Export will be rejected until they are removed from the profile.`, "error");
+      }
       setShowResumeExport(true);
     } catch (e: any) {
       setResumeGenError(e.message || "Resume generation failed.");

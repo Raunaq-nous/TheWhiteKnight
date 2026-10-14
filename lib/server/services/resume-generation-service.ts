@@ -23,46 +23,48 @@ import {
   detectResumeArchetype, withArchetypeSequence, resolveConfiguredMaxPages, resolveConfiguredYearsOfExperience,
   resolveTargetArchetypeKey, ResumeArchetype,
 } from "../../resume-archetype";
-import { budgetForMaxPages, clampToOnePageBudget } from "../../resume-budget";
+import { clampToOnePageBudget } from "../../resume-budget";
 import { resolveResumeSelections } from "../../resume-selection";
 import { runFormatGate, FormatGateResult } from "../../resume-format-gate";
 import {
-  applyConfidentialitySubstitutionsToResumeContent, enforceEmployerLocations, applyConfidentialitySubstitutions, runConfidentialityGate,
+  enforceEmployerLocations, applyConfidentialitySubstitutions, runConfidentialityGate, type ConfidentialityGateResult,
 } from "../../resume-confidentiality";
-import { buildFilledSelection, separateSummaryProofPoint, type FillStats } from "../../resume-fill";
+import { buildFilledSelection, buildCandidates, type FillStats } from "../../resume-fill";
 import { estimateDocxLines } from "../../resume-layout-estimate";
 import { suppressSideBuilds, runToolPlacementGate, ToolPlacementGateResult } from "../../resume-tool-placement";
-import { listProfileBullets } from "../../profile-bullets";
+import { isAiRelatedJd, isTechnicalJd, jdRelevanceTerms } from "../../resume-jd";
+import { extractTopRequirements } from "./jd-requirements";
+import { finalizeResumeContent, requirementCoverage, type SummaryReport, type RequirementCoverage } from "./resume-finalize";
 import type { Profile } from "../../profile";
 import type { Application } from "../../store";
 
 export type GenerateResumeContentResult = {
   data: ResumeContent;
   archetype: ResumeArchetype;
-  // The resolved page ceiling for this archetype/candidate — config-first
-  // (config/profile-rules.json's pagesByArchetype, keyed by the spec's
-  // target-archetype taxonomy; see resolveTargetArchetypeKey /
-  // resolveConfiguredMaxPages in lib/resume-archetype.ts), falling back to
-  // the generic archetype base + years-of-experience threshold when no
-  // configured mapping applies. Callers pass this straight through to the
-  // export flow so the extraction gate checks against the SAME ceiling the
-  // content was actually budgeted for.
+  // The resolved page ceiling (config pagesByArchetype, years rule).
+  // Callers pass it straight to export so the extraction gate checks the
+  // same ceiling the content was built for.
   maxPages: number;
-  // Computed here so EVERY resume-producing path gets this signal, not
-  // just the export flow (app/api/resume/export/route.ts) — that route
-  // still runs its own gate against the final, possibly checkbox-edited
-  // content and is what actually blocks a bad export; this copy is for
-  // visibility as early as generation itself. Never throws on a hard
-  // failure — callers decide what (if anything) to do with it.
+  // Visibility only: the export route re-runs these against the final
+  // content and is what actually blocks.
   formatGate: FormatGateResult;
-  // Same visibility pattern as formatGate — see lib/resume-tool-placement.ts.
-  // The export route is what actually blocks on this; here it's surfaced
-  // as early as generation.
   toolPlacementGate: ToolPlacementGateResult;
-  // What the model ranked and what the deterministic fill added, for
-  // verification and logging (scripts/verify-resume.ts).
-  fill: FillStats & { summaryProofPointSwapped: boolean; finalEstimatedLines: number };
+  // Every field that reaches the resume, the summary included.
+  confidentialityGate: ConfidentialityGateResult;
+  // Step 0: the JD's top requirements. jdWarning is set when fewer than 3
+  // could be extracted (the JD text is too thin to tailor to).
+  jdRequirements: string[];
+  jdWarning: string | null;
+  // The bullet on the resume covering each top requirement.
+  coverage: RequirementCoverage[];
+  summaryReport: SummaryReport;
+  fill: FillStats & { finalEstimatedLines: number; aiJd: boolean; technicalJd: boolean };
 };
+
+/** The profile resume generation reads: never profile.projects (every build is an experience bullet). */
+export function resumeSourceProfile(profile: Profile, app: Application, archetype: ResumeArchetype): Profile {
+  return { ...profile, projects: [], yearsOfExperience: resolveConfiguredYearsOfExperience(profile, app, archetype) };
+}
 
 export async function generateResumeContent(
   profile: Profile,
@@ -72,59 +74,65 @@ export async function generateResumeContent(
 ): Promise<GenerateResumeContentResult> {
   const archetype = detectResumeArchetype(profile, app, resumeArchetype);
   const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
-  // Years of experience flexes by TARGET, not a fixed profile field (spec
-  // Part 3) — an "effective" profile carries the configured value into the
-  // prompt without ever touching the real, stored profile.
-  const effectiveProfile: Profile = { ...profile, yearsOfExperience: resolveConfiguredYearsOfExperience(profile, app, archetype) };
+  // Years flex by TARGET (spec Part 3); projects are never read. The real,
+  // stored profile is untouched.
+  const effectiveProfile = resumeSourceProfile(profile, app, archetype);
+
+  // STEP 0 — the JD's top 5 requirements, before anything is ranked.
+  const jd = await extractTopRequirements(app, providerSettings);
+  const aiJd = isAiRelatedJd(app, jd.requirements);
+  const technicalJd = isTechnicalJd(app, archetype);
+  const jdTerms = jdRelevanceTerms(app, jd.requirements);
+
+  // A bullet that would still fail the confidentiality gate after
+  // substitution is never eligible.
+  const isTextAllowed = (text: string) =>
+    runConfidentialityGate(applyConfidentialitySubstitutions(text, undefined, archetype), undefined, archetype).ok;
+  const eligibleIds = new Set(buildCandidates(effectiveProfile, new Map(), maxPages, { isTextAllowed }).pool.map(c => c.id));
 
   const data = await chatJSON<ResumeContent>(
-    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages) }],
-    // "resume_selection": non-reasoning by default — the model only RANKS
-    // ids (one score per available bullet), a classification-shaped task.
-    // The token ceiling covers a full ranking of a large profile.
-    { temperature: 0.6, maxTokens: 6000, task: "resume_selection" },
+    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages, { topRequirements: jd.requirements, eligibleIds }) }],
+    // "resume_selection": the model RANKS eligible ids and writes the summary.
+    { temperature: 0.4, maxTokens: 6000, task: "resume_selection" },
     providerSettings,
     ResumeContentSchema,
   );
 
-  // RANK, DON'T SELECT: the model's ranking feeds a deterministic fill that
-  // builds Key Projects + Experience and fills to the page target. A bullet
-  // that would still fail the confidentiality gate after substitution is
-  // never picked.
-  const isTextAllowed = (text: string) =>
-    runConfidentialityGate(applyConfidentialitySubstitutions(text, undefined, archetype), undefined, archetype).ok;
-  const fill = buildFilledSelection(effectiveProfile, withArchetypeSequence(data, archetype), archetype, maxPages, { isTextAllowed });
-  const filled: ResumeContent = { ...data, experience: fill.experience, keyWinIds: fill.keyWinIds, keyWins: fill.keyWins, keyWinCompanies: fill.keyWinCompanies, reserve: fill.reserve };
+  // Selection from the ranking: quality filter, JD relevance first, taper.
+  const fill = buildFilledSelection(effectiveProfile, withArchetypeSequence(data, archetype), archetype, maxPages, { isTextAllowed, jdTerms, aiJd });
+  const filled: ResumeContent = {
+    ...data, experience: fill.experience, keyWinIds: [], keyWins: [], keyWinCompanies: [], projects: [], reserve: fill.reserve,
+  };
 
-  // Every experience/project/key-win text is re-resolved from the profile by
-  // id (selection, not writing), at the page ceiling's character cap.
+  // Every bullet's text is re-resolved from the profile by id.
   const resolved = resolveResumeSelections(filled, effectiveProfile, maxPages);
   const normalized = normalizeResumeContent(resolved);
-  // Canonical employer locations override whatever the profile says, here
-  // too — not just at export — so a resume looks right the moment it's
-  // first generated, not only after the export-time gate corrects it.
   const withCanonicalLocations = { ...normalized, experience: enforceEmployerLocations(normalized.experience) };
-  // CONFIDENTIALITY substitutions applied at generation, so stored content
-  // is already clean. The export gate remains the hard backstop.
-  const withConfidentialitySubstitutions = applyConfidentialitySubstitutionsToResumeContent(withCanonicalLocations, undefined, archetype);
   const targetKey = resolveTargetArchetypeKey(app, archetype);
-  const withSideBuildsResolved = suppressSideBuilds(withConfidentialitySubstitutions, targetKey);
+  const withSideBuildsResolved = suppressSideBuilds(withCanonicalLocations, targetKey);
   const clamped = withArchetypeSequence(clampToOnePageBudget(withSideBuildsResolved, archetype, maxPages), archetype);
-  // The summary never repeats the top Key Projects item's proof point.
-  const { content: finalContent, changed: summaryProofPointSwapped } = separateSummaryProofPoint(clamped);
+
+  // Skills, education, confidentiality over every field, summary rules.
+  const { content: finalContent, summaryReport, confidentialityGate } = await finalizeResumeContent(clamped, {
+    profile: effectiveProfile, app, archetype, requirements: jd.requirements, jdTerms, aiJd, technicalJd, providerSettings,
+  });
   const formatGate = runFormatGate(finalContent);
   const toolPlacementGate = runToolPlacementGate(finalContent);
+  const coverage = requirementCoverage(finalContent, jd.requirements);
 
-  const budget = budgetForMaxPages(maxPages);
-  const renderedBulletCount = finalContent.experience.reduce((n, e) => n + e.bullets.length, 0);
   const finalEstimatedLines = estimateDocxLines(finalContent, archetype, maxPages);
+  const renderedBulletCount = finalContent.experience.reduce((n: number, e) => n + e.bullets.length, 0);
   console.log(
     `[CareerOS] resume generated for ${app?.company ?? "unknown"} — archetype=${archetype} maxPages=${maxPages} ` +
-    `candidateBullets=${listProfileBullets(effectiveProfile).length} modelRanked=${fill.stats.modelRankedIds} addedByFill=${fill.stats.addedByFill} ` +
-    `perRoleCap=${budget.bulletsPerRoleMax} globalBulletCap=${budget.totalExperienceBulletsMax} -> ` +
-    `rolesRendered=${finalContent.experience.length} bulletsRendered=${renderedBulletCount} keyImpact=${finalContent.keyWins?.length ?? 0} ` +
-    `estLines=${finalEstimatedLines}/${fill.stats.targetLines} reserve=${finalContent.reserve?.length ?? 0}`,
+    `jdRequirements=${jd.requirements.length}${jd.tooThin ? " (THIN JD)" : ""} aiJd=${aiJd} eligible=${fill.stats.eligibleBullets} ` +
+    `ineligible=${fill.stats.ineligibleBullets} modelRanked=${fill.stats.modelRankedIds} -> roles=${finalContent.experience.length} ` +
+    `bullets=${renderedBulletCount} estLines=${finalEstimatedLines}/${fill.stats.targetLines} reserve=${finalContent.reserve?.length ?? 0} ` +
+    `summaryViolations=${summaryReport.violations.length} confidentiality=${confidentialityGate.ok ? "ok" : "BLOCKED " + confidentialityGate.blockedTerms.join(",")}`,
   );
 
-  return { data: finalContent, archetype, maxPages, formatGate, toolPlacementGate, fill: { ...fill.stats, summaryProofPointSwapped, finalEstimatedLines } };
+  return {
+    data: finalContent, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate,
+    jdRequirements: jd.requirements, jdWarning: jd.warning, coverage, summaryReport,
+    fill: { ...fill.stats, finalEstimatedLines, aiJd, technicalJd },
+  };
 }

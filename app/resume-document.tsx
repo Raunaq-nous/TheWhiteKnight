@@ -190,6 +190,7 @@ function ResumePage({
                 <span style={{ fontWeight: 400, fontStyle: "italic" }}>{e.tenure}</span>
               </div>
               {e.location && <div style={{ fontSize: "9pt", fontStyle: "italic", color: "#444", marginBottom: 2 }}>{e.location}</div>}
+              {e.scope && <div data-scope-line style={{ fontSize: "10pt", color: "#222", margin: "1px 0 2px" }}>{e.scope}</div>}
               {roleSubLabelGroups(e)
                 ? roleSubLabelGroups(e)!.map(group => (
                     <div key={group.label} data-sublabel={group.label}>
@@ -323,6 +324,7 @@ export function ResumeExportView({
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [pageTwoFillPercent, setPageTwoFillPercent] = useState<number | null>(null);
   const [warnings, setWarnings] = useState<FormatGateViolation[]>([]);
+  const [fillWarning, setFillWarning] = useState<string | null>(null);
   const [outcomeWarnings, setOutcomeWarnings] = useState<OutcomeWarning[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [resolvedKeys, setResolvedKeys] = useState<Set<string>>(new Set());
@@ -351,6 +353,7 @@ export function ResumeExportView({
         content: result.resumeContent ?? content,
       });
       setWarnings(result.warnings);
+      setFillWarning(result.fillWarning ?? null);
       setOutcomeWarnings(result.outcomeWarnings);
       setExportState("done");
     } catch (e: any) {
@@ -404,6 +407,11 @@ export function ResumeExportView({
           <span style={{ color: "#8fd19e", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center" }}>
             MEASURED: {pageCount} PAGE{pageCount === 1 ? "" : "S"}
             {pageCount === 2 && pageTwoFillPercent !== null && ` — PAGE 2 ~${pageTwoFillPercent}% FULL`}
+          </span>
+        )}
+        {exportState === "done" && fillWarning && (
+          <span data-testid="fill-warning" style={{ color: "#e8b339", fontFamily: "var(--font-mono)", fontSize: "0.7rem", alignSelf: "center", maxWidth: 520 }}>
+            {fillWarning}
           </span>
         )}
         {exportState === "error" && (

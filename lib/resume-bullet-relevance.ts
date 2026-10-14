@@ -17,25 +17,13 @@ import { hasIdentifiableOutcome } from "./resume-format-gate";
 // "capital allocation" — the AI bullet scores ~3.8x higher on raw overlap
 // despite being the less relevant proof point for a capital-projects JD).
 //
-// Bullets are bucketed BEFORE they are scored on overlap, in two
-// dimensions:
-//   1. OUTCOME BUCKET (impact density) — a bullet with a QUANTIFIED
-//      outcome ($/%/scope marker) always outranks one with only a
-//      qualitative outcome (delivered artifact/consequence/decision), which
-//      always outranks one with NO identifiable outcome at all. Space was
-//      going to narrative bullets with zero result ("Understanding India's
-//      competitive structures...") ahead of quantified ones purely because
-//      they scored higher on raw JD-keyword overlap — this bucket is
-//      checked FIRST, before overlap, so that can't happen again. A
-//      no-outcome bullet is only ever selected to fill remaining space.
-//   2. TOOL-BUILDING BUCKET — direct-delivery bullets always outrank
-//      tool-building bullets, regardless of raw keyword density, UNLESS the
-//      target archetype's core work IS building AI/software tools
-//      (ai_ml_engineering).
-// Within matching buckets, bullets are ordered by keyword overlap. Nothing
-// is dropped — every bullet/project survives, just reordered so the model
-// (and the deterministic selection/clamp pipeline downstream) sees the
-// strongest material first.
+// Ordering (compareScored): the tool-building demotion (direct-delivery
+// bullets outrank tool-building ones unless the archetype's core work IS
+// building AI/software tools), then JD keyword overlap, then impact (outcome bucket, marker count) only as the tiebreak. Quality is not
+// a ranking tier: bullets without an outcome clause are filtered out of
+// resume selection entirely (lib/resume-outcome.ts, lib/resume-fill.ts).
+// Nothing is dropped here; every bullet is just reordered so the model sees
+// the most JD-relevant material first.
 const TOOL_BUILDING_PATTERN =
   /\b(built|build|shipped|ship|developed|develop|designed|design|created|create|launched|launch)\b[^.]{0,60}\b(platform|tool|tools|dashboard|engine|app|application|system|automation|agent|agents|bot|pipeline|prototype)\b/i;
 
@@ -108,11 +96,13 @@ function scoreBullet(text: string, jdTerms: Set<string>, demote: boolean, idx: n
 }
 
 function compareScored(a: ScoredBullet, b: ScoredBullet): number {
-  // Impact density (outcome bucket, then raw marker count) is checked
-  // BEFORE JD-keyword overlap — a quantified bullet must never lose a slot
-  // to a narrative one just because the narrative happens to reuse more of
-  // the JD's vocabulary.
-  return (b.outcome - a.outcome) || (b.toolBucket - a.toolBucket) || (b.density - a.density) || (b.overlap - a.overlap) || (a.idx - b.idx);
+  // JD RELEVANCE before impact: the tool-building demotion (a tool whose
+  // feature names reuse the JD's vocabulary is not the direct evidence),
+  // then keyword overlap with the JD, and impact only as the tiebreak.
+  // Impact-first ordering made every resume look the same: the same
+  // quantified bullets won for every JD. Quality is a separate eligibility
+  // filter (lib/resume-outcome.ts), not a ranking tier.
+  return (b.toolBucket - a.toolBucket) || (b.overlap - a.overlap) || (b.outcome - a.outcome) || (b.density - a.density) || (a.idx - b.idx);
 }
 
 function rankBulletLines(bulletsText: string, jdTerms: Set<string>, demote: boolean): string {
@@ -187,5 +177,5 @@ export function renderRelevanceHintsBlock(hints: BulletRelevanceHint[]): string 
   return `DETERMINISTIC RELEVANCE RANKING — the experience section above is already reordered by this exact logic (most relevant bullet first, within each role); these are the scores behind that order, shown for transparency, not something to re-derive:
 ${lines}
 
-HOW TO READ THIS — bullets are ranked by IMPACT FIRST: a QUANTIFIED bullet (has a real number/%/scope marker) always outranks a QUALITATIVE one (a real but unquantified outcome — a delivered artifact, a named decision), which always outranks a NO OUTCOME bullet (pure activity description with no result at all) — regardless of raw JD-keyword overlap. A NO OUTCOME bullet should only be selected to fill remaining space after every bullet with real impact has been placed. Within the same impact tier, a bullet marked TOOL-BUILDING (building a tool/platform whose feature names happen to reuse the JD's vocabulary) still ranks behind a same-tier bullet that directly delivers the JD's core work, unless the JD's core ask IS building AI/software tools. Respect this ordering when assigning "priority": bullets presented earlier within a role are the stronger pick — never rank a NO OUTCOME bullet ahead of a QUANTIFIED one.`;
+HOW TO READ THIS — bullets are ordered by JD RELEVANCE, with impact (QUANTIFIED > QUALITATIVE > NO OUTCOME) only as the tiebreak. A heavily quantified bullet about work this JD does not ask for is NOT a strong pick for this JD. A TOOL-BUILDING bullet still ranks behind a bullet that directly delivers the JD's core work, unless the JD's core ask IS building AI/software tools: a tool whose feature names reuse the JD's vocabulary is not the direct evidence. Use this as a starting point and apply the JD TOP REQUIREMENTS lens.`;
 }

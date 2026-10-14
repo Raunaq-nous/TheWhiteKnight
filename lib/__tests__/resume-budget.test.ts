@@ -449,12 +449,10 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     }
   });
 
-  it("caps the combined Key Projects & Impact band to keyImpactMaxItems total, keyWins first", () => {
+  it("nulls out the Key Projects band and projects: the resume goes company by company", () => {
     const clamped = clampToOnePageBudget(richConsultingContent(), "consulting");
-    const total = (clamped.keyWins?.length ?? 0) + (clamped.projects?.length ?? 0);
-    expect(total).toBeLessThanOrEqual(ONE_PAGE_BUDGET.keyImpactMaxItems);
-    expect(clamped.keyWins?.length).toBe(ONE_PAGE_BUDGET.keyImpactMaxItems); // 6 keyWins available, only room for 4
-    expect(clamped.projects).toEqual([]);
+    expect(clamped.keyWins).toBeNull();
+    expect(clamped.projects).toBeNull();
   });
 
   it("caps skills to skillsMaxCategories categories and skillsMaxItemsPerCategory items each", () => {
@@ -475,11 +473,10 @@ describe("clampToOnePageBudget — the structural one-page guarantee", () => {
     expect(clamped.certifications).toBeNull();
   });
 
-  it("does not null out sections an archetype DOES use — e.g. product's standalone projects", () => {
-    const content = richConsultingContent({ keyWins: null });
-    const clamped = clampToOnePageBudget(content, "product");
-    expect(clamped.projects).not.toBeNull();
-    expect(clamped.projects!.length).toBeLessThanOrEqual(ONE_PAGE_BUDGET.keyImpactMaxItems);
+  it("nulls out projects on every archetype, product included", () => {
+    for (const archetype of ["product", "ai_ml_engineering", "general", "vc_investing"] as const) {
+      expect(clampToOnePageBudget(richConsultingContent({ keyWins: null }), archetype).projects, archetype).toBeNull();
+    }
   });
 
   it("is idempotent — clamping already-clamped content changes nothing further", () => {
@@ -664,7 +661,7 @@ describe("budgetForMaxPages", () => {
 });
 
 describe("clampToOnePageBudget with maxPages: 2 — expanded content budget", () => {
-  it("keeps more roles, more bullets per role, and a fuller Key Projects & Impact band than the 1-page pass", () => {
+  it("keeps more roles and more bullets per role than the 1-page pass", () => {
     const content = richConsultingContent();
     const onePage = clampToOnePageBudget(content, "consulting", 1);
     const twoPage = clampToOnePageBudget(content, "consulting", 2);
@@ -673,10 +670,6 @@ describe("clampToOnePageBudget with maxPages: 2 — expanded content budget", ()
     const onePageBullets = onePage.experience.reduce((n, e) => n + e.bullets.length, 0);
     const twoPageBullets = twoPage.experience.reduce((n, e) => n + e.bullets.length, 0);
     expect(twoPageBullets).toBeGreaterThan(onePageBullets);
-
-    const onePageImpact = (onePage.keyWins?.length ?? 0) + (onePage.projects?.length ?? 0);
-    const twoPageImpact = (twoPage.keyWins?.length ?? 0) + (twoPage.projects?.length ?? 0);
-    expect(twoPageImpact).toBeGreaterThan(onePageImpact);
   });
 
   it("never exceeds TWO_PAGE_BUDGET's caps even at maxPages 2", () => {

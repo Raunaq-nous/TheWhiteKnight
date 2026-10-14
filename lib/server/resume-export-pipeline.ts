@@ -3,7 +3,8 @@ import "server-only";
 // and scripts/verify-resume.ts:
 //   FORMAT GATE -> canonical employer locations -> TOOL PLACEMENT GATE ->
 //   MEASURE-AND-FILL (docx -> em-dash repair -> LibreOffice pdf -> pdf-parse,
-//   re-rendered until page two is >= 50% full or the reserve runs out) ->
+//   re-rendered until page two is >= 50% full or eligible content runs out,
+//   in which case it exports with a warning) ->
 //   CONFIDENTIALITY GATE on the final docx text AND the extracted pdf text ->
 //   PDF EXTRACTION GATE.
 // Any gate failure is a rejected build, never a best-effort file.
@@ -34,6 +35,9 @@ export type ExportSuccess = {
   warnings: FormatGateViolation[];
   outcomeWarnings: OutcomeWarning[];
   fill: { steps: FillStep[]; addedIds: string[]; droppedIds: string[]; underfilledWithReserve: boolean };
+  // Set when page two is under half full because no further bullet meets
+  // the quality and relevance bar: exported anyway, never padded.
+  fillWarning: string | null;
   subLabelsRendered: boolean;
 };
 
@@ -114,6 +118,7 @@ export async function runResumeExport(input: {
     resumeContent: finalContent,
     warnings: finalFormat.warnings, outcomeWarnings: finalFormat.outcomeWarnings,
     fill: { steps: fill.steps, addedIds: fill.addedIds, droppedIds: fill.droppedIds, underfilledWithReserve: fill.underfilledWithReserve },
+    fillWarning: fill.warning,
     subLabelsRendered: anyRoleUsesSubLabels(finalContent.experience) && docxText.includes(CONSULTING_ENGAGEMENTS_LABEL) && docxText.includes(AI_BUILDS_LABEL),
   };
 }

@@ -34,6 +34,8 @@ It contains four distinct layers. Keep them separate when implementing.
 | `$10.45B` | `$10 billion` | Rounded figures only |
 | Internal tool product names | The capability description (see 1.2) | Internal IP |
 | `CAP Ops`, `BCN` | omit, or `Project Leader` alone | Internal team naming |
+| `PX Pulse` (any spacing or hyphen, any case) | `the risk-analysis module` | Internal IP |
+| `Haus Nous`, `Haus-Nous` (any spacing or hyphen, any case) | `AI-first strategy consulting platform` | Internal IP |
 | Team-size numbers | `lead cross-functional teams` | Policy |
 
 ### 1.2 Tool naming map
@@ -319,12 +321,13 @@ Em dashes · "excited to apply" · "passionate about" · "synergy" · "leverage"
 
 1. **Zero em dashes.** Validate on the packed XML and the extracted PDF text. Autocorrect introduces them; always sweep.
 2. **One project per bullet.** Never combine two distinct projects.
-3. **First-principles thinking** woven naturally into the profile summary, never as a standalone buzzword claim.
+3. **No "first principles" and no "approaches every engagement"** anywhere in the summary. Show the thinking through the concrete work instead.
 4. **Verb-first bullets** with selective bolding inside. Never bold label prefixes.
-5. **Skills sections lean** — two to three rows. No forced "Leadership" row.
+5. **Skills sections lean:** at most two rows of at most six items each, only skills that match the JD's top requirements, drawn from the Part 6 taxonomy. The Technical row appears only for a technical role. Never generic filler ("Strategic Initiatives", "Business Development", "Data Analysis"), never a forced "Leadership" row.
 6. **Pipe separators** for education, certifications and the header contact line.
 7. **GitHub repos described by function**, never listed parenthetically.
-8. All Part 1 confidentiality gates apply.
+8. All Part 1 confidentiality gates apply, to every field that reaches the resume: the summary, scope lines, bullets, skills, education lines and link labels.
+9. **Company by company, nothing else.** No Relevant Projects section and no Key Projects band on any archetype; resume generation never reads the profile's projects. Every employer build already exists as an experience bullet under its employer's AI BUILDS sub-label.
 
 ### Page length
 
@@ -351,27 +354,37 @@ Bold **keywords distributed through the bullet**, not one long bold lead phrase.
 ### Section structure — senior consulting
 
 ```
-PROFILE SUMMARY                          one paragraph, 4–5 sentences
+PROFILE SUMMARY                          at most 3 sentences, about 60 words
 EXPERIENCE
   Company | Role | Dates | Location      dotted top border, larger type
+    Scope line                           one line under the role title
     CONSULTING ENGAGEMENTS               small grey uppercase sub-label
       • bullets
     AI BUILDS AND PROCESS REINVENTION    small grey uppercase sub-label
       • bullets
-SKILLS                                   2–3 rows plus certifications row
-EDUCATION
-PUBLICATIONS                             own section when listing all seven
+SKILLS                                   at most 2 rows x 6 items
+EDUCATION                                degree line, satellite line, publications line
 ```
+
+**Role structure.** Under each role title, one scope line ("Primary client interface across 12+ mandates...", "Leading cross-functional teams...") instead of listing scope as an engagement. The two sub-labels appear only on a role with bullets in both categories (Bain and Aranca); Evalueserve, Tecnova and Madcue are flat lists, and a founder role is never labelled. At Aranca, "Led the internal AI strategy team" leads AI BUILDS whenever the JD is AI-related, and the project economics and cost modelling engine is eligible there.
+
+**Selection.** Before generating, extract the JD's top 5 requirements; fewer than 3 means the JD text is too thin, and that is flagged. A bullet is eligible only with an outcome clause (a number, a consequence or a named decision). Eligible bullets are ranked by JD relevance, with impact only as a tiebreak, and ordered within each employer by JD relevance.
+
+**Length without padding.** Taper by recency and seniority: the current role carries its full relevant set, the previous role the next most, the two before it 3 to 4 each, the oldest (and any founder role) 2. Above a role's floor, only bullets above the relevance threshold are added. If eligible content runs out before page two is half full, stop and export with a warning rather than padding or blocking.
+
+**Education.** The degree line, the compressed satellite line (Part 5), and one line for the Economic Times and Dataquest publications. Nothing more.
 
 ### Profile summary formula
 
-1. Role + years + breadth + current position
-2. What you own end-to-end, with first principles woven in
-3. The build-and-deploy differentiator
-4. Geographies + sectors
+At most **3 sentences and about 60 words**.
 
-*Reference version:*
-> Strategy consultant and AI builder with 10+ years across MBB consulting, growth advisory, and entrepreneurship, currently a Project Leader at Bain and Company. Owns end-to-end process reinvention engagements, applying first principles thinking to break complex enterprise workflows back to their fundamentals before redesigning them as AI-first processes, building the executive business case, and running delivery with senior stakeholders. Brings end-to-end experience building AI products and deploying them into production on the cloud. Has delivered engagements across EMEA, North America, South America, and APAC, spanning technology, telecom, energy and infrastructure, consumer goods, industrials, and financial services.
+1. **Sentence 1:** professional identity framed to the target role, years of experience per `yearsByArchetype` (Part 3), and current position.
+2. **Sentences 2 and 3:** the specific experiences that answer the JD's top requirements, stated concretely: what was done, for whom, in which sector or geography.
+
+Never "first principles", never "approaches every engagement", no banned phrase, no meta-commentary about fit, and **no figure that also appears in a bullet** (the bullets carry the numbers; the summary carries the positioning). Do not copy JD wording wholesale. A summary that breaks a rule gets one corrective rewrite, then a deterministic repair (keep sentence 1, drop later sentences that repeat a bullet figure, trim to 3 sentences and the word limit).
+
+*Reference shape:*
+> Strategy consultant with 10+ years of experience, positioned for capital excellence leadership and currently a Project Leader at Bain and Company. Leads concept selection, capital program readiness and asset performance work for energy and infrastructure clients across South America and North America. Builds AI-enabled diagnostics that put schedule and cost risk in front of executives.
 
 ### Tool placement
 
@@ -495,6 +508,10 @@ Implement these as configuration files the engine reads, not as prose in a promp
     { "match": "BCN", "replace": null, "severity": "block" },
     { "match": "knowledge graph-linked", "replace": "AI-based", "severity": "block",
       "scope": "consulting" },
+    { "match": "PX Pulse", "pattern": "\\bpx[\\s-]*pulse\\b",
+      "replace": "the risk-analysis module", "severity": "block" },
+    { "match": "Haus Nous", "pattern": "\\bhaus[\\s-]*nous\\b",
+      "replace": "AI-first strategy consulting platform", "severity": "block" },
     { "match": "—", "replace": ", ", "severity": "block" }
   ],
   "neverCite": [

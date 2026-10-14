@@ -73,33 +73,43 @@ export const TWO_PAGE_BUDGET = {
   educationMaxEntries: 2,
 } as const;
 
-// FLOORS and targets for the two-page fill (lib/resume-fill.ts), sized so
-// GENERATION already produces the full two-page resume and the preview
-// matches the export; export's measure-and-fill only fine-tunes.
-//
-// Calibrated against real LibreOffice renders (A4, Carlito as Calibri) of a
-// profile shaped like the live one (Bain 9, Aranca 20, Evalueserve 8,
-// Tecnova 5, Madcue 3; ~200-char bullets) with 4 Key Projects items:
-// page two reaches 50% at ~30 experience bullets / ~117 estimated lines.
-// The fill stops at targetLines once totalMin is met, or at totalTarget.
-//
-// Role balance (lib/resume-balance.ts): the current role carries the most
-// bullets counting its Key Projects items, no earlier role exceeds it unless
-// it has run out, and no role carries more than maxRoleShare of Experience.
+// LENGTH WITHOUT PADDING (lib/resume-fill.ts). Selection is by JD
+// relevance among quality-eligible bullets (an outcome clause), tapered by
+// recency and seniority, never padded to a line count:
+//   - caps/floors per role by recency (index 0 = the current role): the
+//     current role carries its full relevant set, the next role the next
+//     most, the two before it 3-4 each, anything older (and any founder
+//     role) 2.
+//   - floors come from the role's best eligible bullets regardless of
+//     relevance (a role is never shown empty); everything above a floor
+//     must clear relevanceThreshold (0..1).
+//   - if eligible content runs out before page two is half full, export
+//     proceeds with a warning instead of padding or blocking.
 export const FILL_TARGETS = {
-  keyImpactMin: 3,
-  keyImpactMax: 4,
   perEmployerMin: 2,
-  totalMin: 26,
-  totalTarget: 32,
-  maxRoleShare: 1 / 3,
-  // Estimated DOCX lines (estimateDocxLines). One page of the two-page
-  // format is ~78 estimated lines; 121 lands page two at ~55%, leaving
-  // export room to fine-tune either way, under the ~156-line third page.
+  taperCaps: [10, 8, 4, 4] as readonly number[],
+  taperFloors: [2, 2, 3, 3] as readonly number[],
+  laterRoleCap: 2,
+  laterRoleFloor: 2,
+  founderRoleCap: 2,
+  relevanceThreshold: 0.4,
+  // Estimated DOCX lines (estimateDocxLines), calibrated against real
+  // LibreOffice renders: one page of the two-page format is ~78 estimated
+  // lines. targetLines (page two half full) is reported, never padded to;
+  // maxLines stops the fill short of a third page.
   linesPerPage: 78,
-  targetLines: 121,
+  targetLines: 117,
   maxLines: 152,
 } as const;
+
+const FOUNDER_ROLE = /\b(co-?founder|founder|owner)\b/i;
+
+/** The taper cap and floor for the role at recency `index` (0 = current). */
+export function taperFor(index: number, role?: string | null): { cap: number; floor: number } {
+  const cap = FOUNDER_ROLE.test(role ?? "") ? FILL_TARGETS.founderRoleCap : (FILL_TARGETS.taperCaps[index] ?? FILL_TARGETS.laterRoleCap);
+  const floor = Math.min(cap, FILL_TARGETS.taperFloors[index] ?? FILL_TARGETS.laterRoleFloor);
+  return { cap, floor };
+}
 
 export type ResumeBudget = {
   readonly summaryMaxChars: number;
