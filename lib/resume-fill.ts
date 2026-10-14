@@ -1,23 +1,46 @@
-// DETERMINISTIC FILL. The model ranks every candidate bullet id by JD
-// relevance; this module builds the actual resume selection from that
-// ranking and FILLS it to the page target. Before this, the model's own
-// pre-trimmed selection was final, and a light selection (13 of 45 bullets)
-// produced a two-page PDF with page two ~5% full.
+// DETERMINISTIC SELECTION. The model ranks every candidate bullet id by JD
+// relevance; this module builds the Experience section from that ranking.
 //
-// Selection, not writing, is unchanged: every bullet is a real profile
-// bullet id, and its text always comes from the profile.
+//   1. QUALITY FILTER. A bullet is eligible only with an outcome clause
+//      (lib/resume-outcome.ts), or when config names it eligible without
+//      one (resumeEligibility.eligibleWithoutOutcome). Scope lines are not
+//      bullets: they render once under the role title.
+//   2. JD RELEVANCE FIRST. Eligible bullets are ordered by the model's JD
+//      relevance; impact density only breaks ties. (Impact-first ranking is
+//      why every resume used to look the same: the same quantified bullets
+//      won for every JD.) A bullet the model did not rank gets a
+//      deterministic keyword-overlap relevance against the JD.
+//   3. TAPER, NO PADDING. Per-role caps and floors by recency
+//      (FILL_TARGETS / taperFor); above a role's floor a bullet must clear
+//      the relevance threshold. No earlier role outnumbers the current role
+//      unless the current role has run out. Nothing is added to reach a
+//      line count; the fill only stops short of a third page.
+//   4. ORDER. Within each employer, bullets run in JD-relevance order. For an
+//      AI-related JD, configured bullets (the internal AI strategy team)
+//      are pinned first in their group.
+//
+// Selection, not writing: every bullet is a real profile bullet id, and its
+// text always comes from the profile.
 
-import type { Profile } from "./profile";
+import type { Profile, ExperienceEntry } from "./profile";
 import { listProfileBullets } from "./profile-bullets";
 import type { ResumeContent, ResumeBullet, ReserveBullet, ResumeExperienceEntry } from "./resume-schema";
-import { RESUME_SPECS, type ResumeArchetype } from "./resume-archetype";
-import { budgetForMaxPages, FILL_TARGETS, clampBulletPreservingOutcome, OUTCOME_MARKER_PATTERN } from "./resume-budget";
+import type { ResumeArchetype } from "./resume-archetype";
+import { budgetForMaxPages, FILL_TARGETS, clampBulletPreservingOutcome, taperFor } from "./resume-budget";
 import { impactDensity, outcomeBucket } from "./resume-bullet-relevance";
+import { hasOutcomeClause } from "./resume-outcome";
 import { sameEngagement } from "./resume-dedupe";
 import { textSimilarity, namesMatch } from "./profile-merge";
 import { violatesToolPlacement } from "./resume-tool-placement";
-import { estimateDocxLines, DOCX_METRICS } from "./resume-layout-estimate";
-import { canAddToRole, spreadWeight, bandItemsFor } from "./resume-balance";
+import { estimateDocxLines } from "./resume-layout-estimate";
+import { keywordOverlap } from "./resume-jd";
+import profileRulesConfig from "../config/profile-rules.json";
+
+type EligibilityConfig = { eligibleWithoutOutcome?: string[]; pinFirstInAiBuildsWhenAiJd?: string[] };
+const ELIGIBILITY: EligibilityConfig = (profileRulesConfig as { resumeEligibility?: EligibilityConfig }).resumeEligibility ?? {};
+const SCOPE_PATTERNS: RegExp[] = ((profileRulesConfig as { scopeLinePatterns?: string[] }).scopeLinePatterns ?? []).map(p => new RegExp(p, "i"));
+const SCOPE_LINES: Record<string, string> = (profileRulesConfig as { scopeLines?: Record<string, string> }).scopeLines ?? {};
+const FOUNDER_ROLE = /\b(co-?founder|founder|owner)\b/i;
 
 export type FillCandidate = {
   id: string;
@@ -27,15 +50,20 @@ export type FillCandidate = {
   relevance: number;
   ranked: boolean;
   density: number;
-  score: number;
+  pinned: boolean;
 };
 
 export type FillStats = {
   modelRankedIds: number;
   modelRankedUsable: number;
   selectedFromModel: number;
+  // Selected bullets the model did not rank (relevance from JD keyword overlap).
   addedByFill: number;
   addedByFillIds: string[];
+  eligibleBullets: number;
+  ineligibleBullets: number;
+  relevanceThreshold: number;
+  pinnedIds: string[];
   perEmployer: Record<string, number>;
   experienceBullets: number;
   keyImpactItems: number;
@@ -57,11 +85,11 @@ export type FillOptions = {
   // Server-side confidentiality hook: return false for text that would
   // fail the gate even after substitution (block-only terms, never-cite).
   isTextAllowed?: (text: string) => boolean;
+  // JD terms for the deterministic relevance of bullets the model didn't rank.
+  jdTerms?: Set<string>;
+  // AI-related JD: pin the configured AI-strategy bullets first.
+  aiJd?: boolean;
 };
-
-// Unranked bullets still compete, on impact alone: this is what fills the
-// page when the model returns too few ids.
-const UNRANKED_RELEVANCE = 0.15;
 
 /** 0..1 relevance per id: bulletRanking first, then any ids the model placed directly (legacy selection output). */
 export function rankingFromModel(raw: Pick<ResumeContent, "bulletRanking" | "experience" | "keyWinIds">): Map<string, number> {
@@ -77,6 +105,7 @@ export function rankingFromModel(raw: Pick<ResumeContent, "bulletRanking" | "exp
   return ranking;
 }
 
+/** Impact: the tiebreak among bullets of equal JD relevance. */
 export function impactFactor(text: string): number {
   return 1 + 0.25 * Math.min(3, impactDensity(text)) + 0.1 * outcomeBucket(text);
 }
@@ -85,52 +114,62 @@ export function isSameEngagement(a: string, b: string): boolean {
   return textSimilarity(a, b) >= 0.6 || sameEngagement(a, b);
 }
 
-export function buildCandidates(profile: Profile, ranking: Map<string, number>, maxPages: number, opts: FillOptions = {}): FillCandidate[] {
+const includesAny = (text: string, needles: string[] | undefined) =>
+  (needles ?? []).some(n => text.toLowerCase().includes(n.toLowerCase()));
+
+/** Quality filter: an outcome clause, or named eligible in config. */
+export function isEligibleBullet(text: string): boolean {
+  return hasOutcomeClause(text) || includesAny(text, ELIGIBILITY.eligibleWithoutOutcome);
+}
+
+/** A role-scope statement ("Primary client interface across 12+ mandates...") rather than an engagement. */
+export function isScopeLine(text: string): boolean {
+  return SCOPE_PATTERNS.some(p => p.test(text.trim()));
+}
+
+/** The one scope line shown under a role title: from the role's own bullets, else config. */
+export function scopeLineFor(entry: Pick<ExperienceEntry, "company" | "bullets">): string | null {
+  const fromBullets = entry.bullets.split("\n").map(b => b.trim()).find(isScopeLine);
+  if (fromBullets) return fromBullets;
+  const key = Object.keys(SCOPE_LINES).find(k => namesMatch(k, entry.company));
+  return key ? SCOPE_LINES[key] : null;
+}
+
+/** Deterministic relevance (0..~0.6) for a bullet the model did not rank. */
+export function fallbackRelevance(text: string, jdTerms?: Set<string>): number {
+  if (!jdTerms || jdTerms.size === 0) return 0;
+  return Math.min(0.6, 0.08 * keywordOverlap(text, jdTerms));
+}
+
+/** Candidates in selection order: JD relevance first, impact as tiebreak, profile order last. */
+export function buildCandidates(profile: Profile, ranking: Map<string, number>, maxPages: number, opts: FillOptions = {}): { pool: FillCandidate[]; ineligible: number } {
   const maxChars = budgetForMaxPages(maxPages).bulletMaxChars;
   const out: FillCandidate[] = [];
+  let ineligible = 0;
   for (const ref of listProfileBullets(profile)) {
     if (ref.sourceType !== "experience") continue;
+    if (isScopeLine(ref.text)) continue;
+    if (!isEligibleBullet(ref.text)) { ineligible++; continue; }
     const text = ref.text.length <= maxChars ? ref.text : clampBulletPreservingOutcome(ref.text, maxChars);
     if (!text) continue;
     if (opts.isTextAllowed && !opts.isTextAllowed(text)) continue;
     if (violatesToolPlacement(text, ref.sourceId)) continue;
     const ranked = ranking.has(ref.id);
-    const relevance = ranked ? ranking.get(ref.id)! : UNRANKED_RELEVANCE;
-    const density = impactDensity(text);
-    out.push({ id: ref.id, company: ref.sourceId, text, category: ref.category ?? null, relevance, ranked, density, score: relevance * impactFactor(text) });
+    const relevance = ranked ? ranking.get(ref.id)! : fallbackRelevance(ref.text, opts.jdTerms);
+    const pinned = Boolean(opts.aiJd) && includesAny(ref.text, ELIGIBILITY.pinFirstInAiBuildsWhenAiJd);
+    out.push({ id: ref.id, company: ref.sourceId, text, category: ref.category ?? null, relevance, ranked, density: impactDensity(text), pinned });
   }
-  // Ties broken by profile order, so the result is deterministic.
-  return out.map((c, i) => ({ c, i })).sort((a, b) => b.c.score - a.c.score || a.i - b.i).map(x => x.c);
-}
-
-function usesImpactBand(archetype: ResumeArchetype): boolean {
-  const spec = RESUME_SPECS[archetype];
-  return spec.sectionSequence.includes("selectedImpact") || Boolean(spec.includeKeyWins);
-}
-
-function targetsFor(maxPages: number) {
-  const budget = budgetForMaxPages(maxPages);
-  if (maxPages >= 2) {
-    return {
-      keyImpactMin: FILL_TARGETS.keyImpactMin, keyImpactMax: FILL_TARGETS.keyImpactMax,
-      perEmployerMin: FILL_TARGETS.perEmployerMin,
-      totalMin: FILL_TARGETS.totalMin, totalTarget: FILL_TARGETS.totalTarget,
-      targetLines: FILL_TARGETS.targetLines,
-    };
-  }
-  const per = DOCX_METRICS[1].linesPerPage;
-  return {
-    keyImpactMin: Math.min(3, budget.keyImpactMaxItems), keyImpactMax: budget.keyImpactMaxItems,
-    perEmployerMin: 2,
-    totalMin: Math.min(8, budget.totalExperienceBulletsMax), totalTarget: budget.totalExperienceBulletsMax,
-    targetLines: Math.round(per * 0.92),
-  };
+  const pool = out
+    .map((c, i) => ({ c, i, impact: impactFactor(c.text) }))
+    .sort((a, b) => b.c.relevance - a.c.relevance || b.impact - a.impact || a.i - b.i)
+    .map(x => x.c);
+  return { pool, ineligible };
 }
 
 /**
- * Builds experience + Key Projects from the ranking and fills to the page
- * target. `base` supplies everything the fill doesn't own (summary, skills,
- * education, sequence) so the layout estimate sees the whole document.
+ * Builds Experience from the ranking. `base` supplies everything the fill
+ * doesn't own (summary, skills, education, sequence) so the layout estimate
+ * sees the whole document.
  */
 export function buildFilledSelection(
   profile: Profile,
@@ -140,119 +179,114 @@ export function buildFilledSelection(
   opts: FillOptions = {},
 ): FillResult {
   const ranking = rankingFromModel(base);
-  const pool = buildCandidates(profile, ranking, maxPages, opts);
-  const t = targetsFor(maxPages);
+  const { pool, ineligible } = buildCandidates(profile, ranking, maxPages, opts);
+  const threshold = FILL_TARGETS.relevanceThreshold;
 
+  const entries = profile.experience.filter(e => !e.excludeFromResume);
+  const roleOf = (c: FillCandidate) => entries.find(e => e.company === c.company) ?? entries.find(e => namesMatch(e.company, c.company));
+  const roleBullets = new Map<string, FillCandidate[]>(entries.map(e => [e.company, []]));
   const chosen: FillCandidate[] = [];
   const isDup = (c: FillCandidate) => chosen.some(x => isSameEngagement(x.text, c.text));
-
-  // 1. Key Projects band: the strongest quantified items, across employers.
-  const band: FillCandidate[] = [];
-  if (usesImpactBand(archetype)) {
-    const perCompany = new Map<string, number>();
-    const take = (requireNumber: boolean) => {
-      for (const c of pool) {
-        if (band.length >= t.keyImpactMax) break;
-        if (band.includes(c) || (requireNumber && c.density === 0)) continue;
-        if ((perCompany.get(c.company) ?? 0) >= 2 || isDup(c)) continue;
-        band.push(c); chosen.push(c);
-        perCompany.set(c.company, (perCompany.get(c.company) ?? 0) + 1);
-      }
-    };
-    take(true);
-    if (band.length < t.keyImpactMin) take(false);
-  }
-
-  // 2. Experience, every employer in profile order.
-  const entries = profile.experience.filter(e => !e.excludeFromResume);
-  const roleBullets = new Map<string, FillCandidate[]>(entries.map(e => [e.company, []]));
-  const roleOf = (c: FillCandidate) => entries.find(e => e.company === c.company) ?? entries.find(e => namesMatch(e.company, c.company));
-  const total = () => [...roleBullets.values()].reduce((n, l) => n + l.length, 0);
-  const add = (c: FillCandidate) => { roleBullets.get(roleOf(c)!.company)!.push(c); chosen.push(c); };
   const usable = (c: FillCandidate) => !chosen.includes(c) && !isDup(c) && Boolean(roleOf(c));
+  const countOf = (company: string) => roleBullets.get(company)?.length ?? 0;
+  const taper = (e: ExperienceEntry) => taperFor(entries.indexOf(e), e.role);
+  const add = (c: FillCandidate) => { roleBullets.get(roleOf(c)!.company)!.push(c); chosen.push(c); };
 
-  const assemble = (): ResumeContent => {
-    const rank = new Map(pool.map((c, i) => [c.id, i + 1]));
-    return {
-      ...base,
-      keyWinIds: band.map(c => c.id),
-      keyWins: band.map(c => c.text),
-      keyWinCompanies: band.map(c => roleOf(c)?.company ?? c.company),
-      experience: entries
-        .filter(e => (roleBullets.get(e.company) ?? []).length > 0)
-        .map(e => ({
+  const rank = new Map(pool.map((c, i) => [c.id, i + 1]));
+  const assemble = (): ResumeContent => ({
+    ...base,
+    keyWinIds: [], keyWins: [], keyWinCompanies: [], projects: [],
+    experience: entries
+      .filter(e => countOf(e.company) > 0)
+      .map(e => {
+        const scope = scopeLineFor(e);
+        return {
           company: e.company, role: e.role, tenure: e.tenure, location: e.location,
-          bullets: roleBullets.get(e.company)!.map(c => ({ sourceBulletId: c.id, text: c.text, priority: rank.get(c.id)!, category: c.category ?? null })),
-        })),
-    };
-  };
+          scope: scope && (!opts.isTextAllowed || opts.isTextAllowed(scope)) ? scope : null,
+          // Pinned first, then JD-relevance order.
+          bullets: [...roleBullets.get(e.company)!]
+            .sort((a, b) => Number(b.pinned) - Number(a.pinned) || rank.get(a.id)! - rank.get(b.id)!)
+            .map(c => ({ sourceBulletId: c.id, text: c.text, priority: c.pinned ? 0 : rank.get(c.id)!, category: c.category ?? null })),
+        };
+      }),
+  });
   const lines = () => estimateDocxLines(assemble(), archetype, maxPages);
 
-  // 2a. Floor: every employer gets its best perEmployerMin bullets.
+  // a. Pins (AI-related JD only), within the role's cap.
+  for (const c of pool) {
+    if (!c.pinned || !usable(c)) continue;
+    const e = roleOf(c)!;
+    if (countOf(e.company) < taper(e).cap) add(c);
+  }
+  // b. Floors: each role's best eligible bullets, so no role shows empty.
+  //    A role whose eligible bullets span both sub-label categories (Bain
+  //    and Aranca) first gets its best of each, so both CONSULTING
+  //    ENGAGEMENTS and AI BUILDS render there; founder roles never split.
+  for (const e of entries) {
+    if (FOUNDER_ROLE.test(e.role ?? "")) continue;
+    const mine = pool.filter(c => roleOf(c)?.company === e.company);
+    const hasBuild = mine.some(c => c.category === "ai_build");
+    const hasEngagement = mine.some(c => c.category !== "ai_build");
+    if (!hasBuild || !hasEngagement) continue;
+    for (const wantBuild of [false, true]) {
+      if (roleBullets.get(e.company)!.some(c => (c.category === "ai_build") === wantBuild)) continue;
+      const best = mine.find(c => (c.category === "ai_build") === wantBuild && usable(c));
+      if (best && countOf(e.company) < taper(e).cap) add(best);
+    }
+  }
   for (const e of entries) {
     for (const c of pool) {
-      if ((roleBullets.get(e.company) ?? []).length >= t.perEmployerMin) break;
+      if (countOf(e.company) >= taper(e).floor) break;
       if (roleOf(c)?.company === e.company && usable(c)) add(c);
     }
   }
-  // 2b. Fill to the two-page target under the role-balance rule
-  //     (lib/resume-balance.ts): best score first, discounted by how many
-  //     bullets the role already has, among roles allowed one more. Stops
-  //     once the bullet floor AND the line target are met, at totalTarget,
-  //     or when no balanced addition is left.
-  const current = entries.find(e => e.current) ?? entries[0] ?? null;
-  const currentBandItems = bandItemsFor(current?.company ?? null, band.map(c => roleOf(c)?.company ?? c.company));
-  const counts = () => new Map([...roleBullets].map(([k, v]) => [k, v.length]));
-  const currentExhausted = () => !current || !pool.some(c => usable(c) && roleOf(c)?.company === current.company);
-  while (total() < t.totalTarget && !(total() >= t.totalMin && lines() >= t.targetLines)) {
-    const n = counts();
-    const state = { counts: n, currentRole: current?.company ?? null, currentBandItems, currentExhausted: currentExhausted(), sectionSize: Math.max(total() + 1, t.totalMin) };
-    let best: FillCandidate | null = null;
-    let bestWeight = -1;
-    for (const c of pool) {
-      if (!usable(c)) continue;
-      const role = roleOf(c)!.company;
-      if (!canAddToRole(role, state)) continue;
-      const w = c.score * spreadWeight(role, n);
-      if (w > bestWeight) { best = c; bestWeight = w; }
-    }
-    if (!best) break;
-    add(best);
+  // c. Above the floors: relevance order, above the threshold, within the
+  //    taper, the current role leading, short of a third page.
+  const current = entries[0];
+  const currentExhausted = () => !current || countOf(current.company) >= taper(current).cap
+    || !pool.some(c => usable(c) && c.relevance >= threshold && roleOf(c)?.company === current.company);
+  for (const c of pool) {
+    if (c.relevance < threshold || !usable(c)) continue;
+    const e = roleOf(c)!;
+    if (countOf(e.company) >= taper(e).cap) continue;
+    if (current && e !== current && !currentExhausted() && countOf(e.company) + 1 > countOf(current.company)) continue;
+    add(c);
+    if (lines() > FILL_TARGETS.maxLines) { roleBullets.get(e.company)!.pop(); chosen.pop(); break; }
   }
-  // Export measures the real PDF and fine-tunes from the reserve under the
-  // same balance rule (lib/resume-measure-fill.ts).
 
   const content = assemble();
+  // Export's measure-and-fill may only add what clears the same bar.
   const reserve: ReserveBullet[] = pool
-    .filter(c => !chosen.includes(c) && !isDup(c) && roleOf(c))
-    .map(c => ({ sourceBulletId: c.id, company: roleOf(c)!.company, text: c.text, category: c.category ?? null, score: Math.round(c.score * 1000) / 1000 }));
+    .filter(c => !chosen.includes(c) && !isDup(c) && roleOf(c) && c.relevance >= threshold)
+    .map(c => ({ sourceBulletId: c.id, company: roleOf(c)!.company, text: c.text, category: c.category ?? null, score: Math.round(c.relevance * 1000) / 1000 }));
 
   const experienceIds = content.experience.flatMap(e => e.bullets.map(b => b.sourceBulletId));
-  const selectedIds = [...band.map(c => c.id), ...experienceIds];
-  const addedByFillIds = selectedIds.filter(id => !ranking.has(id));
+  const addedByFillIds = experienceIds.filter(id => !ranking.has(id));
   return {
     experience: content.experience,
-    keyWinIds: content.keyWinIds ?? [],
-    keyWins: content.keyWins ?? [],
-    keyWinCompanies: content.keyWinCompanies ?? [],
+    keyWinIds: [], keyWins: [], keyWinCompanies: [],
     reserve,
     stats: {
       modelRankedIds: ranking.size,
       modelRankedUsable: pool.filter(c => c.ranked).length,
-      selectedFromModel: selectedIds.length - addedByFillIds.length,
+      selectedFromModel: experienceIds.length - addedByFillIds.length,
       addedByFill: addedByFillIds.length,
       addedByFillIds,
+      eligibleBullets: pool.length,
+      ineligibleBullets: ineligible,
+      relevanceThreshold: threshold,
+      pinnedIds: chosen.filter(c => c.pinned).map(c => c.id),
       perEmployer: Object.fromEntries(content.experience.map(e => [e.company, e.bullets.length])),
       experienceBullets: experienceIds.length,
-      keyImpactItems: band.length,
+      keyImpactItems: 0,
       estimatedLines: lines(),
-      targetLines: t.targetLines,
+      targetLines: FILL_TARGETS.targetLines,
       reserveSize: reserve.length,
     },
   };
 }
 
-// ─── Summary vs top Key Projects item: never the same proof point ─────────
+// ─── Figures (summary vs bullets) ────────────────────────────────────────
 
 const FIGURE_PATTERN = /\$\s?\d[\d,.]*\s?(?:billion|million|thousand|bn|b|m|k)?|\d[\d,.]*\s?%|\b\d[\d,.]*\+?\s+[a-z-]+/gi;
 
@@ -267,42 +301,12 @@ export function proofFigures(text: string): Set<string> {
   return out;
 }
 
-function shareProofPoint(a: string, b: string): boolean {
-  const fa = proofFigures(a);
-  for (const f of proofFigures(b)) if (fa.has(f)) return true;
-  return false;
-}
-
-/**
- * The summary must not lead with the same proof point as the top Key
- * Projects item. Reorders the band so its first item is one whose figures
- * the summary doesn't repeat; if every band item collides, swaps in the best
- * non-colliding quantified reserve bullet. Returns the content unchanged
- * when there's no collision. Never rewrites any text.
- */
-export function separateSummaryProofPoint(content: ResumeContent): { content: ResumeContent; changed: boolean } {
-  const wins = content.keyWins ?? [];
-  const ids = content.keyWinIds ?? [];
-  if (!content.summary || wins.length === 0 || !shareProofPoint(content.summary, wins[0])) return { content, changed: false };
-
-  const free = wins.findIndex(w => !shareProofPoint(content.summary, w));
-  if (free > 0) {
-    const order = [free, ...wins.map((_, i) => i).filter(i => i !== free)];
-    const keyWinIds = ids.length === wins.length ? order.map(i => ids[i]) : ids;
-    const companies = content.keyWinCompanies ?? null;
-    const keyWinCompanies = companies && companies.length === wins.length ? order.map(i => companies[i]) : companies;
-    return { content: { ...content, keyWins: order.map(i => wins[i]), keyWinIds, keyWinCompanies }, changed: true };
+/** The bare numbers in text ("80%" -> "80", "$10 billion" -> "10"), years and tenure excluded. */
+export function bareNumbers(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const f of proofFigures(text)) {
+    const n = f.match(/\d[\d.,]*/)?.[0];
+    if (n) out.add(n.replace(/[.,]$/, "").replace(/,/g, ""));
   }
-  const swap = (content.reserve ?? []).find(r => OUTCOME_MARKER_PATTERN.test(r.text) && !shareProofPoint(content.summary, r.text));
-  if (!swap) return { content, changed: false };
-  return {
-    content: {
-      ...content,
-      keyWins: [swap.text, ...wins.slice(1)],
-      keyWinIds: [swap.sourceBulletId, ...ids.slice(1)],
-      keyWinCompanies: content.keyWinCompanies ? [swap.company, ...content.keyWinCompanies.slice(1)] : content.keyWinCompanies,
-      reserve: (content.reserve ?? []).filter(r => r !== swap),
-    },
-    changed: true,
-  };
+  return out;
 }

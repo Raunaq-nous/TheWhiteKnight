@@ -172,7 +172,6 @@ describe("prompt builder snapshots", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "product");
     expect(output).toContain("DETERMINISTIC RELEVANCE RANKING");
     expect(output).toContain("TOOL-BUILDING");
-    expect(output).toContain("ONE-PAGE CONTENT BUDGET");
   });
 
   it("resumePrompt's experience section is pre-ranked by relevance to the JD, not in raw profile order (BUG 1 fix)", () => {
@@ -215,13 +214,12 @@ describe("prompt builder snapshots", () => {
 
   it("resumePrompt applies archetype-specific section order and rules", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("summary -> selectedImpact -> experience -> skills -> education");
-    expect(consulting).toContain("KEY PROJECTS & IMPACT");
-    expect(consulting).toContain("EXACTLY 2 lines, max");
-    expect(consulting).toContain("NEVER INCLUDE: certifications, leadership");
+    expect(consulting).toContain("summary -> experience -> skills -> education");
+    expect(consulting).toContain("The resume goes company by company and nothing else");
+    expect(consulting).not.toContain("KEY PROJECTS & IMPACT");
 
     const ib = resumePrompt(MOCK_PROFILE, MOCK_APP, "finance_ib");
-    expect(ib).toContain("Do NOT include a summary for this archetype");
+    expect(ib).toContain('omit for this archetype (set "summary" to an empty string)');
     expect(ib).toContain("education -> experience -> skills");
     expect(ib).not.toContain("KEY WINS");
   });
@@ -232,14 +230,27 @@ describe("prompt builder snapshots", () => {
     expect(consulting).not.toContain("RELEVANT PROJECTS:");
   });
 
-  it("resumePrompt states the page budget for the fields the model writes, and leaves bullet counts to code", () => {
-    const onePage = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 1);
-    expect(onePage).toContain("ONE-PAGE CONTENT BUDGET");
+  it("resumePrompt leaves selection to code: JD relevance first, impact only a tiebreak, tapered by recency", () => {
     const twoPage = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 2);
-    expect(twoPage).toContain("TWO-PAGE CONTENT BUDGET");
-    // The model never sizes the resume: code fills to the page target.
-    expect(twoPage).toContain("a short or partial ranking does not shrink the resume");
-    expect(twoPage).toContain("26-32 in total, the current role carrying the most and no role more than about a third");
+    expect(twoPage).toContain("by JD relevance first, impact only as a tiebreak, tapered by recency");
+    expect(twoPage).toContain("Impact is NOT relevance");
+  });
+
+  it("resumePrompt puts the extracted JD top requirements up front and asks which bullet covers each", () => {
+    const out = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 2, { topRequirements: ["capital project delivery", "AI products in production", "C-suite advisory"] });
+    expect(out).toContain("JD TOP REQUIREMENTS");
+    expect(out).toContain("1. capital project delivery");
+    expect(out).toContain('"requirementCoverage"');
+  });
+
+  it("resumePrompt lists only the eligible bullet ids when given them", () => {
+    const all = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 2);
+    const ids = all.match(/\[e_\w+\]/g) ?? [];
+    expect(ids.length).toBeGreaterThan(1);
+    const one = new Set([ids[0]!.slice(1, -1)]);
+    const filtered = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting", 2, { eligibleIds: one });
+    const block = filtered.split("AVAILABLE BULLETS")[1].split("---")[0];
+    expect(block.match(/\[e_\w+\]/g)).toEqual([ids[0]]);
   });
 
   it("resumePrompt ranks each engagement as ONE fact rather than selecting duplicates", () => {
@@ -249,7 +260,6 @@ describe("prompt builder snapshots", () => {
 
   it("resumePrompt RANKS every bullet id rather than selecting or writing them (rank, don't select)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("RANK, DON'T SELECT");
     expect(consulting).toContain("RANKING RULES");
     expect(consulting).toContain('"bulletRanking"');
     expect(consulting).toContain("leave EMPTY");
@@ -265,38 +275,37 @@ describe("prompt builder snapshots", () => {
     }
   });
 
-  it("resumePrompt leaves Key Projects & Impact to the system and bans the model from emitting keyWinIds", () => {
+  it("resumePrompt bans the model from emitting projects, Key Projects or keyWinIds: no projects section on any archetype", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("Your single highest-ranked id leads Key Projects & Impact");
-    expect(consulting).toContain('Do NOT output a "sectionSequence", "keyWinIds" or "reserve" field');
+    expect(consulting).toContain('Never output "projects", "keyWins", "keyWinIds", "sectionSequence" or "reserve" either');
+    expect(consulting).not.toContain('"projects": [');
   });
 
   it("resumePrompt's summary instructions ban meta-commentary about firm fit and generic consulting filler (BUG: fluffy summary)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
     expect(consulting).toContain("NEVER meta-commentary about how well past firms");
-    expect(consulting).toContain("first principles");
+    expect(consulting).toContain('NEVER: "first principles", "approaches every engagement"');
   });
 
-  it("resumePrompt requires the summary to name the target role and lead with a quantified proof point (PROBLEM 6: summary too light)", () => {
+  it("resumePrompt's summary: at most 3 sentences / ~60 words, identity + years + current position, then concrete JD-answering experience", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("does it NAME the target role");
-    expect(consulting).toContain("does it LEAD WITH a real number");
-    expect(consulting).toContain("SINGLE strongest quantified proof point");
-    // The exact reported failed summary is baked in as a concrete anti-pattern.
-    expect(consulting).toContain("Strategy consultant and AI builder with 8+ years across MBB, growth advisory, and entrepreneurship");
-    expect(consulting).toContain("A summary with no named target role and no number is a FAILED summary");
+    expect(consulting).toContain("at most 3 sentences and about 60 words");
+    expect(consulting).toContain("Sentence 1: professional identity framed to the target role");
+    expect(consulting).toContain("current position");
+    expect(consulting).toContain("Sentences 2-3: the specific experiences that answer the JD TOP REQUIREMENTS");
+    expect(consulting).toContain("Do NOT copy JD wording wholesale");
   });
 
-  it("resumePrompt bans the summary repeating the top Key Projects proof point (BUG: repeated 80% figure)", () => {
+  it("resumePrompt bans any summary figure that also appears in a bullet (BUG: repeated 80% figure)", () => {
     const consulting = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(consulting).toContain("The summary must use a DIFFERENT proof point from that bullet");
+    expect(consulting).toContain("NEVER a figure (a $, %, or count) that also appears in any bullet");
   });
 
   it("resumePrompt requires JD priority extraction before writing", () => {
     const output = resumePrompt(MOCK_PROFILE, MOCK_APP, "consulting");
-    expect(output).toContain("TARGET PRIORITIES");
+    expect(output).toContain("JD TOP REQUIREMENTS");
     expect(output).toContain("targetPriorities");
-    expect(output).toContain("RANK AND FOREGROUND");
+    expect(output).toContain("STEP 1 — SUB-FOCUS");
   });
 
   it("resumePrompt puts links in a links array, not the contact line, and bans location from the header", () => {

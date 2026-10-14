@@ -80,12 +80,10 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.vc_investing.summaryAllowed).toBe(false);
   });
 
-  it("consulting uses the fixed one-page structure: summary, combined selectedImpact (Key Projects & Impact), experience, skills, education LAST", () => {
+  it("consulting goes company by company: summary, experience, skills, education LAST", () => {
     expect(RESUME_SPECS.consulting.summaryAllowed).toBe(true);
-    expect(RESUME_SPECS.consulting.includeKeyWins).toBe(true);
-    expect(RESUME_SPECS.consulting.sectionSequence).toEqual([
-      "summary", "selectedImpact", "experience", "skills", "education",
-    ]);
+    expect(RESUME_SPECS.consulting.includeKeyWins).toBe(false);
+    expect(RESUME_SPECS.consulting.sectionSequence).toEqual(["summary", "experience", "skills", "education"]);
   });
 
   it("consulting places education LAST and skills before education", () => {
@@ -94,17 +92,16 @@ describe("RESUME_SPECS", () => {
     expect(seq.indexOf("education")).toBe(seq.length - 1);
   });
 
-  it("consulting's selectedImpact band sits immediately after summary, before experience", () => {
+  it("experience follows the summary directly: no Key Projects band in between", () => {
     const seq = RESUME_SPECS.consulting.sectionSequence;
-    expect(seq.indexOf("selectedImpact")).toBe(seq.indexOf("summary") + 1);
-    expect(seq.indexOf("selectedImpact")).toBeLessThan(seq.indexOf("experience"));
+    expect(seq.indexOf("experience")).toBe(seq.indexOf("summary") + 1);
   });
 
   it("consulting never places keyWins/projects/certifications as standalone sections (combined or omitted)", () => {
     const seq = RESUME_SPECS.consulting.sectionSequence;
     expect(seq).not.toContain("keyWins");
     expect(seq).not.toContain("projects");
-    expect(seq).toContain("selectedImpact"); // Key Wins + Projects render together under this one key
+    expect(seq).not.toContain("selectedImpact");
     expect(seq).not.toContain("certifications");
     expect(RESUME_SPECS.consulting.omittedSections).toContain("certifications");
     expect(RESUME_SPECS.consulting.certificationPolicy.toLowerCase()).toContain("omit");
@@ -116,9 +113,15 @@ describe("RESUME_SPECS", () => {
     expect(RESUME_SPECS.consulting.mandatorySections).not.toContain("leadership");
   });
 
-  it("only consulting includes a Key Wins band", () => {
-    const withKeyWins = (Object.keys(RESUME_SPECS) as ResumeArchetype[]).filter(k => RESUME_SPECS[k].includeKeyWins);
-    expect(withKeyWins).toEqual(["consulting"]);
+  it("no archetype renders a projects section or a Key Projects / Key Wins band: the resume goes company by company", () => {
+    for (const k of Object.keys(RESUME_SPECS) as ResumeArchetype[]) {
+      expect(RESUME_SPECS[k].includeKeyWins, k).toBe(false);
+      for (const banned of ["projects", "selectedImpact", "keyWins"] as const) {
+        expect(RESUME_SPECS[k].sectionSequence, k).not.toContain(banned);
+        expect(RESUME_SPECS[k].omittedSections, k).toContain(banned);
+        expect(RESUME_SPECS[k].mandatorySections, k).not.toContain(banned);
+      }
+    }
   });
 
   it("every spec has a non-empty sectionSequence covering the core sections", () => {
@@ -173,7 +176,8 @@ describe("RESUME_SPECS", () => {
 
   it("finance_ib and vc_investing both ban a summary; only finance_ib also bans projects/leadership", () => {
     expect(RESUME_SPECS.finance_ib.omittedSections).toEqual(expect.arrayContaining(["summary", "projects", "leadership"]));
-    expect(RESUME_SPECS.vc_investing.omittedSections).toEqual(["summary", "certifications"]);
+    expect(RESUME_SPECS.vc_investing.omittedSections).toEqual(expect.arrayContaining(["summary", "certifications"]));
+    expect(RESUME_SPECS.vc_investing.omittedSections).not.toContain("leadership");
   });
 });
 

@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       // dropped bullets) so the client can persist exactly what was sent.
       resumeContent: result.resumeContent,
       fill: result.fill,
+      fillWarning: result.fillWarning,
       warnings: result.warnings,
       outcomeWarnings: result.outcomeWarnings,
     });

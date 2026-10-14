@@ -29,8 +29,8 @@ export async function generateTailoredResume(
   profile: Profile,
   app: Application,
   resumeArchetype?: ResumeArchetype,
-): Promise<{ data: ResumeContent; archetype: ResumeArchetype }> {
-  return callGenerate<{ data: ResumeContent; archetype: ResumeArchetype }>(
+): Promise<{ data: ResumeContent; archetype: ResumeArchetype; jdWarning?: string | null; confidentialityGate?: { ok: boolean; blockedTerms: string[] } }> {
+  return callGenerate<{ data: ResumeContent; archetype: ResumeArchetype; jdWarning?: string | null; confidentialityGate?: { ok: boolean; blockedTerms: string[] } }>(
     "resume", profile, app, undefined, undefined, { resumeArchetype },
   );
 }

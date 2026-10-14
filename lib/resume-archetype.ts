@@ -77,6 +77,10 @@ export type ResumeSpec = {
   maxPages: number;
 };
 
+// COMPANY BY COMPANY: no archetype renders a Relevant Projects section or a
+// Key Projects & Impact band, and resume generation never reads
+// profile.projects. Every employer build already exists as an experience
+// bullet and renders under its employer's AI BUILDS sub-label.
 export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
   // NOTE: the summary-led, Key-Wins-first consulting structure is a
   // founder-directed override of the classic no-summary/education-first MBB
@@ -92,19 +96,15 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     omit: "Deep technical jargon. Certifications (screened almost entirely on pedigree/deal experience here, not credentials). Leadership/activities sections (not part of this layout's fixed one-page budget).",
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
     lengthNorm: "One page for MBB (McKinsey, Bain, BCG) — that convention is real and rigid, regardless of years of experience. Two pages for general/Big-4/MNC advisory consulting once the candidate has 5+ years of experience (two-page resumes get 2.3x more callbacks at that seniority, and no major ATS penalizes page count).",
-    includeKeyWins: true,
-    // Fixed one-page layout, in this exact order: summary, the combined
-    // "selectedImpact" band (Key Projects & Impact — keyWins + projects
-    // data rendered together under one heading, never as two separate
-    // sections), experience, skills, then education LAST. No leadership
-    // section — not affordable within the one-page content budget and not
-    // part of this layout.
-    sectionSequence: ["summary", "selectedImpact", "experience", "skills", "education"],
+    includeKeyWins: false,
+    // Company by company: summary, experience, skills, then education LAST.
+    // No Key Projects band, no projects, no leadership section.
+    sectionSequence: ["summary", "experience", "skills", "education"],
     whatScreenersWant: "MECE problem-structuring, quantified business impact, executive communication, and peer-institution pedigree (target school + notable prior employer). Screeners scan for ~30-60 seconds, hunting for firm names and numbers before reading closely.",
     quantifiedImpactMeaning: "$ revenue captured or cost saved, % margin/efficiency uplift, deal or program size, timeline compression, headcount/team led, number of workstreams owned.",
     languageConventions: "Precise, structured, action-first, no first person. Consulting-toolkit vocabulary (hypothesis-driven, stakeholder alignment) used sparingly and only when true — never as filler.",
     mandatorySections: ["experience", "education", "skills"],
-    omittedSections: ["certifications", "leadership"],
+    omittedSections: ["certifications", "leadership", "projects", "selectedImpact", "keyWins"],
     // Baseline for GENERAL consulting (Accenture, Big 4, MNC advisory) —
     // the default when the target isn't specifically MBB. resolveMaxPages
     // narrows this to 1 for McKinsey/Bain/BCG, where the one-page
@@ -122,12 +122,12 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
     lengthNorm: "Strict one page, even for ex-bankers/consultants moving into investing.",
     includeKeyWins: false,
-    sectionSequence: ["education", "experience", "projects", "skills"],
+    sectionSequence: ["education", "experience", "skills"],
     whatScreenersWant: "Deal judgment: sourcing volume, thesis-writing ability, and either operating experience or technical/financial modeling chops. VC screeners want a signal of a distinctive edge (network, domain expertise, or analytical rigor) — the job is fundamentally pattern-matching founders and deals.",
     quantifiedImpactMeaning: "Capital deployed ($), number of deals sourced/screened/closed, fund size managed, board seats/ownership, portfolio-company outcomes (valuation growth, follow-on rounds raised).",
     languageConventions: "Confident, thesis-driven language (identified, underwrote, led diligence on). Name real companies/deals instead of generic sector language wherever truthfully possible.",
     mandatorySections: ["education", "experience", "skills"],
-    omittedSections: ["summary", "certifications"],
+    omittedSections: ["summary", "certifications", "projects", "selectedImpact", "keyWins"],
     maxPages: 1,
   },
   product: {
@@ -141,12 +141,12 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
     lengthNorm: "One page under 5 years of experience. Two pages acceptable at 5+ years, once there's enough real scope/impact to fill it — never padded to reach the second page.",
     includeKeyWins: false,
-    sectionSequence: ["summary", "experience", "projects", "skills", "education"],
+    sectionSequence: ["summary", "experience", "skills", "education"],
     whatScreenersWant: "End-to-end ownership (0-to-1 or scaling), cross-functional leadership, and business-metric fluency. Screeners want to see the candidate speak in outcomes (retention, revenue, engagement), not a list of features shipped.",
     quantifiedImpactMeaning: "User/MAU growth %, retention/churn change, revenue or ARR impact, conversion lift, NPS change, time-to-launch, adoption numbers.",
     languageConventions: "Outcome-first phrasing: 'grew X by Y% by doing Z' rather than 'responsible for X.' Just enough technical fluency to signal credibility — never overclaim engineering depth.",
     mandatorySections: ["experience", "skills"],
-    omittedSections: ["certifications"],
+    omittedSections: ["certifications", "projects", "selectedImpact", "keyWins"],
     maxPages: 2,
   },
   ai_ml_engineering: {
@@ -160,12 +160,12 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
     lengthNorm: "One page for IC roles under 5 years. Two pages acceptable at 5+ years of experience with real system-scale evidence to show.",
     includeKeyWins: false,
-    sectionSequence: ["summary", "experience", "projects", "skills", "education"],
+    sectionSequence: ["summary", "experience", "skills", "education"],
     whatScreenersWant: "Concrete system-scale evidence and named technologies — often screened by an engineer, not just a recruiter. A generic 'built AI features' bullet reads as an inability to communicate technical depth.",
     quantifiedImpactMeaning: "Latency (ms/p95), uptime/reliability %, model accuracy/F1/AUC lift, inference cost reduction, throughput (req/s), users/requests served at scale, training-time reduction.",
     languageConventions: "Name the stack explicitly (frameworks, languages, infra). Precise engineering verbs (shipped, architected, optimized, scaled) over soft-skill verbs.",
-    mandatorySections: ["experience", "projects", "skills"],
-    omittedSections: ["certifications"],
+    mandatorySections: ["experience", "skills"],
+    omittedSections: ["certifications", "projects", "selectedImpact", "keyWins"],
     maxPages: 2,
   },
   finance_ib: {
@@ -184,7 +184,7 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     quantifiedImpactMeaning: "Transaction/deal size ($M/$B), number of deals executed, valuation methodologies applied (DCF/LBO/comps), GPA (used as a literal screen), model complexity.",
     languageConventions: "Formulaic, information-dense, specifics-then-result. No creative verbs, no color — uniformity is the convention, not a limitation to work around.",
     mandatorySections: ["education", "experience", "skills"],
-    omittedSections: ["summary", "projects", "leadership", "certifications"],
+    omittedSections: ["summary", "projects", "leadership", "certifications", "selectedImpact", "keyWins"],
     // Two pages is acceptable only at MD/Director level with an extensive
     // deal sheet — analyst/associate seniority is handled by the <5-years
     // override in resolveMaxPages, which forces 1 regardless of this base.
@@ -201,12 +201,12 @@ export const RESUME_SPECS: Record<ResumeArchetype, ResumeSpec> = {
     certificationPolicy: "Omit entirely — never include a certifications section, for any archetype (blanket product rule).",
     lengthNorm: "Strict one page.",
     includeKeyWins: false,
-    sectionSequence: ["summary", "experience", "projects", "education", "skills"],
+    sectionSequence: ["summary", "experience", "education", "skills"],
     whatScreenersWant: "Whatever this specific job's stated requirements say — there's no default field convention, so mirror the JD's own priorities directly.",
     quantifiedImpactMeaning: "Whatever metric the JD itself emphasizes; default to $/%/scale wherever the profile has real numbers.",
     languageConventions: "Plain, professional, JD-mirrored vocabulary.",
     mandatorySections: ["experience", "education", "skills"],
-    omittedSections: ["certifications"],
+    omittedSections: ["certifications", "projects", "selectedImpact", "keyWins"],
     maxPages: 1,
   },
 };

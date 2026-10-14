@@ -143,10 +143,12 @@ export type DocxPlanNode =
   // tab stop — company+dates, or institution+years.
   | { kind: "entryHeader"; left: string; right: string }
   | { kind: "entryRole"; text: string }
+  // One scope line under the role title (spec Part 8 role structure).
+  | { kind: "scopeLine"; text: string }
   | { kind: "skillsLine"; category: string; items: string }
   // Small grey uppercase group label within an experience entry (spec
   // Part 8/9) — CONSULTING ENGAGEMENTS / AI BUILDS AND PROCESS
-  // REINVENTION. Only emitted for the "consulting" archetype.
+  // REINVENTION. Only on a role with bullets in both categories.
   | { kind: "subLabel"; text: string };
 
 /**
@@ -198,6 +200,7 @@ export function buildDocxPlan(content: ResumeContent, archetype?: ResumeArchetyp
       for (const e of content.experience) {
         plan.push({ kind: "entryHeader", left: e.company, right: e.tenure });
         plan.push({ kind: "entryRole", text: e.location ? `${e.role}, ${e.location}` : e.role });
+        if (e.scope?.trim()) plan.push({ kind: "scopeLine", text: e.scope.trim() });
         const groups = roleSubLabelGroups(e);
         if (!groups) {
           for (const b of [...e.bullets].sort((a, b) => a.priority - b.priority)) plan.push({ kind: "bullet", text: b.text });
@@ -307,6 +310,11 @@ function docxParagraphsForNode(node: DocxPlanNode, format: DocxFormat): Paragrap
     case "entryRole":
       return [new Paragraph({
         children: [new TextRun({ text: node.text, italics: true, font: FONT, size: format.smallSize })],
+        spacing: { after: 24, ...tightLine },
+      })];
+    case "scopeLine":
+      return [new Paragraph({
+        children: [new TextRun({ text: node.text, font: FONT, size: format.bodySize })],
         spacing: { after: 24, ...tightLine },
       })];
     case "skillsLine":

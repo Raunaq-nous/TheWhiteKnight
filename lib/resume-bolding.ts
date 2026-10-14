@@ -76,10 +76,17 @@ const RANGE_PATTERN = /\b(?:[A-Z]{2,6}\s+)?from\s+\d+(?:\.\d+)?%\s+to\s+(?:the\s
 // "55+ partial and 10 complete live client cases" — a compound scale
 // marker named explicitly in the spec (Part 4's Schedule/Cost/Risk
 // Diagnostic toolkit scale line), distinct from a plain "N <unit>" count.
-const COMPOUND_COUNT_PATTERN = /\b\d+\+?\s+(?:partial|complete)(?:\s+and\s+\d+\+?\s+(?:partial|complete))?\s+(?:live\s+)?(?:client\s+)?(?:cases?|projects?|sites?|engagements?)\b/gi;
+// A whole number, thousands separators included ("16,000", "70,000"), never
+// starting mid-number: the old `\b\d+` began matching after the comma, so
+// "16,000 projects" rendered as "16,**000 projects**".
+const NUM = String.raw`(?<![\d.,])(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?`;
+const COMPOUND_COUNT_PATTERN = new RegExp(String.raw`${NUM}\+?\s+(?:partial|complete)(?:\s+and\s+${NUM}\+?\s+(?:partial|complete))?\s+(?:live\s+)?(?:client\s+)?(?:cases?|projects?|sites?|engagements?)\b`, "gi");
 const CURRENCY_PATTERN = /\$\d[\d,.]*\s?(?:[bmk]illion|[bmk])?\b/gi;
-const COUNT_WITH_UNIT_PATTERN = /\b\d+\+?\s?(?:projects?|sites?|processes?|clients?|mandates?|deals?|years?|months?|people|hires?|workstreams?|engagements?|cases?|industries?|GW|plants?|partners?|teams?|integrators?|territories?|states?|firms?|customers?|activities?)\b/gi;
-const BARE_PERCENT_PATTERN = /\b\d+(?:\.\d+)?%/g;
+// A headline count: the number, up to two qualifier words, then a unit
+// ("150+ independent creators", "70,000 monthly viewers", "16,000 projects").
+const COUNT_UNITS = "projects?|sites?|processes|process|clients?|mandates?|deals?|years?|months?|people|hires?|workstreams?|engagements?|cases?|industries|industry|GW|plants?|partners?|teams?|integrators?|territories|states?|firms?|customers?|activities|creators?|viewers?|users?|subscribers?|countries|markets?|categories|accounts?|suppliers?|buyers?|cities|programs?|programmes?|concepts?|employees|members|followers|downloads|transactions|assets?|portfolios?|companies";
+const COUNT_WITH_UNIT_PATTERN = new RegExp(String.raw`${NUM}\+?\s?(?:[a-z][a-z-]*\s){0,2}?(?:${COUNT_UNITS})\b`, "gi");
+const BARE_PERCENT_PATTERN = new RegExp(String.raw`${NUM}%`, "g");
 
 function findQuantitySpans(text: string, claimed: BoldSpan[]): BoldSpan[] {
   return [

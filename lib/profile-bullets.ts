@@ -94,8 +94,8 @@ export function profileBulletIndex(profile: Profile): Map<string, ProfileBulletR
  * experience or projects (see lib/resume-selection.ts, which enforces this
  * server-side regardless of what the model actually returns).
  */
-export function renderAvailableBulletsBlock(profile: Profile): string {
-  const bullets = listProfileBullets(profile);
+export function renderAvailableBulletsBlock(profile: Profile, onlyIds?: Set<string>): string {
+  const bullets = listProfileBullets(profile).filter(b => !onlyIds || onlyIds.has(b.id));
   if (bullets.length === 0) return "";
   const byLabel = new Map<string, ProfileBulletRef[]>();
   for (const b of bullets) {

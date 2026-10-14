@@ -25,7 +25,13 @@ import { join } from "node:path";
 import type { ResumeContent } from "./resume-schema";
 
 export type ForbiddenTermRule = {
+  // The term as reported in a gate failure. Matched literally and
+  // case-insensitively unless `pattern` is set.
   match: string;
+  // Optional regex source (case-insensitive) for terms with spelling
+  // variants, e.g. "\\bhaus[\\s-]*nous\\b" for "Haus Nous" / "Haus-Nous" /
+  // "HausNous". Used by both substitution and the gate.
+  pattern?: string;
   // null = block-only, no auto-fix exists (e.g. omit capacity entirely).
   replace: string | null;
   severity: "block";
@@ -73,6 +79,10 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function rulePattern(rule: ForbiddenTermRule, flags: string): RegExp {
+  return new RegExp(rule.pattern ?? escapeRegExp(rule.match), flags);
+}
+
 function ruleApplies(rule: ForbiddenTermRule, archetype?: string): boolean {
   if (!rule.scope) return true;
   return rule.scope === archetype;
@@ -95,8 +105,7 @@ export function applyConfidentialitySubstitutions(
   for (const rule of config.forbiddenTerms) {
     if (rule.replace === null) continue;
     if (!ruleApplies(rule, archetype)) continue;
-    const pattern = new RegExp(escapeRegExp(rule.match), "gi");
-    result = result.replace(pattern, rule.replace);
+    result = result.replace(rulePattern(rule, "gi"), rule.replace);
   }
   return result;
 }
@@ -123,6 +132,9 @@ export function applyConfidentialitySubstitutionsToResumeContent(
     summary: clean(content.summary),
     experience: content.experience.map(e => ({
       ...e,
+      company: clean(e.company),
+      role: clean(e.role),
+      scope: e.scope ? clean(e.scope) : e.scope,
       bullets: e.bullets.map(b => ({ ...b, text: clean(b.text) })),
     })),
     skills: content.skills.map(g => ({ ...g, items: g.items.map(clean) })),
@@ -131,8 +143,12 @@ export function applyConfidentialitySubstitutionsToResumeContent(
     leadership: content.leadership?.map(clean),
     education: content.education.map(ed => ({
       ...ed,
+      institution: clean(ed.institution),
+      degree: clean(ed.degree),
+      field: ed.field ? clean(ed.field) : ed.field,
       achievements: ed.achievements?.map(clean),
     })),
+    links: content.links?.map(l => ({ ...l, label: clean(l.label) })),
     reserve: content.reserve?.map(r => ({ ...r, text: clean(r.text) })),
   };
 }
@@ -169,8 +185,7 @@ export function runConfidentialityGate(
 
   for (const rule of config.forbiddenTerms) {
     if (!ruleApplies(rule, archetype)) continue;
-    const pattern = new RegExp(escapeRegExp(rule.match), "i");
-    if (pattern.test(text)) blockedTerms.push(rule.match);
+    if (rulePattern(rule, "i").test(text)) blockedTerms.push(rule.match);
   }
 
   for (const fact of config.neverCite) {
@@ -281,4 +296,23 @@ export async function extractDocxText(docxBuffer: Buffer): Promise<string> {
   // Strip XML tags to get plain readable text — good enough for a
   // substring/regex scan; this is not used for anything display-facing.
   return xml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Every string that can reach a rendered resume, joined: summary, scope
+ * lines, every bullet, skills, education (including its notes), links,
+ * key wins, projects and leadership. The generation-time confidentiality
+ * gate runs over this, so no field (the summary included) escapes it.
+ */
+export function renderedResumeText(c: ResumeContent): string {
+  return [
+    c.name, c.contactLine, c.summary,
+    ...(c.links ?? []).flatMap(l => [l.label, l.url]),
+    ...(c.keyWins ?? []),
+    ...(c.projects ?? []).map(p => `${p.name} ${p.description}`),
+    ...c.experience.flatMap(e => [e.company, e.role, e.tenure, e.location ?? "", e.scope ?? "", ...e.bullets.map(b => b.text)]),
+    ...c.skills.flatMap(s => [s.category, ...s.items]),
+    ...c.education.flatMap(ed => [ed.institution, ed.degree, ed.field ?? "", ed.years, ...(ed.achievements ?? [])]),
+    ...(c.leadership ?? []),
+  ].filter(Boolean).join("\n");
 }

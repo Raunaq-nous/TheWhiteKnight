@@ -127,12 +127,13 @@ describe("computeBulletRelevanceHints", () => {
 });
 
 describe("renderRelevanceHintsBlock", () => {
-  it("labels TOOL-BUILDING bullets, impact tier, and explains the ordering (impact first, then tool-building demotion)", () => {
+  it("labels TOOL-BUILDING bullets and impact tier, and explains the ordering (JD relevance first, impact only as the tiebreak)", () => {
     const block = renderRelevanceHintsBlock(computeBulletRelevanceHints(baseProfile(), baseApp()));
     expect(block).toContain("TOOL-BUILDING");
     expect(block).toContain("DETERMINISTIC RELEVANCE RANKING");
     expect(block).toContain("QUANTIFIED");
-    expect(block).toContain("still ranks behind a same-tier bullet that directly delivers");
+    expect(block).toContain("still ranks behind a bullet that directly delivers");
+    expect(block).toContain("only as the tiebreak");
   });
 
   it("returns an empty string for no hints", () => {

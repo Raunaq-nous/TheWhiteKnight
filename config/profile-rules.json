@@ -6,11 +6,31 @@
     { "match": "CAP Ops", "replace": null, "severity": "block" },
     { "match": "BCN", "replace": null, "severity": "block" },
     { "match": "knowledge graph-linked", "replace": "AI-based", "severity": "block", "scope": "consulting" },
+    { "match": "PX Pulse", "pattern": "\\bpx[\\s-]*pulse\\b", "replace": "the risk-analysis module", "severity": "block" },
+    { "match": "Haus Nous", "pattern": "\\bhaus[\\s-]*nous\\b", "replace": "AI-first strategy consulting platform", "severity": "block" },
     { "match": "—", "replace": ", ", "severity": "block" }
   ],
   "neverCite": [
     "5,232-activity", "$3.8 billion validation", "release count", "dev environment URL"
   ],
+  "resumeEligibility": {
+    "eligibleWithoutOutcome": ["internal AI strategy team", "project economics and cost modelling engine"],
+    "pinFirstInAiBuildsWhenAiJd": ["internal AI strategy team"]
+  },
+  "scopeLinePatterns": ["^(?:served as |serving as |acted as )?(?:the )?primary client interface\\b", "^lead(?:ing|s)? cross-functional teams\\b"],
+  "scopeLines": {
+    "Aranca": "Primary client interface across 12+ mandates for Fortune 500 and PE-backed clients across EMEA and North America."
+  },
+  "educationNotes": {
+    "Manipal Institute of Technology": "Worked on the control system of a satellite during an ISRO-guided student project; co-authored multiple published research papers."
+  },
+  "resumePublicationVenues": ["Economic Times", "Dataquest"],
+  "skillsTaxonomy": {
+    "Strategy and transformation": ["enterprise process reinvention", "discovery workshops and pain-point diagnosis", "process modelling and taxonomy design", "target-state design", "value frameworks and business case modelling", "KPI and benefits realisation", "operating model design", "change management and adoption planning", "executive stakeholder management", "market entry", "GTM strategy", "M&A advisory", "financial modelling", "investment evaluation", "due diligence", "pricing strategy", "commercial diligence", "portfolio strategy", "market sizing"],
+    "AI and technology": ["agentic AI and agent architecture design", "multi-agent orchestration", "agentic retrieval and knowledge graphs", "Anthropic Claude", "Microsoft Azure", "cloud deployment", "AI governance and access control", "prompt engineering", "custom AI skills"],
+    "Technical": ["Python", "TypeScript", "React", "FastAPI", "SQL", "LangChain", "Next.js", "vector databases", "Claude Code", "Cursor", "GitHub", "APIs"]
+  },
+  "skillsFiller": ["strategic initiatives", "business development", "data analysis", "communication", "leadership", "teamwork", "problem solving", "stakeholder management", "project management", "microsoft office", "excel", "powerpoint"],
   "employerLocations": {
     "Bain and Company": "Gurgaon",
     "Aranca": "Mumbai",
