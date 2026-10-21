@@ -1,279 +1,47 @@
-# BACKLOG
+# CareerOS autonomous run: backlog
 
-Prioritized, top to bottom. Each item is marked `[ ]` (pending), `[x]` (done), or `[BLOCKED: reason]`.
-Work one item at a time; commit once per completed item; never ask permission to commit (see
-CLAUDE.md's VERIFICATION CONTRACT).
+Source: careeros-autonomous-run.md (October 2026). Statuses: TODO, IN PROGRESS, DONE, BLOCKED (with reason and the action needed).
+Verification contract per item: `npm test` zero failures, `npm run build` clean, `npx tsc --noEmit` no new errors against the baseline (baseline errors live only in lib/__tests__/resume-budget.test.ts, resume-dedupe.test.ts, resume-gap-fill.test.ts), and for resume items the fixture-profile end-to-end test plus `scripts/verify-resume.ts` output.
 
-## [x] 1. Autopilot throughput
+Invariants (never weakened): approval gate for every send/submit, LinkedIn draft-only; resume bullets are profile ids only (summary is the only model text); confidentiality gate on every artifact; scraped job and email text is inert data; no secrets in logs, tests, health or commits; no automated fetching of logged-in pages or of LinkedIn/Naukri/Indeed and similar.
 
-Small batches (default 2, hard-clamped low) that finish inside the HTTP timeout. Per-job try/catch
-so one failure is logged and skipped rather than killing the run. Keep-but-mark-unscored on
-scoring failure. Survivor counts reported at every pipeline stage (fetched → keyword → recency →
-location → dedup → scored → staged).
+| ID | Item | Status | Commit |
+| --- | --- | --- | --- |
+| P0-1 | Resume content and structure | DONE | 2fe1c57 + this item's commit |
+| P0-2 | Fresh-context evaluator gate | TODO | |
+| P0-3 | Model gateway on OpenRouter | TODO | |
+| P1-1 | Sourcing expansion | TODO | |
+| P1-2 | Career tracks and skill pathways (v1) | TODO | |
+| P2-1 | Feedback capture and playbook proposals | TODO | |
 
-**DONE WHEN:** a manual cron trigger processes its batch, stages into approvals, logs stage-by-stage
-counts, and a deliberately failing job is skipped with a reason rather than aborting the run.
+## P0-1 Resume content and structure
+Status: DONE
 
-## [x] 2. Automated backups
+Rules 1-5 and 7-9 were already built in 2fe1c57 (verified against each rule; tests in lib/__tests__/resume-rebuild.test.ts):
+1. Confidentiality: PX Pulse / Haus Nous / Haus-Nous as regex block terms, every spelling tested; substitution and the generation-time gate cover every field (summary, scope lines, bullets, skills, education, links).
+2. No projects section on any archetype; generation and refine never read profile.projects.
+3. Outcome-clause eligibility, JD relevance first with impact as tiebreak, per-employer relevance order, top-5 requirement extraction with a thin-JD flag.
+4. Summary: 3 sentences / ~60 words, identity + years + position, concrete JD answers, banned and repeated-figure checks, one retry then repair; spec Part 8 updated.
+5. Scope lines under the role title; sub-labels only where both categories exist; Aranca AI strategy pin for AI JDs; cost modelling engine eligible.
+7. Recency taper with relevance threshold; export warns instead of padding.
+8. Satellite and publications education lines.
+9. Thousands-separator and headline-figure bolding.
 
-Nightly SQLite `.backup` to `/root/backups` with 7-day retention, wired into `deploy/setup.sh`.
-Document the off-box copy step in `RUN.md`.
+Gap closed in this item: rule 6 now requires every listed skill to be evidenced by a SELECTED bullet (config skillEvidencePatterns, else word match). Unevidenced skills are dropped at generation and again after export's measure-and-fill (a dropped bullet may have been the only evidence). The evidence is stored on the resume (skillEvidence) and verify-resume prints each skill with its evidencing bullet id.
 
-**DONE WHEN:** the cron line exists in setup.sh, a manual run produces a dated `.db` file, and
-RUN.md documents pulling a copy off the server.
+Verification: npm test 910 passed (2 opt-in skipped); RESUME_LIVE_EXPORT=1 real LibreOffice export test passed for a capital and an AI JD (2 pages, under-fill warning shown, confidentiality on DOCX and PDF passed); npm run build clean; tsc no new errors.
 
-## [x] 3. Rules pre-filter before LLM scoring
+## P0-2 Fresh-context evaluator gate
+Status: TODO
 
-Deterministic location/seniority/keyword filter running before any model call.
+## P0-3 Model gateway on OpenRouter
+Status: TODO
 
-**DONE WHEN:** an obviously off-target job is rejected with zero tokens spent, and the rejection
-reason appears in the survivor-count log.
+## P1-1 Sourcing expansion
+Status: TODO
 
-## [x] 4. Response analytics
+## P1-2 Career tracks and skill pathways (v1)
+Status: TODO
 
-A stats view over existing data: applications by status, reply rate, correlation between resume
-score and response, time-to-response.
-
-**DONE WHEN:** the view renders real numbers from the pipeline and handles the empty-data case.
-
-## [x] 5. Bullet ID drift
-
-Saved resumes referencing edited profile bullets must warn on load, listing the specific
-unresolvable bullets, and offer re-resolution or regeneration.
-
-**DONE WHEN:** editing a profile bullet that a saved resume references produces a visible warning
-naming it, never a silent drop.
-
-## [x] 6. Buckets config
-
-One persisted source of truth, editable in the UI, consumed by both ingest and batch scan. Remove
-the three hardcoded copies (`app/ingest` MOCK_BUCKETS, `lib/buckets` DEFAULT_BUCKETS, and the
-static `app/config` page).
-
-**DONE WHEN:** editing a bucket in the UI changes scoring behaviour in both ingest and batch scan,
-and no hardcoded bucket array remains.
-
-## [x] 7. ATS language alignment
-
-Compare resume vocabulary against the JD's and flag where different words are used for the same
-skill (e.g. "forecasting model" vs "predictive analytics"). Surface in the requirement map. This
-is terminology mapping, not keyword stuffing.
-
-**DONE WHEN:** a JD term with a profile synonym is flagged with both phrasings shown.
-
-## [x] 8. Adversarial resume evaluation (already implemented — verified, not rebuilt)
-
-Score the generated resume from a screener's perspective: category scores, the evidence found for
-each, and explicit deductions (missing quantification, vague bullets, unaddressed JD requirements,
-formatting problems). Reference pattern: github.com/interviewstreet/hiring-agent. Use the cheap
-model via the scoring task route. Store the score with the application.
-
-**DONE WHEN:** an export shows a score with deductions before I generate the PDF, and the score
-persists against the application.
-
-*(Research-heavy — delegated to a subagent per CLAUDE.md's instruction.)*
-
-## [x] 9. Collector-per-source refactor
-
-Abstract base interface, one module per source, then add Naukri and SmartRecruiters. Reference
-pattern: github.com/algsoch/job_agentic collectors/.
-
-**DONE WHEN:** existing ATS/Adzuna/Exa sources work unchanged through the new interface, and
-Naukri and SmartRecruiters return results or fail cleanly with a reason.
-
-*(Research-heavy — delegated to a subagent per CLAUDE.md's instruction.)*
-
----
-
-## Run log
-
-### Item 1 — Autopilot throughput (done)
-
-- `lib/automation-settings.ts` / `lib/server/services/automation-service.ts`: `DEFAULT_MAX_JOBS_PER_RUN`
-  8 → 2, `MAX_JOBS_PER_RUN_CEILING` 25 → 5 (both copies, kept in sync). `app/settings/page.tsx`'s
-  own hardcoded `25` (a third copy of the ceiling) replaced with the imported constant.
-- New `lib/server/services/rules-prefilter.ts`: deterministic, zero-token recency filter (drops
-  postings >45 days old with a known date) and location filter (drops postings in a clearly
-  different place than the candidate's open-to locations) — both permissive on ambiguity, run
-  BEFORE any scoring call.
-- `AutomationRunLog` gained `jobsFetched`, `jobsAfterRecencyFilter`, `jobsAfterLocationFilter`,
-  `filteredOut` (stage + reason per rejected job) — full stage-by-stage counts now: fetched →
-  keyword (`jobsFound`) → recency → location → dedup (`jobsSkippedDuplicate`) → scored → staged.
-  Settings page's run-log line now prints the whole chain with a tooltip listing rejection reasons.
-- Per-job try/catch and keep-but-mark-unscored on scoring failure were already implemented from
-  prior work in this codebase — verified via existing + new tests, not re-built.
-- Tests: `lib/__tests__/rules-prefilter.test.ts` (12 new), 3 new tests in
-  `automation-service.test.ts` for the stage counts and zero-token rejection. Full suite 678/678,
-  build clean, `tsc --noEmit` clean.
-
-### Item 2 — Automated backups (done)
-
-- New `deploy/backup.sh`: SQLite `.backup` (a consistent online snapshot, not a raw `cp`) to
-  `/root/backups/careeros-<UTC timestamp>.db`, with 7-day retention (`find ... -mtime +7 -delete`).
-  Manually verified end-to-end in this session (a fake `sqlite3` CLI standing in for the real
-  binary, which isn't installable in this sandbox — no network access to the Ubuntu mirror): a
-  dated `.db` file was produced, and a synthetic 10-day-old backup was deleted on the next run
-  while a 2-day-old one survived.
-- `deploy/setup.sh`: added `sqlite3` to the Step 1 apt install list; new "Step 7c: Automated
-  nightly backups" installs a root crontab line running `backup.sh` at 03:00 UTC; the final
-  summary block now lists the manual-backup and `/root/backups` commands.
-- `RUN.md`'s backup section rewritten: documents the automated nightly backup, an `scp` example
-  and an `rsync`/`rclone` suggestion for the OFF-box copy step (on-box backups alone don't survive
-  losing the server), and a restore procedure.
-- No TypeScript/JS touched — full suite 678/678 (unchanged), build clean, `tsc --noEmit` clean.
-
-### Item 3 — Rules pre-filter before LLM scoring (done)
-
-Location and recency were already fully handled by item 1's `rules-prefilter.ts`. The remaining
-gap: `scan-service.ts`'s existing keyword/seniority relevance filter (already zero-token, already
-ran before scoring) silently dropped jobs with no visibility into why.
-
-- `lib/server/services/scan-service.ts`: new `explainLowRelevance()` distinguishes an explicit
-  seniority/keyword exclusion match from a plain no-match; `scanJobs()` now returns a `rejected`
-  array (optional, backward compatible) alongside `jobs`.
-- `lib/automation-settings.ts`: `RulesFilterRejectionLog.stage` widened to include `"keyword"`.
-- `automation-service.ts` folds `scanResult.rejected` into `filteredOut` under stage `"keyword"`,
-  ahead of the recency/location entries — so the full pipeline (keyword → recency → location) now
-  has both counts AND per-job reasons in one place.
-- Tests: 3 new in `scan-service.test.ts` (no-match reason, excluded-term reason naming the term,
-  never rejects a real match), 1 new integration test in `automation-service.test.ts` confirming
-  the fold-in. Full suite 682/682, build clean, `tsc --noEmit` clean.
-
-### Item 8 — Adversarial resume evaluation (already done, discovered during item 4 investigation)
-
-While surveying the data model for item 4's response-analytics view, found this already fully
-built from earlier work in this codebase (not part of any session summarized to me — genuinely
-pre-existing): `lib/schemas.ts`'s `ResumeAuditResultSchema` (categories with evidence, deductions
-typed `missing_quantification | vague_bullet | unaddressed_requirement | formatting_problem` with
-severity, bonus points, overall score, verdict — matches the backlog's own wording almost
-verbatim), `/api/resume/audit` (routes through the `"audit"` AI task, confirmed wired to
-`CHEAP_MODEL` in `lib/ai-client.ts`'s task registry), `app/resume-builder.tsx` (runs the audit
-automatically once a draft exists, renders score/verdict/categories/deductions, BEFORE the user
-can confirm and move on to export), and `app/application/page.tsx`'s `persistResumeContent`
-(saves `resumeAudit` with `scoredAt`/`atsReadable` onto the application). All DONE WHEN criteria
-already satisfied. Verified `lib/__tests__/resume-audit.test.ts` (5/5 passing) rather than adding
-duplicate coverage. No code changed for this item.
-
-### Item 4 — Response analytics (done)
-
-No dedicated inbound-reply/status-history tracking exists in this codebase
-(`send-service.ts` only records outbound sends) — documented as a stated limitation rather than
-silently faked: "responded" is inferred from status (interview/offer/rejected all count, a
-rejection is still a response), and time-to-response uses `updatedAt - createdAt` as a proxy.
-
-- New `lib/analytics.ts`: `countByStatus`, `computeReplyRate` (rate is `null`, not `0`, when
-  nothing has been sent yet), `scoreResponseCorrelation` (Pearson/point-biserial between
-  `Application.score` and response, `null` below 3 data points or with no variance),
-  `averageTimeToResponseDays`, and `computeResponseAnalytics` combining all four.
-- New `/analytics` page (added to nav): reply rate, avg. time to response, score↔response
-  correlation as stat cards, a by-status bar breakdown, and an explicit empty-data state (distinct
-  from a `0%`/`NaN` reply rate) plus a footnote stating the proxy limitations above.
-- Tests: 16 new in `lib/__tests__/analytics.test.ts` covering the empty-data case, the reply-rate
-  denominator (only "applied"-or-later), correlation edge cases (too little data, no variance),
-  and a full realistic-pipeline scenario. Full suite 698/698, build clean (confirmed `/analytics`
-  in the build's route list), `tsc --noEmit` clean.
-
-### Item 5 — Bullet ID drift (done)
-
-- New `lib/resume-bullet-drift.ts`: `findDriftedBullets(content, profile)` — pure detection,
-  checks every experience bullet/project/key-win's `sourceBulletId` (a content-hash of the profile
-  bullet's TEXT) against the current profile's bullet index; anything that no longer resolves
-  (the bullet was edited or removed) is flagged, tagged with its stale text and, for experience
-  bullets, the employer it's under. `replacementCandidates(profile, company)` lists current
-  bullets from that SAME employer as re-resolve options — never a replacement from an unrelated
-  role.
-- `app/application/page.tsx`: a saved resume with any drifted bullet now shows a visible warning
-  banner naming each one (with its stale text and location), a per-bullet re-resolve dropdown
-  (only when the same employer still has current bullets to offer), and a "regenerate entire
-  resume" button reusing the existing generate handler. Nothing was ever silently dropped even
-  before this — the stale text was already fully rendered — this closes the actual gap: zero
-  visibility that it had gone stale.
-- Tests: 8 new in `resume-bullet-drift.test.ts` covering all three drift locations, the
-  same-employer restriction on replacement candidates, and a no-mutation guarantee. Full suite
-  706/706, build clean, `tsc --noEmit` clean.
-
-### Item 6 — Buckets config (done)
-
-Followed `lib/company-targets.ts`'s exact existing pattern (write-through client cache + a
-server-persisted singleton) rather than inventing a new one.
-
-- `lib/buckets.ts`: `DEFAULT_BUCKETS` is now only the seed data; added `getBuckets()`/
-  `saveBuckets()`/`resetBuckets()` going through `lib/data-cache.ts` (new `buckets` field, plus
-  `updateCacheBuckets`) and `wt_saveSettings("buckets", ...)`.
-- `lib/server/repositories/settings-repo.ts` / `types.ts`: new `getBuckets`/`saveBuckets` on
-  `SettingsRepository`, same `getSingleton`/`setSingleton` pattern as every other setting.
-- `app/api/data/bootstrap|export|import/route.ts`: `buckets` added alongside `companyTargets` in
-  all three.
-- `lib/server/services/automation-service.ts`: now calls `settingsRepo.getBuckets(userEmail)`
-  instead of the removed `DEFAULT_BUCKETS` import — the scheduled automation path picks up bucket
-  edits too, not just the two consumers named in the backlog item.
-- **All three hardcoded copies removed**: `app/ingest/page.tsx`'s `MOCK_BUCKETS` deleted (now
-  calls `getBuckets()`), `app/batch/page.tsx`'s `DEFAULT_BUCKETS` import replaced with `getBuckets()`
-  at both `runBatch()` call sites, and `app/config/page.tsx`'s static display-only `const buckets =
-  [...]` replaced with a real editable UI (add/edit/remove/reset, per-field inputs) backed by
-  `getBuckets()`/`saveBuckets()`.
-- Tests: 1 new integration test in `automation-service.test.ts` proving a bucket saved via
-  `settingsRepo.saveBuckets()` is exactly what reaches `scoreJob()` (not the old default) — the
-  literal DONE WHEN. Full suite 707/707, build clean, `tsc --noEmit` clean.
-
-### Item 7 — ATS language alignment (done)
-
-Genuine synonym recognition ("forecasting model" ≈ "predictive analytics") needs semantic
-judgment, not string matching — extended the requirement map's EXISTING LLM call rather than
-inventing a separate mechanism.
-
-- `lib/schemas.ts`: new `TerminologyMismatchSchema` (`jdTerm` + `profileTerm`), added as an
-  optional `terminologyMismatch` field on `RequirementCoverageSchema` — set only when a
-  requirement has real evidence (`rating` strong/weak) AND that evidence's wording genuinely
-  differs from the JD's own.
-- `lib/prompts.ts`'s `requirementMapPrompt`: new STEP 3 instructing this explicitly as
-  "terminology MAPPING, not keyword stuffing" — surfacing a real synonym gap for the candidate to
-  see, never an instruction to insert the JD's words into their profile.
-- `app/resume-builder.tsx`: the requirement-map row now shows a "DIFFERENT WORDING" line with both
-  phrasings whenever `terminologyMismatch` is set.
-- `app/api/resume/requirement-map/route.ts` already spreads the full model response through
-  unchanged — no stripping to fix.
-- Tests: 5 new in `requirement-coverage-schema.test.ts` (schema accepts/rejects the field
-  correctly, a full mixed-coverage map parses), 1 new in `prompts.test.ts` confirming the prompt
-  instruction and its exact example pair. Full suite 713/713, build clean, `tsc --noEmit` clean.
-
-### Item 9 — Collector-per-source refactor (done, delegated to a subagent — research-heavy per this item's own note)
-
-- New `JobCollector` interface (`lib/server/services/collectors/types.ts`) — `collect(input):
-  Promise<CollectorResult>`, every collector returning `{jobs: [], error?}` on any failure, never
-  throwing. One module per source under `lib/server/services/collectors/`: `greenhouse.ts`,
-  `ashby.ts`, `lever.ts`, `adzuna.ts`, `exa.ts` (portal + company-domain variants) — each extracted
-  from the old inline fetchers with byte-identical `JobResult` output (proven by tests comparing
-  the collector's output to the pre-refactor shape). `index.ts` is the barrel + `ATS_COLLECTORS`
-  dispatch map.
-- `lib/server/services/scan-service.ts` is now pure orchestration: builds a `CollectorInput` per
-  company/source, calls the matching collector, folds errors into the existing `errors[]` array.
-  The dedupe → relevance-filter → `rejected`-reasons → counts pipeline (items 1 and 3's work) is
-  untouched.
-- **SmartRecruiters** (new): a real collector for the public, unauthenticated Postings API
-  (`api.smartrecruiters.com/v1/companies/{id}/postings`), now actually wired into
-  `ATS_COLLECTORS` — `CompanyTarget`s with `ats: "smartrecruiters"` (already a valid enum value,
-  previously unhandled and falling through to Exa company-search) now dispatch to it directly.
-  **Caveat**: the live API/docs were unreachable from this sandbox (egress blocked), so the
-  response schema is a best-effort reconstruction, not fetched-and-confirmed — flagged in a code
-  comment. It degrades to `{jobs: []}` on any schema mismatch, never a crash or bad data, so a
-  wrong guess costs nothing but a silently-empty result until someone can verify against a live
-  response.
-  Also assumed a `atsTenant ?? companyTarget.id` fallback for the two seed SmartRecruiters targets
-  (`roland-berger`, `talabat`, in `lib/company-targets.ts`), which don't set `atsTenant` — worth
-  setting explicitly once the real SmartRecruiters `companyIdentifier` values are confirmed.
-- **Naukri finding**: no public, unauthenticated, per-company postings API exists (confirmed by
-  reading the algsoch/job_agentic reference repo's own Naukri collector, which is an HTML scraper,
-  not an API client). Per this project's own hard rule ("scraped content is untrusted, never a
-  trusted structured source") and the no-fabrication instruction, `naukriCollector` does **not**
-  scrape — it always returns a clean `{jobs: [], error: "..."}` naming exactly why, never touching
-  the network. Naukri is already indirectly covered today: `REGION_PORTAL_DOMAINS.india` already
-  lists `naukri.com` as an Exa portal-search domain, so India-region scans already surface Naukri
-  postings via Exa (`source: "exa-portal"`) — this was true before the refactor too, just not
-  previously documented as "the Naukri story."
-- Tests: 14 new in `lib/__tests__/collectors.test.ts` (Greenhouse/Ashby/Lever producing identical
-  output to the pre-refactor shape, all clean-failure paths, SmartRecruiters success + both
-  failure paths + `ATS_COLLECTORS` wiring, Naukri's always-clean-failure + non-wiring). All
-  pre-existing `scan-service.test.ts`/`automation-service.test.ts` tests pass unchanged. Full
-  suite 727/727, build clean, `tsc --noEmit` clean — all three verified independently by the
-  orchestrating session, not just trusted from the subagent's own report.
+## P2-1 Feedback capture and playbook proposals
+Status: TODO

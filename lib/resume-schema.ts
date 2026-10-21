@@ -155,6 +155,7 @@ export const ResumeContentSchema = z.object({
   bulletRanking: z.array(BulletRankingEntrySchema).nullable().optional().describe("EVERY available bullet id with a 0-100 relevance to this JD, most relevant first. The system builds the selection from this."),
   reserve: z.array(ReserveBulletSchema).nullable().optional().describe("Set by the system, never the model."),
   keyWinCompanies: z.array(z.string()).nullable().optional().describe("Set by the system, never the model: the employer behind each keyWins item, index-aligned, so role balance can count Key Projects items."),
+  skillEvidence: z.array(z.object({ skill: z.string(), sourceBulletId: z.string().nullable() })).nullable().optional().describe("Set by the system: the selected bullet evidencing each listed skill."),
   requirementCoverage: z.array(z.object({
     requirement: z.string(),
     sourceBulletId: z.string().nullable().optional(),

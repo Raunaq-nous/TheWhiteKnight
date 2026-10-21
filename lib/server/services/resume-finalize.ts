@@ -12,7 +12,7 @@ import type { Profile } from "../../profile";
 import type { Application } from "../../store";
 import type { ResumeArchetype } from "../../resume-archetype";
 import { applyConfidentialitySubstitutionsToResumeContent, runConfidentialityGate, renderedResumeText, type ConfidentialityGateResult } from "../../resume-confidentiality";
-import { selectResumeSkills } from "../../resume-skills";
+import { selectResumeSkills, skillEvidence } from "../../resume-skills";
 import { finalizeEducation } from "../../resume-education";
 import { summaryViolations, repairSummary } from "../../resume-summary";
 import { keywordOverlap, tokens } from "../../resume-jd";
@@ -43,10 +43,14 @@ const SummarySchema = z.object({ summary: z.string() });
 export async function finalizeResumeContent(content: ResumeContent, ctx: FinalizeContext): Promise<{
   content: ResumeContent; summaryReport: SummaryReport; confidentialityGate: ConfidentialityGateResult;
 }> {
+  // Skills only where a SELECTED bullet evidences them.
+  const bullets = content.experience.flatMap(e => e.bullets.map(b => ({ sourceBulletId: b.sourceBulletId, text: b.text })));
+  const skills = selectResumeSkills(content.skills ?? [], { jdTerms: ctx.jdTerms, aiJd: ctx.aiJd, technicalJd: ctx.technicalJd, bullets });
   const withSections: ResumeContent = {
     ...content,
     projects: [], keyWins: [], keyWinIds: [], keyWinCompanies: [],
-    skills: selectResumeSkills(content.skills ?? [], { jdTerms: ctx.jdTerms, aiJd: ctx.aiJd, technicalJd: ctx.technicalJd }),
+    skills,
+    skillEvidence: skillEvidence(skills, bullets),
     education: finalizeEducation(content.education ?? [], ctx.profile),
   };
   let out = applyConfidentialitySubstitutionsToResumeContent(withSections, undefined, ctx.archetype);

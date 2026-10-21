@@ -67,8 +67,12 @@ async function main() {
   console.log(`bullets per employer: ${data.experience.map(e => `${e.company}=${e.bullets.length}`).join(", ")}`);
   printExperience(data);
 
-  console.log(`\n=== SKILLS ===`);
-  for (const g of data.skills) console.log(`  ${g.category}: ${g.items.join(", ")}`);
+  console.log(`\n=== SKILLS (each with the selected bullet that evidences it) ===`);
+  const evidence = new Map((data.skillEvidence ?? []).map(x => [x.skill, x.sourceBulletId]));
+  for (const g of data.skills) {
+    console.log(`  ${g.category}:`);
+    for (const item of g.items) console.log(`    - ${item} <- ${evidence.get(item) ? `[${evidence.get(item)}]` : "NO EVIDENCE"}`);
+  }
   console.log(`\n=== EDUCATION ===`);
   for (const ed of data.education) {
     console.log(`  ${ed.institution} | ${ed.degree}${ed.field ? `, ${ed.field}` : ""} | ${ed.years}`);

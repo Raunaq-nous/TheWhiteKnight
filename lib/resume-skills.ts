@@ -3,7 +3,9 @@
 // taxonomy (config skillsTaxonomy). The Technical row appears only for a
 // technical role; the AI row only for an AI-related or technical JD.
 // Generic filler ("Strategic Initiatives", "Business Development",
-// "Data Analysis") never appears.
+// "Data Analysis") never appears. Every listed skill must be EVIDENCED by
+// at least one selected bullet (config skillEvidencePatterns, else most of
+// its words in the bullet); an unevidenced skill is dropped.
 
 import type { ResumeSkillGroup } from "./resume-schema";
 import { tokens } from "./resume-jd";
@@ -12,7 +14,8 @@ import profileRulesConfig from "../config/profile-rules.json";
 export const SKILLS_MAX_ROWS = 2;
 export const SKILLS_MAX_ITEMS = 6;
 
-const cfg = profileRulesConfig as { skillsTaxonomy?: Record<string, string[]>; skillsFiller?: string[] };
+const cfg = profileRulesConfig as { skillsTaxonomy?: Record<string, string[]>; skillsFiller?: string[]; skillEvidencePatterns?: Record<string, string> };
+const EVIDENCE: Map<string, RegExp> = new Map(Object.entries(cfg.skillEvidencePatterns ?? {}).map(([k, v]) => [k.toLowerCase(), new RegExp(v, "i")]));
 export const SKILLS_TAXONOMY: Record<string, string[]> = cfg.skillsTaxonomy ?? {};
 const FILLER = new Set((cfg.skillsFiller ?? []).map(s => s.toLowerCase()));
 const TECHNICAL_ROW = "Technical";
@@ -28,7 +31,34 @@ function matchesJd(item: string, jdTerms: Set<string>): number {
   return hit / t.length >= 0.5 ? hit : 0;
 }
 
-export type SkillsContext = { jdTerms: Set<string>; aiJd: boolean; technicalJd: boolean };
+export type EvidenceBullet = { sourceBulletId: string; text: string };
+export type SkillEvidence = { skill: string; sourceBulletId: string };
+
+/** The first selected bullet that evidences `skill`, or null. */
+export function evidenceFor(skill: string, bullets: EvidenceBullet[]): string | null {
+  const pattern = EVIDENCE.get(skill.toLowerCase());
+  const words = [...tokens(skill)];
+  for (const b of bullets) {
+    if (pattern ? pattern.test(b.text) : words.length > 0 && words.filter(w => tokens(b.text).has(w)).length / words.length >= 0.5) {
+      return b.sourceBulletId;
+    }
+  }
+  return null;
+}
+
+/** Each listed skill with the bullet id that evidences it (null when none does). */
+export function skillEvidence(groups: ResumeSkillGroup[], bullets: EvidenceBullet[]): { skill: string; sourceBulletId: string | null }[] {
+  return groups.flatMap(g => g.items.map(skill => ({ skill, sourceBulletId: evidenceFor(skill, bullets) })));
+}
+
+/** Drops every skill no selected bullet evidences, and any row left empty. */
+export function keepEvidencedSkills(groups: ResumeSkillGroup[], bullets: EvidenceBullet[]): ResumeSkillGroup[] {
+  return groups
+    .map(g => ({ ...g, items: g.items.filter(item => evidenceFor(item, bullets) !== null) }))
+    .filter(g => g.items.length > 0);
+}
+
+export type SkillsContext = { jdTerms: Set<string>; aiJd: boolean; technicalJd: boolean; bullets?: EvidenceBullet[] };
 
 /**
  * The resume's skills rows. The model's picks count only when they are
@@ -45,6 +75,8 @@ export function selectResumeSkills(modelSkills: ResumeSkillGroup[], ctx: SkillsC
       .filter(item => !FILLER.has(item.toLowerCase()))
       .map((item, i) => ({ item, i, model: picked.has(norm(item)), jd: matchesJd(item, ctx.jdTerms) }))
       .filter(x => x.model || x.jd > 0)
+      // Evidenced by a selected bullet, when the bullets are known.
+      .filter(x => !ctx.bullets || evidenceFor(x.item, ctx.bullets) !== null)
       .sort((a, b) => Number(b.model) - Number(a.model) || b.jd - a.jd || a.i - b.i)
       .slice(0, SKILLS_MAX_ITEMS)
       .map(x => x.item);
