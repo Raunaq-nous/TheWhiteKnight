@@ -1,0 +1,54 @@
+{
+  "search_metadata": { "id": "6716a0c2e1f0a1b2c3d4e5f6", "status": "Success", "json_endpoint": "https://serpapi.com/searches/0000/6716a0c2e1f0a1b2c3d4e5f6.json", "created_at": "2026-10-20 09:12:01 UTC", "processed_at": "2026-10-20 09:12:01 UTC", "google_jobs_url": "https://www.google.com/search?q=product+manager&udm=8", "total_time_taken": 1.92 },
+  "search_parameters": { "q": "product manager", "engine": "google_jobs", "location_requested": "London, England, United Kingdom", "location_used": "London,England,United Kingdom", "google_domain": "google.com", "hl": "en", "gl": "uk" },
+  "jobs_results": [
+    {
+      "title": "Senior Product Manager, Payments",
+      "company_name": "Acme Fintech",
+      "location": "London, UK",
+      "via": "Acme Fintech Careers",
+      "share_link": "https://www.google.com/search?ibp=htl;jobs&q=product+manager#htidocid=abc123",
+      "thumbnail": "https://serpapi.com/searches/0000/images/acme.jpeg",
+      "extensions": ["3 days ago", "Full-time", "Health insurance"],
+      "detected_extensions": { "posted_at": "3 days ago", "schedule_type": "Full-time", "health_insurance": true },
+      "description": "Acme Fintech is hiring a Senior Product Manager to own our payments roadmap.\n\nYou will work with engineering and design.",
+      "job_highlights": [{ "title": "Qualifications", "items": ["5+ years of product management"] }],
+      "apply_options": [
+        { "title": "LinkedIn", "link": "https://uk.linkedin.com/jobs/view/senior-product-manager-payments-4012345678" },
+        { "title": "Acme Fintech Careers", "link": "https://careers.acmefintech.com/jobs/senior-pm-payments?utm_source=google_jobs_apply" },
+        { "title": "Indeed", "link": "https://uk.indeed.com/viewjob?jk=1a2b3c4d5e6f" }
+      ],
+      "job_id": "eyJqb2JfdGl0bGUiOiJTZW5pb3IgUHJvZHVjdCBNYW5hZ2VyLCBQYXltZW50cyJ9"
+    },
+    {
+      "title": "Product Manager (Remote)",
+      "company_name": "Globex",
+      "location": "Anywhere",
+      "via": "LinkedIn",
+      "share_link": "https://www.google.com/search?ibp=htl;jobs&q=product+manager#htidocid=def456",
+      "extensions": ["Work from home", "Full-time"],
+      "detected_extensions": { "posted_at": "1 day ago", "work_from_home": true, "schedule_type": "Full-time" },
+      "description": "Globex is looking for a Product Manager to drive growth experiments.",
+      "apply_options": [
+        { "title": "LinkedIn", "link": "https://www.linkedin.com/jobs/view/product-manager-remote-4098765432" },
+        { "title": "Glassdoor", "link": "https://www.glassdoor.co.uk/job-listing/product-manager-globex-JV_KO0,15_KE16,22.htm?jl=1009876543" }
+      ],
+      "job_id": "eyJqb2JfdGl0bGUiOiJQcm9kdWN0IE1hbmFnZXIgKFJlbW90ZSkifQ=="
+    },
+    {
+      "title": "Associate Product Manager",
+      "company_name": "Initech",
+      "location": "Manchester, UK",
+      "via": "Initech",
+      "share_link": "https://www.google.com/search?ibp=htl;jobs&q=product+manager#htidocid=ghi789",
+      "extensions": ["2 weeks ago"],
+      "detected_extensions": { "posted_at": "2 weeks ago" },
+      "description": "Join Initech as an Associate Product Manager.",
+      "job_id": "eyJqb2JfdGl0bGUiOiJBc3NvY2lhdGUgUHJvZHVjdCBNYW5hZ2VyIn0="
+    }
+  ],
+  "serpapi_pagination": {
+    "next_page_token": "eyJmYyI6IkVvNERDcjRDUVVsa2NEUmFNbUZXIn0=",
+    "next": "https://serpapi.com/search.json?engine=google_jobs&next_page_token=eyJmYyI6IkVvNERDcjRDUVVsa2NEUmFNbUZXIn0%3D&q=product+manager"
+  }
+}

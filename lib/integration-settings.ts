@@ -14,6 +14,14 @@ export type IntegrationSettings = {
   adzunaAppId?: string;
   adzunaAppKey?: string;
   portfolioGithubToken?: string;
+  // Job-alert inbox (IMAP), read-only. Stored like the other secrets: in the
+  // user's own database, never in browser storage.
+  imapHost?: string;
+  imapPort?: number;
+  imapSecure?: boolean;
+  imapUser?: string;
+  imapPassword?: string;
+  imapFolder?: string;
 };
 
 export function getIntegrationSettings(): IntegrationSettings {

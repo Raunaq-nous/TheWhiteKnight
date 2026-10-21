@@ -1,0 +1,40 @@
+{
+  "apiVersion": "2",
+  "documentationUrl": "https://jobicy.com/jobs-rss-feed",
+  "friendlyNotice": "Usage of our API is subject to our terms. Please link back to jobicy.com and the original job listing.",
+  "jobCount": 2,
+  "xRayHash": "9f8e7d6c5b4a",
+  "clientKey": "anon",
+  "lastUpdate": "2026-10-20 12:00:00",
+  "jobs": [
+    {
+      "id": 118422,
+      "url": "https://jobicy.com/jobs/118422-senior-product-manager",
+      "jobSlug": "118422-senior-product-manager",
+      "jobTitle": "Senior Product Manager",
+      "companyName": "Acme Fintech",
+      "companyLogo": "https://jobicy.com/data/server-nyc0409/galaxy/mercury/2026/10/acme.png",
+      "jobIndustry": ["Product &amp; Operations"],
+      "jobType": ["full-time"],
+      "jobGeo": "UK, EMEA",
+      "jobLevel": "Senior",
+      "jobExcerpt": "Own the payments roadmap for a remote fintech.",
+      "jobDescription": "<p>Own the payments roadmap.</p>",
+      "pubDate": "2026-10-20 09:30:11"
+    },
+    {
+      "id": 118400,
+      "url": "https://jobicy.com/jobs/118400-product-manager-growth",
+      "jobSlug": "118400-product-manager-growth",
+      "jobTitle": "Product Manager, Growth",
+      "companyName": "Globex",
+      "jobIndustry": ["Product &amp; Operations"],
+      "jobType": ["full-time"],
+      "jobGeo": "Anywhere",
+      "jobLevel": "Midweight",
+      "jobExcerpt": "Drive growth experiments.",
+      "jobDescription": "<p>Drive growth.</p>",
+      "pubDate": "2026-10-19 15:00:00"
+    }
+  ]
+}

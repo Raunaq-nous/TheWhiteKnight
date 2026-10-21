@@ -10,7 +10,7 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 | P0-1 | Resume content and structure | DONE | 2fe1c57 + this item's commit |
 | P0-2 | Fresh-context evaluator gate | DONE | see section |
 | P0-3 | Model gateway on OpenRouter | DONE | see section |
-| P1-1 | Sourcing expansion | TODO | |
+| P1-1 | Sourcing expansion | IN PROGRESS | WIP |
 | P1-2 | Career tracks and skill pathways (v1) | TODO | |
 | P2-1 | Feedback capture and playbook proposals | TODO | |
 
@@ -64,7 +64,10 @@ Status: DONE
 Verification: npm test 939 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P1-1 Sourcing expansion
-Status: TODO
+Status: IN PROGRESS (WIP commit; collectors from two failed subagents are on disk but not yet verified or registered)
+
+Done so far (not yet wired into scans): lib/job-sources.ts (source catalogue and priority), lib/job-dedupe.ts (cross-source dedupe keeping the company-direct URL), lib/ghost-jobs.ts (stale/repost/gone flags), lib/source-analytics.ts (conversion by source, ranking with category priors), JD fetch order direct -> Jina -> Exa (automated mode never calls Exa or fetches restricted portals), lib/alert-email.ts + lib/server/services/alert-inbox.ts (IMAP alert inbox, lookup-only portals), Application.source/ghost fields, IMAP fields in integration settings, imapflow + mailparser dependencies.
+Remaining: verify and test the collector files, register them, scan integration (autopilot keyless/company-direct preference, no Exa in autopilot, budgets), ghost flagging in autopilot, attribution on save, /analytics by source, ATS detector UI/route, settings UI for keys and IMAP, track-aware scanning, tests.
 
 ## P1-2 Career tracks and skill pathways (v1)
 Status: TODO

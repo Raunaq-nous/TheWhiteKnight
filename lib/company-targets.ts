@@ -3,7 +3,10 @@
 
 export type Region = "global" | "middle-east" | "apac" | "india" | "north-america" | "europe";
 export type Sector = "consulting" | "big-tech-strategy" | "ai-emerging" | "fintech" | "ecommerce" | "investment" | "industry";
-export type ATSPlatform = "greenhouse" | "ashby" | "lever" | "workday" | "smartrecruiters" | "custom";
+export type ATSPlatform =
+  | "greenhouse" | "ashby" | "lever" | "workday" | "smartrecruiters"
+  | "workable" | "recruitee" | "personio" | "teamtailor" | "rippling"
+  | "custom";
 
 export type CompanyTarget = {
   id: string;

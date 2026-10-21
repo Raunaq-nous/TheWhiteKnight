@@ -7,6 +7,8 @@ import {
 import { showToast } from "./toast";
 import type { ResumeContent } from "./resume-schema";
 import type { ArtifactEvaluation, EvaluatedKind } from "./evaluation";
+import type { JobSource } from "./job-sources";
+import type { GhostCheck } from "./ghost-jobs";
 import type { ResumeArchetype } from "./resume-archetype";
 import type { ResumeAuditResult } from "./schemas";
 
@@ -90,6 +92,14 @@ export type Application = {
   // resume above, and the settings it was measured under. Cleared whenever
   // the resume content changes, so a stale count is never shown.
   resumeExport?: ResumeExportMeasurement | null;
+  // Where the job came from (attribution and conversion by source), the
+  // board an aggregator found it on, and its ATS posting id.
+  source?: JobSource;
+  sourceVia?: string;
+  externalId?: string;
+  // Ghost-job check: stale (>30 days), repost, or gone from its ATS feed.
+  // Flagged jobs stay visible but are never staged by autopilot.
+  ghost?: GhostCheck | null;
   // The fresh-context evaluator's latest verdict per artifact kind (resume,
   // cover letter, outreach drafts), with its findings (lib/evaluation.ts).
   evaluations?: Partial<Record<EvaluatedKind, ArtifactEvaluation>>;

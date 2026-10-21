@@ -1,0 +1,39 @@
+{
+  "updatedAt": 1761030000,
+  "offset": 0,
+  "limit": 20,
+  "totalCount": 3,
+  "jobs": [
+    {
+      "title": "Senior Product Manager",
+      "excerpt": "Own the payments roadmap at a remote-first fintech.",
+      "companyName": "Acme Fintech",
+      "companyLogo": "https://cdn-images.himalayas.app/acme.png",
+      "employmentType": "Full Time",
+      "minSalary": 110000,
+      "maxSalary": 140000,
+      "seniority": ["Senior"],
+      "currency": "USD",
+      "locationRestrictions": ["United Kingdom", "Germany"],
+      "timezoneRestrictions": [0, 1],
+      "categories": ["Product-Management"],
+      "parentCategories": ["Product"],
+      "description": "<p>Own the payments roadmap.</p>",
+      "pubDate": 1760950000,
+      "expiryDate": 1765000000,
+      "applicationLink": "https://himalayas.app/companies/acme-fintech/jobs/senior-product-manager/apply",
+      "guid": "https://himalayas.app/companies/acme-fintech/jobs/senior-product-manager"
+    },
+    {
+      "title": "Customer Success Lead",
+      "excerpt": "Help customers succeed.",
+      "companyName": "Globex",
+      "locationRestrictions": [],
+      "categories": ["Customer-Success"],
+      "description": "<p>Help customers.</p>",
+      "pubDate": 1760900000,
+      "applicationLink": "https://himalayas.app/companies/globex/jobs/customer-success-lead/apply",
+      "guid": "https://himalayas.app/companies/globex/jobs/customer-success-lead"
+    }
+  ]
+}

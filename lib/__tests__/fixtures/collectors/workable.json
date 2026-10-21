@@ -1,0 +1,50 @@
+{
+  "name": "Acme Robotics",
+  "description": "<p>We build robots.</p>",
+  "jobs": [
+    {
+      "title": "Head of Strategy &amp; Operations",
+      "shortcode": "A1B2C3D4E5",
+      "code": "",
+      "employment_type": "Full-time",
+      "telecommuting": false,
+      "department": "Operations",
+      "url": "https://apply.workable.com/j/A1B2C3D4E5",
+      "shortlink": "https://apply.workable.com/j/A1B2C3D4E5",
+      "application_url": "https://apply.workable.com/j/A1B2C3D4E5/apply",
+      "published_on": "2026-09-30",
+      "created_at": "2026-09-29",
+      "country": "United Kingdom",
+      "city": "London",
+      "state": "England",
+      "education": "",
+      "experience": "Mid-Senior level",
+      "function": "Strategy/Planning",
+      "industry": "Robotics",
+      "locations": [{ "country": "United Kingdom", "countryCode": "GB", "city": "London", "region": "England", "hidden": false }],
+      "description": "<p>Lead strategy and operations across the company.</p>"
+    },
+    {
+      "title": "AI Product Manager",
+      "shortcode": "F6G7H8I9J0",
+      "code": "",
+      "employment_type": "Full-time",
+      "telecommuting": true,
+      "department": "Product",
+      "url": "https://apply.workable.com/j/F6G7H8I9J0",
+      "shortlink": "https://apply.workable.com/j/F6G7H8I9J0",
+      "application_url": "https://apply.workable.com/j/F6G7H8I9J0/apply",
+      "published_on": "2026-10-10",
+      "created_at": "2026-10-09",
+      "country": "Germany",
+      "city": "Berlin",
+      "state": "",
+      "education": "",
+      "experience": "",
+      "function": "Product Management",
+      "industry": "Robotics",
+      "locations": [{ "country": "Germany", "countryCode": "DE", "city": "Berlin", "region": "", "hidden": false }],
+      "description": "<p>Own the AI roadmap.</p>"
+    }
+  ]
+}

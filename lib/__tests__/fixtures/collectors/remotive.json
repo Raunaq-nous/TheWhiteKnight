@@ -1,0 +1,35 @@
+{
+  "0-legal-notice": "Remotive API Legal Notice: please link back to the URL found on remotive.com and mention Remotive as a source.",
+  "job-count": 2,
+  "total-job-count": 1532,
+  "jobs": [
+    {
+      "id": 2045113,
+      "url": "https://remotive.com/remote-jobs/product/senior-product-manager-2045113",
+      "title": "Senior Product Manager",
+      "company_name": "Acme Fintech",
+      "company_logo": "https://remotive.com/job/2045113/logo",
+      "category": "Product",
+      "tags": ["fintech", "payments"],
+      "job_type": "full_time",
+      "publication_date": "2026-10-18T14:22:31",
+      "candidate_required_location": "Europe",
+      "salary": "",
+      "description": "<p>Own the <strong>payments</strong> roadmap.</p>"
+    },
+    {
+      "id": 2045220,
+      "url": "https://remotive.com/remote-jobs/product/product-manager-growth-2045220",
+      "title": "Product Manager, Growth",
+      "company_name": "Globex",
+      "company_logo": "https://remotive.com/job/2045220/logo",
+      "category": "Product",
+      "tags": ["growth"],
+      "job_type": "full_time",
+      "publication_date": "2026-10-19T08:01:00",
+      "candidate_required_location": "Worldwide",
+      "salary": "$120k - $150k",
+      "description": "<p>Drive growth experiments.</p>"
+    }
+  ]
+}

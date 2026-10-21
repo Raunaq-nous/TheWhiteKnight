@@ -1,0 +1,67 @@
+{
+  "status": "OK",
+  "request_id": "5f8b3c7e-1a2b-4c3d-9e8f-0a1b2c3d4e5f",
+  "parameters": { "query": "product manager in london", "page": 1, "num_pages": 1, "date_posted": "all", "country": "us", "language": "en" },
+  "data": [
+    {
+      "job_id": "Q2xR4VbT1dEAAAAAAA==",
+      "job_title": "Senior Product Manager",
+      "employer_name": "Acme Fintech",
+      "employer_logo": "https://logo.example/acme.png",
+      "employer_website": "https://acmefintech.com",
+      "job_publisher": "Acme Fintech Careers",
+      "job_employment_type": "FULLTIME",
+      "job_apply_link": "https://careers.acmefintech.com/jobs/senior-pm",
+      "job_apply_is_direct": true,
+      "apply_options": [
+        { "publisher": "Acme Fintech Careers", "apply_link": "https://careers.acmefintech.com/jobs/senior-pm", "is_direct": true },
+        { "publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/4012345678", "is_direct": false }
+      ],
+      "job_description": "Own the payments roadmap end to end.",
+      "job_is_remote": false,
+      "job_posted_at": "3 days ago",
+      "job_posted_at_timestamp": 1760918400,
+      "job_posted_at_datetime_utc": "2026-10-17T00:00:00.000Z",
+      "job_location": "London, UK",
+      "job_city": "London",
+      "job_state": "England",
+      "job_country": "GB",
+      "job_google_link": "https://www.google.com/search?q=jobs&udm=8#vhid=Q2xR4VbT1dEAAAAAAA%3D%3D"
+    },
+    {
+      "job_id": "Zk9yUmVtb3RlAAAAAA==",
+      "job_title": "Product Manager, Growth",
+      "employer_name": "Globex",
+      "job_publisher": "LinkedIn",
+      "job_employment_type": "FULLTIME",
+      "job_apply_link": "https://www.linkedin.com/jobs/view/4098765432",
+      "job_apply_is_direct": false,
+      "apply_options": [
+        { "publisher": "LinkedIn", "apply_link": "https://www.linkedin.com/jobs/view/4098765432", "is_direct": false },
+        { "publisher": "Globex Jobs", "apply_link": "https://jobs.globex.com/apply/pm-growth", "is_direct": true }
+      ],
+      "job_description": "Drive growth experiments across the funnel.",
+      "job_is_remote": true,
+      "job_posted_at_datetime_utc": "2026-10-19T12:00:00.000Z",
+      "job_city": null,
+      "job_state": null,
+      "job_country": "GB",
+      "job_google_link": "https://www.google.com/search?q=jobs&udm=8#vhid=Zk9yUmVtb3RlAAAAAA%3D%3D"
+    },
+    {
+      "job_id": "SW5pdGVjaEFQTQAAAA==",
+      "job_title": "Associate Product Manager",
+      "employer_name": "Initech",
+      "job_publisher": "Indeed",
+      "job_apply_link": "https://uk.indeed.com/viewjob?jk=9z8y7x6w",
+      "job_apply_is_direct": false,
+      "apply_options": [{ "publisher": "Indeed", "apply_link": "https://uk.indeed.com/viewjob?jk=9z8y7x6w", "is_direct": false }],
+      "job_description": "Join Initech as an APM.",
+      "job_is_remote": false,
+      "job_posted_at_datetime_utc": "2026-10-10T08:30:00.000Z",
+      "job_city": "Manchester",
+      "job_state": "England",
+      "job_country": "GB"
+    }
+  ]
+}

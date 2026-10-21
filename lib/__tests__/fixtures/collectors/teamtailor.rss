@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations">
+  <channel>
+    <title>Acme Nordic - Jobs</title>
+    <link>https://acme.teamtailor.com/jobs</link>
+    <description>Jobs at Acme Nordic</description>
+    <item>
+      <title><![CDATA[Strategy & Insights Manager]]></title>
+      <description><![CDATA[<p>Drive <strong>strategy</strong> & insights.</p>]]></description>
+      <pubDate>Mon, 05 Oct 2026 08:30:00 +0200</pubDate>
+      <guid isPermaLink="false">a1b2c3d4-0000-4000-8000-000000000001</guid>
+      <link>https://acme.teamtailor.com/jobs/1234567-strategy-insights-manager</link>
+      <remoteStatus>hybrid</remoteStatus>
+      <tt:department>Strategy</tt:department>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Stockholm HQ</tt:name>
+          <tt:address>Sveavägen 1</tt:address>
+          <tt:zip>111 57</tt:zip>
+          <tt:city>Stockholm</tt:city>
+          <tt:country>Sweden</tt:country>
+        </tt:location>
+      </tt:locations>
+    </item>
+    <item>
+      <title>Product Lead, AI &amp; Data &#8211; Remote</title>
+      <description>&lt;p&gt;Build &amp;amp; ship AI products.&lt;/p&gt;</description>
+      <pubDate>Fri, 16 Oct 2026 10:00:00 +0000</pubDate>
+      <guid isPermaLink="false">a1b2c3d4-0000-4000-8000-000000000002</guid>
+      <link>https://acme.teamtailor.com/jobs/1234568-product-lead-ai-data</link>
+      <remoteStatus>fully</remoteStatus>
+      <tt:locations>
+        <tt:location>
+          <tt:name>Remote</tt:name>
+        </tt:location>
+      </tt:locations>
+    </item>
+  </channel>
+</rss>

@@ -10,7 +10,7 @@ export type JobResult = {
   company?: string;
   location?: string;
   url: string;
-  source: "greenhouse" | "ashby" | "lever" | "exa-portal" | "exa-company" | "adzuna" | "smartrecruiters" | "naukri";
+  source: JobSource;
   publishedDate?: string;
   snippet?: string;
   relevance?: number; // 0-100 score against query + roleKeywords
@@ -18,7 +18,18 @@ export type JobResult = {
   // (Greenhouse/Ashby/Lever/SmartRecruiters) — avoids a second fetch per job
   // for scoring.
   descriptionHtml?: string;
+  // The source's own id for the posting (ATS posting id, aggregator job id).
+  externalId?: string;
+  // Company-direct apply URL when the source knows it (aggregators often
+  // point at the employer's own form). Dedupe keeps this one.
+  applyUrl?: string;
+  // For aggregators: the board/publisher the listing came from.
+  via?: string;
+  remote?: boolean;
 };
+
+export type { JobSource } from "../../../job-sources";
+import type { JobSource } from "../../../job-sources";
 
 // A hint used by domain-search collectors (Exa company search) to map a
 // result URL's hostname back to the CompanyTarget it came from.
@@ -39,6 +50,11 @@ export type CollectorInput = {
   appKey?: string;
   numResults?: number;
   companyLookup?: CompanyDomainHint[];
+  // Company careers URL (Workday: https://{tenant}.wd{N}.myworkdayjobs.com/{locale}/{site}).
+  careersUrl?: string;
+  // Aggregators: free-text location filter and a page cap per call.
+  location?: string;
+  maxPages?: number;
 };
 
 export type CollectorResult = {
