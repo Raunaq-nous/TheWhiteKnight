@@ -43,19 +43,21 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.5",
 };
 
-/** Direct fetch: JSON-LD JobPosting first, else the page text. */
-async function fetchDirect(url: string, f: typeof fetch): Promise<FetchJdResult> {
+/** Direct fetch: JSON-LD JobPosting first, else the page text (LinkedIn: plus its text-metadata fallback). */
+async function fetchDirect(url: string, f: typeof fetch, linkedIn = false): Promise<FetchJdResult> {
   try {
     const res = await f(url, { headers: BROWSER_HEADERS, redirect: "follow" });
-    if (!res.ok) return { ok: false, status: res.status === 401 || res.status === 403 ? 422 : 422, error: `Page returned ${res.status}` };
+    if (!res.ok) return { ok: false, status: 422, error: `Page returned ${res.status}` };
     const html = await res.text();
     const ld = extractJobPostingFromLdJson(html);
-    if (ld && ld.text.length >= MIN_TEXT) {
+    if (ld && ld.text.trim()) {
+      // A parsed JSON-LD JobPosting is authoritative; forward its fields.
       return { ok: true, text: ld.text.slice(0, 12000), source: "direct", ...(ld.company || ld.title || ld.location ? { company: ld.company, role: ld.title, location: ld.location } : {}) };
     }
     const text = htmlToText(html);
-    if (text.length < MIN_TEXT) return { ok: false, status: 422, error: "Page content too short or empty." };
-    return { ok: true, text: text.slice(0, 8000), source: "direct" };
+    if (text.length < 100) return { ok: false, status: 422, error: "Page content too short or empty." };
+    const fields = linkedIn ? extractLinkedInMetadataFromText(text) : null;
+    return { ok: true, text: text.slice(0, 8000), source: "direct", ...(fields ? { company: fields.company, role: fields.role, location: fields.location } : {}) };
   } catch (e) {
     return { ok: false, status: 422, error: (e as Error).message };
   }
@@ -125,7 +127,7 @@ export async function fetchJdText(rawUrl: string, optsOrExaKey?: FetchJdOptions 
       const exa = await fetchExa(url, f, opts.exaApiKey, linkedIn);
       if (exa.ok) return exa;
     }
-    const direct = await fetchDirect(url, f);
+    const direct = await fetchDirect(url, f, linkedIn);
     if (direct.ok) return direct;
     return {
       ok: false, status: 422,
