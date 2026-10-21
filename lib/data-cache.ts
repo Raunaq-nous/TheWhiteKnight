@@ -36,7 +36,7 @@ const EMPTY: CacheData = {
   skillPlan: null,
   skillStatus: {},
   notifications: [],
-  modelSettings: { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" },
+  modelSettings: { provider: "together", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo" },
   integrationSettings: {},
   companyTargets: [],
   batchState: null,

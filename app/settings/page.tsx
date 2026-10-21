@@ -195,7 +195,7 @@ export default function SettingsPage() {
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>
           <div className="label" style={{ marginBottom: 16 }}>AI MODEL</div>
           <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
-            All AI calls run on the server — your API key is sent with each request but never stored server-side. DeepSeek is included by default; bring your own key for Claude or OpenAI.
+            All AI calls run on the server — your API key is sent with each request but never stored server-side. A serverless Together model is included by default; bring your own key for Claude or OpenAI.
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
