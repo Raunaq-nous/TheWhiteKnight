@@ -6,6 +6,7 @@ import {
 } from "./data-cache";
 import { showToast } from "./toast";
 import type { ResumeContent } from "./resume-schema";
+import type { ArtifactEvaluation, EvaluatedKind } from "./evaluation";
 import type { ResumeArchetype } from "./resume-archetype";
 import type { ResumeAuditResult } from "./schemas";
 
@@ -89,6 +90,9 @@ export type Application = {
   // resume above, and the settings it was measured under. Cleared whenever
   // the resume content changes, so a stale count is never shown.
   resumeExport?: ResumeExportMeasurement | null;
+  // The fresh-context evaluator's latest verdict per artifact kind (resume,
+  // cover letter, outreach drafts), with its findings (lib/evaluation.ts).
+  evaluations?: Partial<Record<EvaluatedKind, ArtifactEvaluation>>;
 };
 
 export type ResumeExportMeasurement = {

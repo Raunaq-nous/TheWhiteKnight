@@ -7,6 +7,9 @@ import { addContact, Contact } from "../lib/contacts-store";
 import { getIntegrationSettings } from "../lib/integration-settings";
 import { generateHMOutreach, generateLinkedInDM, generateReferralDM, generateCEOColdEmail, ContactProfile } from "../lib/generate";
 import { queueDM, queueOutreach, queueReferralDM, queueCEOEmail } from "../lib/notifications";
+import { updateApplication } from "../lib/store";
+import { EvaluationPanel } from "./evaluation-panel";
+import type { ArtifactEvaluation, EvaluatedKind } from "../lib/evaluation";
 
 type SearchType = "hiring_manager" | "referral_candidate" | "ceo" | "executive";
 
@@ -34,6 +37,8 @@ export function ContactsPanel({ app, profile, onClose }: { app: Application; pro
   const [results, setResults] = useState<ContactCard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // The independent review of the last draft (shown, never hidden).
+  const [lastEvaluation, setLastEvaluation] = useState<ArtifactEvaluation | null>(null);
   const [drafting, setDrafting] = useState<string | null>(null);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
@@ -96,19 +101,23 @@ export function ContactsPanel({ app, profile, onClose }: { app: Application; pro
 
     try {
       let content = "";
+      let evaluation: ArtifactEvaluation | null = null;
       if (action === "dm") {
-        content = await generateLinkedInDM(profile, app, target);
+        ({ content, evaluation } = await generateLinkedInDM(profile, app, target));
         queueDM(app.slug, app.company, app.role, content, { name: c.name, linkedinUrl: c.linkedinUrl, contactId: stored.id });
       } else if (action === "referral") {
-        content = await generateReferralDM(profile, app, target);
+        ({ content, evaluation } = await generateReferralDM(profile, app, target));
         queueReferralDM(app.slug, app.company, app.role, content, { name: c.name, linkedinUrl: c.linkedinUrl, contactId: stored.id });
       } else if (action === "outreach") {
-        content = await generateHMOutreach(profile, app, target);
+        ({ content, evaluation } = await generateHMOutreach(profile, app, target));
         queueOutreach(app.slug, app.company, app.role, content, { name: c.name, email: c.email, linkedinUrl: c.linkedinUrl, contactId: stored.id });
       } else if (action === "ceo-email") {
-        content = await generateCEOColdEmail(profile, app, target);
+        ({ content, evaluation } = await generateCEOColdEmail(profile, app, target));
         queueCEOEmail(app.slug, app.company, app.role, content, { name: c.name, email: c.email, linkedinUrl: c.linkedinUrl, contactId: stored.id });
       }
+      setLastEvaluation(evaluation);
+      const kind: Record<string, EvaluatedKind> = { dm: "linkedin-dm", referral: "referral-dm", outreach: "outreach-hm", "ceo-email": "ceo-cold-email" };
+      if (evaluation && kind[action]) updateApplication(app.id, { evaluations: { ...(app.evaluations ?? {}), [kind[action]]: evaluation } });
     } catch (e: any) {
       setError(`Draft failed: ${e.message}`);
     } finally {
@@ -145,6 +154,7 @@ export function ContactsPanel({ app, profile, onClose }: { app: Application; pro
       </div>
 
       {error && <div style={{ color: "var(--error)", fontSize: "0.75rem", fontFamily: "var(--font-mono)", marginBottom: 8 }}>{error}</div>}
+      <EvaluationPanel evaluation={lastEvaluation} />
 
       {results.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 500, overflowY: "auto" }}>

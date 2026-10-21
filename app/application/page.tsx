@@ -24,6 +24,8 @@ import { ResumeGapFillBox } from "../resume-gap-fill-box";
 import { ResumeBuilder } from "../resume-builder";
 import { ResumeAuditResult } from "../../lib/schemas";
 import { showToast } from "../../lib/toast";
+import { EvaluationPanel } from "../evaluation-panel";
+import type { ArtifactEvaluation } from "../../lib/evaluation";
 import { findDriftedBullets, replacementCandidates } from "../../lib/resume-bullet-drift";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
 
@@ -39,7 +41,7 @@ function ApplicationDetail() {
   const [nextActionText, setNextActionText] = useState("");
   const [saved, setSaved] = useState(false);
   const [generating, setGenerating] = useState<GenerationAction | null>(null);
-  const [aiOutput, setAiOutput] = useState<{ action: GenerationAction; content: string } | null>(null);
+  const [aiOutput, setAiOutput] = useState<{ action: GenerationAction; content: string; evaluation?: ArtifactEvaluation | null } | null>(null);
   const [skillGap, setSkillGap] = useState<SkillGapResult | null>(null);
   const [genError, setGenError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -156,13 +158,15 @@ function ApplicationDetail() {
   // Resume generation produces structured content (ResumeContent), not a
   // markdown string, so it's kept out of the generic handleGenerate/aiOutput
   // flow below and given its own handler + render surface (ResumeExportView).
-  const persistResumeContent = async (data: ResumeContent, archetype: ResumeArchetype, audit?: ResumeAuditResult | null, atsReadable?: boolean | null): Promise<boolean> => {
+  const persistResumeContent = async (data: ResumeContent, archetype: ResumeArchetype, audit?: ResumeAuditResult | null, atsReadable?: boolean | null, evaluation?: ArtifactEvaluation | null): Promise<boolean> => {
     if (!app) return false;
     const md = resumeContentToMarkdown(data, archetype);
     // Only touch resumeAudit when a fresh one was actually produced (the
     // interactive builder path) — leave whatever's already stored alone for
     // callers (refine, plain generate) that don't score every edit.
-    const auditChange = audit ? { resumeAudit: { ...audit, scoredAt: new Date().toISOString(), atsReadable: atsReadable ?? true } } : {};
+    const auditChange: Partial<Application> = audit ? { resumeAudit: { ...audit, scoredAt: new Date().toISOString(), atsReadable: atsReadable ?? true } } : {};
+    // A fresh evaluator verdict is stored with the application.
+    if (evaluation) auditChange.evaluations = { ...(app.evaluations ?? {}), resume: evaluation };
     setResumeContent(data);
     setResumeArchetypeUsed(archetype);
     setSavedResume(md);
@@ -184,8 +188,9 @@ function ApplicationDetail() {
     setResumeGenError("");
     try {
       const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
-      const { data, archetype, jdWarning, confidentialityGate } = await generateTailoredResume(profile, app, override);
-      await persistResumeContent(data, archetype);
+      const { data, archetype, jdWarning, confidentialityGate, evaluation } = await generateTailoredResume(profile, app, override);
+      await persistResumeContent(data, archetype, null, null, evaluation ?? null);
+      if (evaluation?.verdict === "FAIL") showToast("The independent review failed this resume. See its findings in the resume panel.", "error");
       // Thin JD: generation still ran, but say so rather than paper over it.
       if (jdWarning) showToast(jdWarning, "error");
       if (confidentialityGate && !confidentialityGate.ok) {
@@ -267,7 +272,8 @@ function ApplicationDetail() {
         setAiOutput(null);
       } else {
         let content = "";
-        if (action === "cover-letter") content = await generateCoverLetter(profile, app);
+        let evaluation: ArtifactEvaluation | null = null;
+        if (action === "cover-letter") ({ content, evaluation } = await generateCoverLetter(profile, app));
         else if (action === "executive-summary") content = await generateExecutiveSummary(profile, app);
         else if (action === "problem-solver") {
           setResearchingPitch(true);
@@ -293,17 +299,23 @@ function ApplicationDetail() {
           content = await generateProblemSolverPitch(profile, app, researchContext);
         }
         else if (action === "outreach-hm") {
-          content = await generateHMOutreach(profile, app);
+          ({ content, evaluation } = await generateHMOutreach(profile, app));
           queueOutreach(app.slug, app.company, app.role, content);
         } else if (action === "linkedin-dm") {
-          content = await generateLinkedInDM(profile, app);
+          ({ content, evaluation } = await generateLinkedInDM(profile, app));
           queueDM(app.slug, app.company, app.role, content);
         } else if (action === "ceo-cold-email") {
-          content = await generateCEOColdEmail(profile, app);
+          ({ content, evaluation } = await generateCEOColdEmail(profile, app));
           queueCEOEmail(app.slug, app.company, app.role, content);
         }
         setSkillGap(null);
-        setAiOutput({ action, content });
+        setAiOutput({ action, content, evaluation });
+        // Store the evaluator's verdict and findings with the application.
+        if (evaluation) {
+          const evaluations = { ...(app.evaluations ?? {}), [action]: evaluation };
+          setApp(prev => prev ? { ...prev, evaluations } : prev);
+          updateApplication(app.id, { evaluations });
+        }
       }
     } catch (e: any) {
       setGenError(e.message || "Generation failed.");
@@ -910,6 +922,7 @@ window.addEventListener('load', function() {
                   <button className="btn" style={{ fontSize: "0.625rem", padding: "4px 10px" }} onClick={() => setAiOutput(null)}>CLOSE</button>
                 </div>
               </div>
+              <EvaluationPanel evaluation={aiOutput.evaluation} />
               {aiOutput.content?.trim() ? (
                 <pre style={{ whiteSpace: "pre-wrap", fontFamily: "var(--font-mono)", fontSize: "0.8125rem", color: "var(--text-secondary)", lineHeight: 1.7, margin: 0, maxHeight: 600, overflowY: "auto" }}>
                   {aiOutput.content}
@@ -1069,6 +1082,7 @@ window.addEventListener('load', function() {
                   {resumeContent.certifications?.length ? ` · ${resumeContent.certifications.length} certification${resumeContent.certifications.length === 1 ? "" : "s"}` : ""}
                 </p>
                 <ResolvedResumeSettings app={app} archetype={resumeArchetypeUsed} />
+                <EvaluationPanel evaluation={app.evaluations?.resume} compact />
                 {(resumeContent.subFocus || (resumeContent.targetPriorities && resumeContent.targetPriorities.length > 0)) && (
                   <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--bg-primary)", borderRadius: 4, border: "1px dashed var(--border)" }}>
                     <div style={{ fontSize: "0.625rem", color: "var(--accent)", marginBottom: 4 }}>WHAT THE ENGINE TARGETED THIS RESUME AT</div>
@@ -1506,8 +1520,8 @@ window.addEventListener('load', function() {
       <ResumeBuilder
         app={app}
         onClose={() => setShowResumeBuilder(false)}
-        onConfirm={async (data, archetype, audit, atsReadable) => {
-          await persistResumeContent(data, archetype, audit, atsReadable);
+        onConfirm={async (data, archetype, audit, atsReadable, evaluation) => {
+          await persistResumeContent(data, archetype, audit, atsReadable, evaluation);
           setShowResumeBuilder(false);
           setShowResumeExport(true);
         }}

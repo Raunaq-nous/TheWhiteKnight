@@ -1,0 +1,6 @@
+{"criteria": [
+  {"id": "covers_requirements", "pass": false, "evidence": [], "finding": "Requirement 3 (cost and schedule risk diagnostics) has no supporting line."},
+  {"id": "quantified_outcomes", "pass": true, "evidence": ["cut manual review effort by 80%"], "finding": "ok"},
+  {"id": "no_repetition", "pass": true, "evidence": ["$10 billion portfolio of 16 projects"], "finding": "ok"},
+  {"id": "no_fluff", "pass": true, "evidence": ["a passionate, results-driven leader"], "finding": "ok"}
+]}

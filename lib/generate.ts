@@ -1,5 +1,6 @@
 // Client-side wrapper. All AI calls go through /api/generate so the API key stays server-side.
 import { Profile } from "./profile";
+import type { ArtifactEvaluation } from "./evaluation";
 import { Application } from "./store";
 import { getModelSettings } from "./model-settings";
 import { ResumeContent } from "./resume-schema";
@@ -7,6 +8,10 @@ import { ResumeArchetype } from "./resume-archetype";
 
 export type { GenerationAction, SkillGapResult, SkillBuilderResult, ContactProfile } from "./prompts";
 import type { GenerationAction, SkillGapResult, ContactProfile } from "./prompts";
+
+// A cover letter or outreach draft with the fresh-context evaluator's
+// verdict (never just the text: a FAIL must reach the user).
+export type EvaluatedText = { content: string; evaluation: ArtifactEvaluation | null };
 
 async function callGenerate<T = any>(action: GenerationAction, profile: Profile, app: Application, target?: ContactProfile, researchContext?: string, extra?: Record<string, unknown>): Promise<T> {
   const settings = getModelSettings();
@@ -29,8 +34,8 @@ export async function generateTailoredResume(
   profile: Profile,
   app: Application,
   resumeArchetype?: ResumeArchetype,
-): Promise<{ data: ResumeContent; archetype: ResumeArchetype; jdWarning?: string | null; confidentialityGate?: { ok: boolean; blockedTerms: string[] } }> {
-  return callGenerate<{ data: ResumeContent; archetype: ResumeArchetype; jdWarning?: string | null; confidentialityGate?: { ok: boolean; blockedTerms: string[] } }>(
+): Promise<{ data: ResumeContent; archetype: ResumeArchetype; jdWarning?: string | null; confidentialityGate?: { ok: boolean; blockedTerms: string[] }; evaluation?: ArtifactEvaluation | null }> {
+  return callGenerate<{ data: ResumeContent; archetype: ResumeArchetype; jdWarning?: string | null; confidentialityGate?: { ok: boolean; blockedTerms: string[] }; evaluation?: ArtifactEvaluation | null }>(
     "resume", profile, app, undefined, undefined, { resumeArchetype },
   );
 }
@@ -63,8 +68,8 @@ export async function refineResume(
   return res.json() as Promise<{ data: ResumeContent; archetype: ResumeArchetype }>;
 }
 
-export async function generateCoverLetter(profile: Profile, app: Application): Promise<string> {
-  return (await callGenerate<{ content: string }>("cover-letter", profile, app)).content;
+export async function generateCoverLetter(profile: Profile, app: Application): Promise<EvaluatedText> {
+  return callGenerate<EvaluatedText>("cover-letter", profile, app);
 }
 
 export async function generateExecutiveSummary(profile: Profile, app: Application): Promise<string> {
@@ -75,20 +80,20 @@ export async function generateProblemSolverPitch(profile: Profile, app: Applicat
   return (await callGenerate<{ content: string }>("problem-solver", profile, app, undefined, researchContext)).content;
 }
 
-export async function generateHMOutreach(profile: Profile, app: Application, target?: ContactProfile): Promise<string> {
-  return (await callGenerate<{ content: string }>("outreach-hm", profile, app, target)).content;
+export async function generateHMOutreach(profile: Profile, app: Application, target?: ContactProfile): Promise<EvaluatedText> {
+  return callGenerate<EvaluatedText>("outreach-hm", profile, app, target);
 }
 
-export async function generateLinkedInDM(profile: Profile, app: Application, target?: ContactProfile): Promise<string> {
-  return (await callGenerate<{ content: string }>("linkedin-dm", profile, app, target)).content;
+export async function generateLinkedInDM(profile: Profile, app: Application, target?: ContactProfile): Promise<EvaluatedText> {
+  return callGenerate<EvaluatedText>("linkedin-dm", profile, app, target);
 }
 
-export async function generateReferralDM(profile: Profile, app: Application, target: ContactProfile): Promise<string> {
-  return (await callGenerate<{ content: string }>("referral-dm", profile, app, target)).content;
+export async function generateReferralDM(profile: Profile, app: Application, target: ContactProfile): Promise<EvaluatedText> {
+  return callGenerate<EvaluatedText>("referral-dm", profile, app, target);
 }
 
-export async function generateCEOColdEmail(profile: Profile, app: Application, target?: ContactProfile): Promise<string> {
-  return (await callGenerate<{ content: string }>("ceo-cold-email", profile, app, target)).content;
+export async function generateCEOColdEmail(profile: Profile, app: Application, target?: ContactProfile): Promise<EvaluatedText> {
+  return callGenerate<EvaluatedText>("ceo-cold-email", profile, app, target);
 }
 
 export async function generateSkillGap(profile: Profile, app: Application): Promise<SkillGapResult> {

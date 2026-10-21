@@ -12,7 +12,7 @@
 // USAGE:
 //   npm run verify:resume -- <userEmail> <applicationSlug> [archetype]
 import { profileRepo, applicationRepo } from "../lib/server/repositories";
-import { generateResumeContent } from "../lib/server/services/resume-generation-service";
+import { generateEvaluatedResume } from "../lib/server/services/resume-generation-service";
 import { runResumeExport } from "../lib/server/resume-export-pipeline";
 import type { ResumeArchetype } from "../lib/resume-archetype";
 import { roleSubLabelGroups } from "../lib/resume-sublabels";
@@ -42,7 +42,7 @@ async function main() {
     process.exit(1);
   }
 
-  const r = await generateResumeContent(profile, app, undefined, archetypeArg as ResumeArchetype | undefined);
+  const r = await generateEvaluatedResume(profile, app, undefined, archetypeArg as ResumeArchetype | undefined);
   const { data, fill } = r;
 
   console.log(`\n=== ${app.company} | ${app.role} ===`);
@@ -78,6 +78,10 @@ async function main() {
     console.log(`  ${ed.institution} | ${ed.degree}${ed.field ? `, ${ed.field}` : ""} | ${ed.years}`);
     for (const a of ed.achievements ?? []) console.log(`    - ${a}`);
   }
+
+  console.log(`\n=== INDEPENDENT REVIEW (fresh-context evaluator) ===`);
+  console.log(`verdict: ${r.evaluation.verdict} after ${r.evaluation.attempts} attempt(s)${r.evaluation.regenerated ? " (regenerated once)" : ""}${r.evaluation.error ? ` evaluator error: ${r.evaluation.error}` : ""}`);
+  for (const c of r.evaluation.criteria) console.log(`  ${c.pass ? "PASS" : "FAIL"} ${c.label}${c.pass ? (c.evidence[0] ? ` <- "${c.evidence[0].slice(0, 100)}"` : "") : `: ${c.finding}`}`);
 
   console.log(`\n=== GATES (generation) ===`);
   console.log(`confidentiality ok=${r.confidentialityGate.ok}${r.confidentialityGate.ok ? "" : " blocked=" + JSON.stringify(r.confidentialityGate.blockedTerms)}`);

@@ -100,10 +100,13 @@ describe("resume generation invariant: every path resolves selections (no raw mo
     expect(names.has("resolveResumeSelections")).toBe(true);
   });
 
-  it("draft-service.ts (the automation autopilot path) no longer builds a resume directly — it calls the shared pipeline", () => {
+  it("draft-service.ts (the automation autopilot path) no longer builds a resume directly — it calls the shared, evaluator-gated pipeline", () => {
     const source = fs.readFileSync(path.join(REPO_ROOT, "lib/server/services/draft-service.ts"), "utf-8");
     const names = importedNames(source);
     expect(names.has("resumePrompt")).toBe(false);
-    expect(names.has("generateResumeContent")).toBe(true);
+    // generateEvaluatedResume wraps generateResumeContent behind the evaluator gate.
+    expect(names.has("generateEvaluatedResume")).toBe(true);
+    const service = fs.readFileSync(path.join(REPO_ROOT, "lib/server/services/resume-generation-service.ts"), "utf-8");
+    expect(service).toMatch(/export async function generateEvaluatedResume[\s\S]*generateResumeContent\(/);
   });
 });
