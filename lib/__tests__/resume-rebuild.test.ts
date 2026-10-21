@@ -21,7 +21,7 @@ import {
 import { buildFilledSelection, isEligibleBullet, isScopeLine, scopeLineFor } from "../resume-fill";
 import { hasOutcomeClause } from "../resume-outcome";
 import { summaryViolations, repairSummary, splitSentences } from "../resume-summary";
-import { selectResumeSkills, SKILLS_TAXONOMY } from "../resume-skills";
+import { selectResumeSkills, SKILLS_TAXONOMY, evidenceFor, keepEvidencedSkills } from "../resume-skills";
 import { finalizeEducation, publicationsLine } from "../resume-education";
 import { computeBoldSpans, splitTextByBoldSpans } from "../resume-bolding";
 import { roleSubLabelGroups, AI_BUILDS_LABEL, CONSULTING_ENGAGEMENTS_LABEL } from "../resume-sublabels";
@@ -264,6 +264,20 @@ describe("generation pipeline (model mocked)", () => {
     for (const filler of ["strategic initiatives", "business development", "data analysis"]) expect(flat).not.toContain(filler);
   });
 
+  it("6. every listed skill is evidenced by a SELECTED bullet, and the evidence is stored", async () => {
+    const p = profile();
+    mockModel(p, { reqs: CAPITAL_REQS, summary: GOOD_SUMMARY, skills: [{ category: "Any", items: ["market entry", "due diligence", "pricing strategy", "M&A advisory", "financial modelling", "market sizing"] }] });
+    const r = await generateResumeContent(p, CAPITAL_APP, undefined, "consulting");
+    const shown = new Map(allBullets(r.data).map(b => [b.sourceBulletId, b.text]));
+    const listed = r.data.skills.flatMap(g => g.items);
+    expect(listed.length).toBeGreaterThan(0);
+    expect((r.data.skillEvidence ?? []).map(e => e.skill)).toEqual(listed);
+    for (const e of r.data.skillEvidence ?? []) {
+      expect(e.sourceBulletId, e.skill).not.toBeNull();
+      expect(shown.has(e.sourceBulletId!), e.skill).toBe(true);
+    }
+  });
+
   it("7. taper: Bain leads, Evalueserve and Tecnova 3-4 at most, Madcue 2; nothing below the relevance bar pads beyond a floor", async () => {
     const p = profile();
     mockModel(p, { reqs: CAPITAL_REQS, summary: GOOD_SUMMARY });
@@ -374,6 +388,16 @@ describe("5. scope lines (pure)", () => {
 });
 
 describe("6. skills (pure)", () => {
+  it("drops a JD-matching skill that no selected bullet evidences", () => {
+    const bullets = [{ sourceBulletId: "e_1", text: "Led a market entry strategy for a French conglomerate in India." }];
+    const rows = selectResumeSkills([{ category: "S", items: ["market entry", "pricing strategy"] }], { jdTerms: new Set(["market", "entry", "pricing"]), aiJd: false, technicalJd: false, bullets });
+    expect(rows.flatMap(r => r.items)).toEqual(["market entry"]);
+    expect(evidenceFor("market entry", bullets)).toBe("e_1");
+    expect(evidenceFor("pricing strategy", bullets)).toBeNull();
+    expect(keepEvidencedSkills([{ category: "S", items: ["market entry", "pricing strategy"] }], bullets)).toEqual([{ category: "S", items: ["market entry"] }]);
+    expect(keepEvidencedSkills([{ category: "S", items: ["pricing strategy"] }], bullets)).toEqual([]);
+  });
+
   const jdTerms = jdRelevanceTerms(AI_APP, AI_REQS);
   it("keeps model picks that are taxonomy items, drops filler and non-taxonomy items, caps at 2 x 6", () => {
     const rows = selectResumeSkills([{ category: "Mixed", items: ["Strategic Initiatives", "Python", "market entry", "Synergy building"] }], { jdTerms, aiJd: true, technicalJd: false });

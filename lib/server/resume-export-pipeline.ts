@@ -21,6 +21,7 @@ import {
 } from "../resume-confidentiality";
 import { runToolPlacementGate, toolPlacementGateFailureMessage } from "../resume-tool-placement";
 import { measureAndFill, FillStep } from "../resume-measure-fill";
+import { keepEvidencedSkills, skillEvidence } from "../resume-skills";
 import { CONSULTING_ENGAGEMENTS_LABEL, AI_BUILDS_LABEL, anyRoleUsesSubLabels } from "../resume-sublabels";
 
 export type ExportFailure = { ok: false; status: number; body: Record<string, unknown> };
@@ -83,7 +84,10 @@ export async function runResumeExport(input: {
     const { extracted } = await render(content, pages);
     return { pageCount: extracted.numpages, pageTwoFillPercent: extracted.numpages === 2 ? estimatePageTwoFillPercent(extracted.pageTexts) : null };
   });
-  const finalContent = fill.content;
+  // A bullet dropped for overflow may have been a skill's only evidence.
+  const finalBullets = fill.content.experience.flatMap(e => e.bullets.map(b => ({ sourceBulletId: b.sourceBulletId, text: b.text })));
+  const finalSkills = keepEvidencedSkills(fill.content.skills, finalBullets);
+  const finalContent = { ...fill.content, skills: finalSkills, skillEvidence: skillEvidence(finalSkills, finalBullets) };
   const { docxBuffer, pdfBuffer, extracted } = await render(finalContent, fill.maxPages);
 
   // CONFIDENTIALITY GATE, pass 1: the final .docx text.
