@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { MODEL_OPTIONS, getModelSettings, saveModelSettings, ModelProvider } from "../../lib/model-settings";
+import { ModelGatewaySettings } from "../model-gateway-settings";
 import { INTEGRATION_OPTIONS, getIntegrationSettings, saveIntegrationSettings, IntegrationSettings } from "../../lib/integration-settings";
 import {
   AutomationSettings,
@@ -290,6 +291,11 @@ export default function SettingsPage() {
               </span>
             )}
           </div>
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>
+          <div className="label" style={{ marginBottom: 16 }}>MODEL GATEWAY</div>
+          <ModelGatewaySettings />
         </div>
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>

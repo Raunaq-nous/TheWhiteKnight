@@ -101,6 +101,27 @@ function applySchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_approvals_user_status
       ON approvals (user_email, status, created_at DESC);
+
+    -- Model gateway call log (lib/ai-gateway.ts): which provider and model
+    -- served every call, with the token split and cost. Server-wide: the
+    -- provider keys are server env vars.
+    CREATE TABLE IF NOT EXISTS ai_calls (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      at                TEXT NOT NULL,
+      task              TEXT NOT NULL,
+      provider          TEXT NOT NULL,
+      model_requested   TEXT NOT NULL,
+      model_served      TEXT NOT NULL,
+      prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      reasoning_tokens  INTEGER NOT NULL DEFAULT 0,
+      cost_usd          REAL NOT NULL DEFAULT 0,
+      ok                INTEGER NOT NULL DEFAULT 1,
+      error             TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_calls_task ON ai_calls (task, at DESC);
+    CREATE INDEX IF NOT EXISTS idx_ai_calls_provider ON ai_calls (provider, at);
   `);
 
   // Additive migrations for DBs created before these columns existed.

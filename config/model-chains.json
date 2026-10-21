@@ -1,0 +1,29 @@
+{
+  "_note": "Default OpenRouter model chains (October 2026). Ids could not be resolved from https://openrouter.ai/api/v1/models in the build sandbox; validate them on the server with `npm run check:models` (SERVER-CHECKS.md). Every chain is editable in Settings.",
+  "chains": {
+    "structured": ["z-ai/glm-5.3-flash", "deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3"],
+    "writing": ["z-ai/glm-5.3", "moonshotai/kimi-k3", "anthropic/claude-sonnet-5.5"],
+    "vision": ["qwen/qwen3.8-27b"]
+  },
+  "taskChains": {
+    "scoring": "structured",
+    "jd_extraction": "structured",
+    "requirement_map": "structured",
+    "resume_selection": "structured",
+    "gap_analysis": "structured",
+    "evaluator": "structured",
+    "skill_extraction": "structured",
+    "profile_extraction": "structured",
+    "form_answers": "structured",
+    "company_discovery": "structured",
+    "audit": "structured",
+    "drafting": "writing"
+  },
+  "_pricesNote": "USD per 1M tokens [input, output], used to estimate spend for providers that do not report cost (OpenRouter reports its own). Unknown models use the provider default.",
+  "pricesPerMTok": {
+    "together": { "default": [0.88, 0.88] },
+    "anthropic": { "default": [3, 15], "claude-opus-4-7": [15, 75] },
+    "openai": { "default": [2.5, 10], "gpt-4o": [2.5, 10] },
+    "openrouter": { "default": [1, 3] }
+  }
+}

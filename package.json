@@ -16,7 +16,8 @@
     "merge:employer-entries": "tsx scripts/merge-employer-entries.ts",
     "verify:resume": "tsx scripts/verify-resume.ts",
     "remove:profile-bullets": "tsx scripts/remove-profile-bullets.ts",
-    "tag:imported-bullets": "tsx scripts/tag-imported-bullets.ts"
+    "tag:imported-bullets": "tsx scripts/tag-imported-bullets.ts",
+    "check:models": "tsx scripts/check-models.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

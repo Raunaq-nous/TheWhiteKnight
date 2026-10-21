@@ -48,7 +48,11 @@ export async function runDueFollowUps(
     if (!profile) { skipped++; continue; }
 
     const modelSettings = settingsRepo.getModelSettings(userEmail);
-    const providerSettings = { provider: modelSettings.provider as "together", model: modelSettings.model };
+    // Same rule as everywhere else: only a BYO provider (with its key) is
+    // passed; Together and the OpenRouter gateway use the server's own keys.
+    const providerSettings = modelSettings.provider !== "together"
+      ? { provider: modelSettings.provider, model: modelSettings.model, apiKey: modelSettings.apiKey }
+      : undefined;
 
     let draft: unknown;
     try {

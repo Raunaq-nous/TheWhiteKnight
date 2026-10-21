@@ -34,7 +34,11 @@ export async function getFormAnswers(
   if (!profile) throw new Error("Profile not found; set up your profile first");
 
   const modelSettings = settingsRepo.getModelSettings(userEmail);
-  const providerSettings = { provider: modelSettings.provider as "together", model: modelSettings.model };
+  // Same rule as everywhere else: only a BYO provider (with its key) is
+    // passed; Together and the OpenRouter gateway use the server's own keys.
+    const providerSettings = modelSettings.provider !== "together"
+      ? { provider: modelSettings.provider, model: modelSettings.model, apiKey: modelSettings.apiKey }
+      : undefined;
 
   // formFields are inert data — join as plain text, never eval.
   const questionsText = formFields.join("\n");
