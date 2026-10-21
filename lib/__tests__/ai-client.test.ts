@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { chat, getModelForTask, CHEAP_MODEL } from "../ai-client";
+import {
+  chat, getModelForTask, CHEAP_MODEL, DEFAULT_MODEL, isKnownNonServerless, isFailoverTrigger, providerErrorCode,
+  probeTogetherModel, configuredTogetherModels, visionExtract,
+} from "../ai-client";
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = global.fetch;
@@ -40,8 +43,9 @@ describe("ai-client", () => {
       }
     });
 
-    it("resolves the reasoning model for the drafting tier", () => {
-      expect(getModelForTask("drafting")).toBe("deepseek-ai/DeepSeek-V4-Pro");
+    it("drafting defaults to a serverless model too, never a dedicated-endpoint one", () => {
+      expect(getModelForTask("drafting")).toBe(DEFAULT_MODEL);
+      expect(isKnownNonServerless(getModelForTask("drafting"))).toBe(false);
     });
 
     it("respects a task-specific env var override", () => {
@@ -78,7 +82,7 @@ describe("ai-client", () => {
       expect(capturedBody.model).toBe("explicit/model");
     });
 
-    it("falls back to the reasoning DEFAULT_MODEL when no task and no model are given (unchanged legacy behavior)", async () => {
+    it("falls back to the serverless DEFAULT_MODEL when no task and no model are given", async () => {
       let capturedBody: any;
       global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
         capturedBody = JSON.parse(init.body);
@@ -86,7 +90,7 @@ describe("ai-client", () => {
       }) as any;
 
       await chat([{ role: "user", content: "hi" }], {});
-      expect(capturedBody.model).toBe("deepseek-ai/DeepSeek-V4-Pro");
+      expect(capturedBody.model).toBe(DEFAULT_MODEL);
     });
   });
 
@@ -199,6 +203,117 @@ describe("ai-client", () => {
 
       await chat([{ role: "user", content: "x" }], { task: "scoring" }, { provider: "anthropic", model: "claude-x", apiKey: "k" });
       expect(capturedBody.model).toBe("claude-x");
+    });
+  });
+
+  describe("failover", () => {
+    const NOT_SERVERLESS = JSON.stringify({ id: "x", error: { message: "Unable to access non-serverless model deepseek-ai/DeepSeek-V4-Pro. Please visit https://api.together.ai/models/deepseek-ai/DeepSeek-V4-Pro to create and start a new dedicated endpoint for the model.", type: "invalid_request_error", param: null, code: "model_not_available" } });
+    const errorResponse = (status: number, body: string) => ({ ok: false, status, text: async () => body, json: async () => JSON.parse(body) });
+
+    it("a 400 or 404 with model_not_available / model_not_found triggers failover, like 401/402/403/429/5xx", () => {
+      expect(isFailoverTrigger(400, providerErrorCode(NOT_SERVERLESS))).toBe(true);
+      expect(isFailoverTrigger(404, "model_not_found")).toBe(true);
+      expect(isFailoverTrigger(404, "model_not_available")).toBe(true);
+      for (const s of [401, 402, 403, 429, 500, 502, 503]) expect(isFailoverTrigger(s, null), String(s)).toBe(true);
+      // Any other bad request is the caller's fault: no failover.
+      expect(isFailoverTrigger(400, "invalid_request_error")).toBe(false);
+      expect(isFailoverTrigger(400, null)).toBe(false);
+      expect(isFailoverTrigger(404, null)).toBe(false);
+      expect(providerErrorCode('{"message":"model_not_found: no such model"}')).toBe("model_not_found");
+    });
+
+    it("the live failure: a stored DeepSeek-V4-Pro setting fails over to the serverless default and the call succeeds", async () => {
+      const models: string[] = [];
+      global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body);
+        models.push(body.model);
+        if (body.model === "some/dedicated-only-model") return errorResponse(400, NOT_SERVERLESS);
+        return mockResponse(togetherResult({ content: "ok" }));
+      }) as any;
+      const out = await chat([{ role: "user", content: "hi" }], { task: "form_answers" }, { provider: "together", model: "some/dedicated-only-model" });
+      expect(out).toBe("ok");
+      expect(models).toEqual(["some/dedicated-only-model", CHEAP_MODEL]);
+    });
+
+    it("a known dedicated-endpoint model is skipped without spending a request", async () => {
+      const models: string[] = [];
+      global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        models.push(JSON.parse(init.body).model);
+        return mockResponse(togetherResult({ content: "ok" }));
+      }) as any;
+      await chat([{ role: "user", content: "hi" }], {}, { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" });
+      expect(models).toEqual([DEFAULT_MODEL]);
+    });
+
+    it("a 404 model_not_found fails over too", async () => {
+      const models: string[] = [];
+      global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        const m = JSON.parse(init.body).model;
+        models.push(m);
+        return m === "gone/model" ? errorResponse(404, JSON.stringify({ error: { code: "model_not_found" } })) : mockResponse(togetherResult({ content: "ok" }));
+      }) as any;
+      expect(await chat([{ role: "user", content: "hi" }], { model: "gone/model" })).toBe("ok");
+      expect(models).toEqual(["gone/model", DEFAULT_MODEL]);
+    });
+
+    it("a BYO provider's 401/402/403 fails over to Together", async () => {
+      const urls: string[] = [];
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        urls.push(url);
+        return url.includes("anthropic") ? errorResponse(402, '{"error":{"type":"billing_error"}}') : mockResponse(togetherResult({ content: "ok" }));
+      }) as any;
+      const out = await chat([{ role: "user", content: "hi" }], { task: "scoring" }, { provider: "anthropic", model: "claude-x", apiKey: "k" });
+      expect(out).toBe("ok");
+      expect(urls[0]).toContain("anthropic");
+      expect(urls[1]).toContain("together");
+    });
+
+    it("an ordinary 400 bad request does NOT fail over", async () => {
+      let calls = 0;
+      global.fetch = vi.fn().mockImplementation(async () => { calls++; return errorResponse(400, '{"error":{"code":"invalid_request_error","message":"bad"}}'); }) as any;
+      await expect(chat([{ role: "user", content: "hi" }], { model: "a/b" })).rejects.toThrow(/400/);
+      expect(calls).toBe(1);
+    });
+
+    it("when every model fails over, the last error is thrown", async () => {
+      global.fetch = vi.fn().mockImplementation(async () => errorResponse(400, NOT_SERVERLESS)) as any;
+      await expect(chat([{ role: "user", content: "hi" }], { model: "x/y" })).rejects.toThrow(/model_not_available/);
+    });
+
+    it("vision falls through to the next vision model on model_not_available", async () => {
+      const models: string[] = [];
+      global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        const m = JSON.parse(init.body).model;
+        models.push(m);
+        return models.length === 1 ? errorResponse(400, NOT_SERVERLESS) : mockResponse(togetherResult({ content: "text" }));
+      }) as any;
+      expect(await visionExtract("AAAA", "image/png", "read")).toBe("text");
+      expect(models).toHaveLength(2);
+      expect(models[1]).not.toBe(models[0]);
+    });
+  });
+
+  describe("serverless health probe", () => {
+    it("no configured default is a known dedicated-endpoint model", () => {
+      for (const c of configuredTogetherModels()) expect(isKnownNonServerless(c.model), c.model).toBe(false);
+    });
+
+    it("flags a model Together refuses as non-serverless, by name", async () => {
+      global.fetch = vi.fn().mockImplementation(async () => ({ ok: false, status: 400, text: async () => '{"error":{"code":"model_not_available"}}' })) as any;
+      expect(await probeTogetherModel("acme/big-model")).toMatchObject({ model: "acme/big-model", status: "not-serverless", code: "model_not_available" });
+    });
+
+    it("flags a known dedicated-endpoint model without a request", async () => {
+      global.fetch = vi.fn() as any;
+      expect((await probeTogetherModel("deepseek-ai/DeepSeek-V4-Pro")).status).toBe("not-serverless");
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("a model that answers is serverless; an outage is 'error', not a false flag", async () => {
+      global.fetch = vi.fn().mockImplementation(async () => mockResponse(togetherResult({ content: "O" }))) as any;
+      expect((await probeTogetherModel(CHEAP_MODEL)).status).toBe("serverless");
+      global.fetch = vi.fn().mockImplementation(async () => ({ ok: false, status: 503, text: async () => "down" })) as any;
+      expect((await probeTogetherModel(CHEAP_MODEL)).status).toBe("error");
     });
   });
 });

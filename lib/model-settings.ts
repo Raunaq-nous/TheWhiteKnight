@@ -12,10 +12,10 @@ export type ModelSettings = {
 export const MODEL_OPTIONS = [
   {
     provider: "together" as const,
-    model: "deepseek-ai/DeepSeek-V4-Pro",
-    label: "DeepSeek V4 Pro",
-    sublabel: "Together AI",
-    description: "Best open-source model for reasoning and agentic tasks. 1T param MoE, 128K context.",
+    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    label: "Llama 3.3 70B Instruct Turbo",
+    sublabel: "Together AI (serverless)",
+    description: "Fast, serverless open model. No dedicated endpoint needed.",
     pricing: "Included — no key needed",
     requiresKey: false,
   },
@@ -43,7 +43,8 @@ export const MODEL_OPTIONS = [
   },
 ] as const;
 
-const DEFAULT: ModelSettings = { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" };
+// Serverless only: never a model that needs a dedicated endpoint.
+const DEFAULT: ModelSettings = { provider: "together", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo" };
 
 export function getModelSettings(): ModelSettings {
   return getCache().modelSettings ?? DEFAULT;

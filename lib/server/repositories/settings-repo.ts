@@ -10,7 +10,8 @@ import type { SettingsRepository } from "./types";
 import type { TargetBucket } from "../../store";
 import { DEFAULT_BUCKETS } from "../../buckets";
 
-const DEFAULT_MODEL: ModelSettings = { provider: "together", model: "deepseek-ai/DeepSeek-V4-Pro" };
+// Serverless only: never a model that needs a dedicated endpoint.
+const DEFAULT_MODEL: ModelSettings = { provider: "together", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo" };
 // Duplicated (not imported as a value) rather than pulled from
 // lib/automation-settings.ts, which pulls in the client write-through cache
 // module — same convention as DEFAULT_MODEL above.
