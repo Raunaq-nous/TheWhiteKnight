@@ -8,7 +8,8 @@ const USER_AGENT = "CareerOS/1.0 (personal job search tool)";
 
 function toSnippet(html: unknown): string | undefined {
   if (typeof html !== "string" || !html) return undefined;
-  return html.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim().slice(0, 240) || undefined;
+  // Strip tags, THEN decode the entities left in the text ("&amp;" -> "&").
+  return decodeEntities(html.replace(/<[^>]*>/g, " ")).replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim().slice(0, 240) || undefined;
 }
 
 const STOPWORDS = new Set(["and", "or", "the", "of", "in", "for", "a", "an", "to", "with", "at"]);
