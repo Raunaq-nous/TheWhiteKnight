@@ -160,8 +160,11 @@ export function extractCompanyName(html: string): string | undefined {
   const decoded = decodeBasicEntities(raw).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
   const parts = decoded.split(/\s+[|\-–—·:]\s+/).map((p) => p.trim()).filter(Boolean);
   for (const p of parts) {
+    // A generic heading ("Work With Us") is skipped whole, before any prefix
+    // stripping could reduce it to a bare pronoun ("Us").
+    if (GENERIC_TITLE.test(p)) continue;
     const stripped = p.replace(/^(careers?|jobs?|work|working)\s+(at|with)\s+/i, "").replace(/\s+(careers?|jobs?)$/i, "").trim();
-    if (stripped && !GENERIC_TITLE.test(stripped)) return stripped.slice(0, 80);
+    if (stripped && !GENERIC_TITLE.test(stripped) && !/^(us|me|you|them)$/i.test(stripped)) return stripped.slice(0, 80);
   }
   return undefined;
 }
