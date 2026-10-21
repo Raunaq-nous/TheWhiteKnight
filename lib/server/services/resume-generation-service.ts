@@ -18,7 +18,9 @@ import "server-only";
 // already called it correctly).
 import { chatJSON, ProviderSettings } from "../../ai-client";
 import { resumePrompt } from "../../prompts";
-import { ResumeContentSchema, ResumeContent, normalizeResumeContent } from "../../resume-schema";
+import { ResumeContentSchema, ResumeContent, normalizeResumeContent, resumeContentToMarkdown } from "../../resume-schema";
+import { evaluateArtifact, resumeChecks, withEvaluatorGate } from "./evaluator";
+import type { ArtifactEvaluation } from "../../evaluation";
 import {
   detectResumeArchetype, withArchetypeSequence, resolveConfiguredMaxPages, resolveConfiguredYearsOfExperience,
   resolveTargetArchetypeKey, ResumeArchetype,
@@ -71,6 +73,7 @@ export async function generateResumeContent(
   app: Application,
   providerSettings: ProviderSettings | undefined,
   resumeArchetype?: ResumeArchetype,
+  options: { evaluatorFindings?: string[] | null } = {},
 ): Promise<GenerateResumeContentResult> {
   const archetype = detectResumeArchetype(profile, app, resumeArchetype);
   const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
@@ -91,7 +94,7 @@ export async function generateResumeContent(
   const eligibleIds = new Set(buildCandidates(effectiveProfile, new Map(), maxPages, { isTextAllowed }).pool.map(c => c.id));
 
   const data = await chatJSON<ResumeContent>(
-    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages, { topRequirements: jd.requirements, eligibleIds }) }],
+    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages, { topRequirements: jd.requirements, eligibleIds, evaluatorFindings: options.evaluatorFindings ?? undefined }) }],
     // "resume_selection": the model RANKS eligible ids and writes the summary.
     { temperature: 0.4, maxTokens: 6000, task: "resume_selection" },
     providerSettings,
@@ -135,4 +138,27 @@ export async function generateResumeContent(
     jdRequirements: jd.requirements, jdWarning: jd.warning, coverage, summaryReport,
     fill: { ...fill.stats, finalEstimatedLines, aiJd, technicalJd },
   };
+}
+
+/**
+ * Resume generation behind the fresh-context evaluator gate: on FAIL it is
+ * regenerated once with the findings; the verdict always travels with it.
+ */
+export async function generateEvaluatedResume(
+  profile: Profile,
+  app: Application,
+  providerSettings: ProviderSettings | undefined,
+  resumeArchetype?: ResumeArchetype,
+): Promise<GenerateResumeContentResult & { evaluation: ArtifactEvaluation }> {
+  const { artifact, evaluation } = await withEvaluatorGate({
+    generate: findings => generateResumeContent(profile, app, providerSettings, resumeArchetype, { evaluatorFindings: findings }),
+    evaluate: r => evaluateArtifact({
+      kind: "resume",
+      artifact: resumeContentToMarkdown(r.data, r.archetype),
+      requirements: r.jdRequirements,
+      deterministic: resumeChecks(r.data, r.archetype, r.coverage, app.jdRaw ?? ""),
+      providerSettings,
+    }),
+  });
+  return { ...artifact, evaluation };
 }

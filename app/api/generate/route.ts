@@ -10,7 +10,9 @@ import { clampToOnePageBudget } from "../../../lib/resume-budget";
 import { resolveResumeSelections } from "../../../lib/resume-selection";
 import { enforceEmployerLocations } from "../../../lib/resume-confidentiality";
 import { suppressSideBuilds } from "../../../lib/resume-tool-placement";
-import { generateResumeContent, resumeSourceProfile } from "../../../lib/server/services/resume-generation-service";
+import { generateEvaluatedResume, resumeSourceProfile } from "../../../lib/server/services/resume-generation-service";
+import { generateEvaluatedDraft } from "../../../lib/server/services/draft-service";
+import { EVALUATED_DRAFT_KINDS } from "../../../lib/evaluation";
 import { finalizeResumeContent } from "../../../lib/server/services/resume-finalize";
 import { isAiRelatedJd, isTechnicalJd, jdRelevanceTerms } from "../../../lib/resume-jd";
 import {
@@ -77,9 +79,10 @@ export async function POST(req: NextRequest) {
       // generation-service.ts) — shared with the automation autopilot's
       // draft-service.ts, so there is exactly one way a resume gets built
       // and resolveResumeSelections can never be forgotten on one path.
-      const result = await generateResumeContent(profile, app, providerSettings, resumeArchetype);
-      const { data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport } = result;
-      return NextResponse.json({ data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport });
+      // Behind the fresh-context evaluator gate (regenerated once on FAIL).
+      const result = await generateEvaluatedResume(profile, app, providerSettings, resumeArchetype);
+      const { data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport, evaluation } = result;
+      return NextResponse.json({ data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport, evaluation });
     }
     if (action === "refine" && req.headers.get("x-refine-for") === "resume") {
       if (!currentContent || !instruction) {
@@ -124,6 +127,12 @@ export async function POST(req: NextRequest) {
         allowSummaryRetry: false,
       });
       return NextResponse.json({ data: finalContent, archetype, maxPages, confidentialityGate });
+    }
+
+    // Cover letters and outreach drafts go behind the evaluator gate.
+    if ((EVALUATED_DRAFT_KINDS as string[]).includes(action)) {
+      const { text, evaluation } = await generateEvaluatedDraft({ action, profile, app, target, providerSettings });
+      return NextResponse.json({ content: text, evaluation });
     }
 
     let prompt = "";

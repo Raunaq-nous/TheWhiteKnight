@@ -85,7 +85,7 @@ function relevanceFor(text: string, reqs: string[]): number {
   return Math.min(100, 30 + hits * 18);
 }
 
-type ModelOpts = { reqs: string[]; summary: string; rewrittenSummary?: string; skills?: ResumeContent["skills"]; prompts?: string[] };
+type ModelOpts = { reqs: string[]; summary: string; rewrittenSummary?: string; skills?: ResumeContent["skills"]; prompts?: string[]; evaluator?: () => unknown };
 
 function mockModel(p: Profile, o: ModelOpts) {
   vi.mocked(chatJSON).mockImplementation((async (messages: { content: string }[]) => {
@@ -95,6 +95,7 @@ function mockModel(p: Profile, o: ModelOpts) {
     o.prompts?.push(prompt);
     if (prompt.includes("Extract the TOP 5 requirements")) return { requirements: o.reqs };
     if (prompt.includes("Rewrite this resume profile summary")) return { summary: o.rewrittenSummary ?? o.summary };
+    if (prompt.includes("DEFAULT IS FAIL")) return o.evaluator ? o.evaluator() : { criteria: [] };
     const ids = new Set([...prompt.matchAll(/\[(e_\w+)\]/g)].map(m => m[1]));
     const refs = listProfileBullets(p).filter(r => ids.has(r.id));
     return {
@@ -300,6 +301,32 @@ describe("generation pipeline (model mocked)", () => {
       "Worked on the control system of a satellite during an ISRO-guided student project; co-authored multiple published research papers.",
       "Publications: AI's impact on green manufacturing (Economic Times, 2024); Digital governance (Dataquest, 2025)",
     ]);
+  });
+
+  it("P0-2: the resume goes behind the evaluator gate: a FAIL regenerates once with the findings in the ranking prompt", async () => {
+    const p = profile();
+    const prompts: string[] = [];
+    let evalCalls = 0;
+    mockModel(p, {
+      reqs: CAPITAL_REQS, summary: GOOD_SUMMARY, prompts,
+      evaluator: () => (++evalCalls === 1
+        ? { criteria: [{ id: "covers_requirements", pass: false, evidence: [], finding: "Requirement 3 has no supporting line." }] }
+        : { criteria: [] }),
+    });
+    const { generateEvaluatedResume } = await import("../server/services/resume-generation-service");
+    const r = await generateEvaluatedResume(p, CAPITAL_APP, undefined, "consulting");
+    const ranking = prompts.filter(x => x.includes("AVAILABLE BULLETS"));
+    expect(ranking).toHaveLength(2);
+    expect(ranking[0]).not.toContain("INDEPENDENT REVIEWER FAILED");
+    expect(ranking[1]).toContain("Requirement 3 has no supporting line.");
+    expect(r.evaluation.attempts).toBe(2);
+    expect(r.evaluation.regenerated).toBe(true);
+    expect(r.evaluation.kind).toBe("resume");
+    expect(r.evaluation.criteria.map(c => c.id)).toContain("skills_evidenced");
+    // The evaluator never saw the generation prompt.
+    const evalPrompt = prompts.find(x => x.includes("DEFAULT IS FAIL"))!;
+    expect(evalPrompt).not.toContain("AVAILABLE BULLETS");
+    expect(evalPrompt).not.toContain("RANKING RULES");
   });
 
   it("the generation-time confidentiality gate covers every field and passes on clean content", async () => {

@@ -1,4 +1,5 @@
 import "server-only";
+import type { ArtifactEvaluation } from "../../evaluation";
 import { randomUUID } from "crypto";
 import { applicationRepo, profileRepo, settingsRepo, notificationRepo } from "../repositories";
 import { queueApproval } from "../approval-gate";
@@ -198,8 +199,12 @@ async function autopilotStage(
       recommendation: scoreResult.recommendation,
       draftAction: "cover-letter",
       draft,
+      // The fresh-context evaluator's verdict travels with the staged draft.
+      evaluation: (draft as { evaluation?: unknown } | null)?.evaluation ?? null,
     },
   });
+  const evaluation = (draft as { evaluation?: ArtifactEvaluation } | null)?.evaluation;
+  if (evaluation) applicationRepo.update(userEmail, app.id, { evaluations: { ...(app.evaluations ?? {}), "cover-letter": evaluation } });
 
   return { staged: true, error };
 }

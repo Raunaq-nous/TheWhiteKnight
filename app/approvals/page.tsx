@@ -1,4 +1,6 @@
 "use client";
+import { EvaluationPanel } from "../evaluation-panel";
+import type { ArtifactEvaluation } from "../../lib/evaluation";
 
 import { useEffect, useState, useCallback } from "react";
 import { Header, Footer } from "../components";
@@ -69,6 +71,8 @@ function ApprovalCard({
               App: {item.action.applicationId}
             </div>
           )}
+          {/* The independent review of a staged draft, so a FAIL is seen before approving. */}
+          <EvaluationPanel evaluation={item.action.payload?.evaluation as ArtifactEvaluation | null | undefined} compact />
           <div className="card-meta" style={{ marginTop: 4 }}>
             <span className="label">
               {item.expired ? "EXPIRED" : item.status.toUpperCase()}

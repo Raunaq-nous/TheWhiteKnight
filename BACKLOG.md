@@ -8,7 +8,7 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 | ID | Item | Status | Commit |
 | --- | --- | --- | --- |
 | P0-1 | Resume content and structure | DONE | 2fe1c57 + this item's commit |
-| P0-2 | Fresh-context evaluator gate | TODO | |
+| P0-2 | Fresh-context evaluator gate | DONE | see section |
 | P0-3 | Model gateway on OpenRouter | TODO | |
 | P1-1 | Sourcing expansion | TODO | |
 | P1-2 | Career tracks and skill pathways (v1) | TODO | |
@@ -32,7 +32,20 @@ Gap closed in this item: rule 6 now requires every listed skill to be evidenced 
 Verification: npm test 910 passed (2 opt-in skipped); RESUME_LIVE_EXPORT=1 real LibreOffice export test passed for a capital and an AI JD (2 pages, under-fill warning shown, confidentiality on DOCX and PDF passed); npm run build clean; tsc no new errors.
 
 ## P0-2 Fresh-context evaluator gate
-Status: TODO
+Status: DONE
+
+Existing: a one-pass adversarial resume audit (app/api/resume/audit, shown in the builder). It stays as the hiring-side score; the new gate is separate.
+- lib/server/services/evaluator.ts: a separate model call on task "evaluator" (structured-task chain; AI_MODEL_EVALUATOR override) whose prompt contains only the finished artifact and the JD's top requirements, never the generation prompt.
+- lib/evaluation.ts: default-FAIL rubric. Criteria: covers each top JD requirement; every listed skill is evidenced (resume); enough quantified outcomes for the length; no figure or engagement repeated; no fluff or banned phrases; confidentiality clean; summary within its limits (resume). A model criterion passes only with evidence quoted VERBATIM from the artifact, AND-ed with deterministic checks (coverage, skill evidence, quantified ratio, repeated figures/engagements, banned phrases, the confidentiality gate, summary rules). An omitted criterion or an evaluator error fails.
+- withEvaluatorGate: on FAIL, regenerate once with the findings in the prompt; if it still fails, the findings travel with the artifact. An evaluator outage is not retried.
+- Wired into: resume generation (/api/generate resume and the autopilot draft service), cover letters and outreach (outreach-hm, linkedin-dm, referral-dm, ceo-cold-email) on the application page, the contacts panel and autopilot / follow-up staging (verdict in the approval payload).
+- Stored with the application (Application.evaluations[kind]) and shown in the resume builder, the resume panel, the draft output panel, the contacts panel and the approvals queue (app/evaluation-panel.tsx).
+- verify-resume prints the verdict and every criterion.
+- Tests: lib/__tests__/evaluator.test.ts with captured fixtures (fixtures/evaluator: pass, fail, fail-then-pass, fail-then-fail, outage, fresh context) plus a resume-path test in resume-rebuild.test.ts.
+
+Assumption: drafts use the parsed JD key requirements (top 5) for coverage, without a second extraction call.
+
+Verification: npm test 923 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P0-3 Model gateway on OpenRouter
 Status: TODO

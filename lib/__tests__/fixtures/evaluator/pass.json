@@ -1,0 +1,6 @@
+{"criteria": [
+  {"id": "covers_requirements", "pass": true, "evidence": ["led a concept selection study for a national oil and gas company", "lifted a solar asset's IRR from 6% to the 10% hurdle rate"], "finding": "ok"},
+  {"id": "quantified_outcomes", "pass": true, "evidence": ["cut manual review effort by 80%"], "finding": "ok"},
+  {"id": "no_repetition", "pass": true, "evidence": ["$10 billion portfolio of 16 projects"], "finding": "ok"},
+  {"id": "no_fluff", "pass": true, "evidence": ["unlocked investment on a previously non-feasible project"], "finding": "ok"}
+]}

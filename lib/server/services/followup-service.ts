@@ -66,6 +66,7 @@ export async function runDueFollowUps(
         sourceApprovalId: fu.id,
         note: (fu.action.payload?.note as string) ?? "",
         draft,
+        evaluation: (draft as { evaluation?: unknown } | null)?.evaluation ?? null,
       },
     });
 

@@ -19,6 +19,8 @@ import {
 import { ResumeContent, resolveSectionSequence } from "../lib/resume-schema";
 import { ResumeArchetype } from "../lib/resume-archetype";
 import { generateResumeAudit, ResumeAuditResult } from "../lib/resume-audit";
+import { EvaluationPanel } from "./evaluation-panel";
+import type { ArtifactEvaluation } from "../lib/evaluation";
 import type { Application } from "../lib/store";
 import { showToast } from "../lib/toast";
 
@@ -65,7 +67,7 @@ export function ResumeBuilder({
   onClose,
 }: {
   app: Application;
-  onConfirm: (content: ResumeContent, archetype: ResumeArchetype, audit: ResumeAuditResult | null, atsReadable: boolean | null) => void;
+  onConfirm: (content: ResumeContent, archetype: ResumeArchetype, audit: ResumeAuditResult | null, atsReadable: boolean | null, evaluation: ArtifactEvaluation | null) => void;
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<"map" | "drafting" | "draft" | "error">("map");
@@ -84,6 +86,8 @@ export function ResumeBuilder({
   const [audit, setAudit] = useState<ResumeAuditResult | null>(null);
   const [atsReadable, setAtsReadable] = useState<boolean | null>(null);
   const [auditError, setAuditError] = useState("");
+  // The fresh-context evaluator's verdict on the generated draft.
+  const [evaluation, setEvaluation] = useState<ArtifactEvaluation | null>(null);
 
   useEffect(() => {
     const profile = getProfile();
@@ -100,7 +104,8 @@ export function ResumeBuilder({
     setPhase("drafting");
     setError("");
     try {
-      const { data, archetype: arch } = await generateTailoredResume(profile, app);
+      const { data, archetype: arch, evaluation: verdict } = await generateTailoredResume(profile, app);
+      setEvaluation(verdict ?? null);
       setDraft(data);
       setArchetype(arch);
       const sequence = resolveSectionSequence(data, arch);
@@ -204,7 +209,7 @@ export function ResumeBuilder({
 
   const handleConfirm = () => {
     if (!draft || !applied) return;
-    onConfirm(applied, archetype, audit, atsReadable);
+    onConfirm(applied, archetype, audit, atsReadable, evaluation);
   };
 
   return (
@@ -246,6 +251,9 @@ export function ResumeBuilder({
           )}
           {phase === "drafting" && <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--accent)", marginTop: 12 }}>Drafting resume...</div>}
         </div>
+
+        {/* Fresh-context evaluator gate: its verdict and findings, never hidden. */}
+        {draft && <EvaluationPanel evaluation={evaluation} />}
 
         {/* Adversarial hiring-side score — shown once a draft exists, before CONFIRM & GENERATE PDF is even reachable. */}
         {draft && (
