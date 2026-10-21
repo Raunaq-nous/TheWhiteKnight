@@ -1,0 +1,35 @@
+[
+  {
+    "last_updated": 1761040000,
+    "legal": "API Terms of Service: Please link back to the URL on Remote OK and mention Remote OK as a source, so we get traffic back from your site. If you do not we'll have to suspend API access."
+  },
+  {
+    "slug": "remote-senior-product-manager-acme-fintech-1098765",
+    "id": "1098765",
+    "epoch": 1760958000,
+    "date": "2026-10-20T11:00:00+00:00",
+    "company": "Acme Fintech",
+    "company_logo": "https://remoteok.com/assets/img/jobs/1098765.png",
+    "position": "Senior Product Manager",
+    "tags": ["product", "fintech", "saas"],
+    "description": "<p>Own the payments roadmap &amp; strategy.</p>",
+    "location": "Europe",
+    "salary_min": 110000,
+    "salary_max": 140000,
+    "apply_url": "https://remoteok.com/remote-jobs/1098765/apply",
+    "url": "https://remoteOK.com/remote-jobs/remote-senior-product-manager-acme-fintech-1098765"
+  },
+  {
+    "slug": "remote-senior-golang-engineer-globex-1098700",
+    "id": "1098700",
+    "epoch": 1760900000,
+    "date": "2026-10-19T19:00:00+00:00",
+    "company": "Globex",
+    "position": "Senior Golang Engineer",
+    "tags": ["golang", "backend"],
+    "description": "<p>Build services.</p>",
+    "location": "",
+    "apply_url": "https://remoteok.com/remote-jobs/1098700/apply",
+    "url": "https://remoteOK.com/remote-jobs/remote-senior-golang-engineer-globex-1098700"
+  }
+]

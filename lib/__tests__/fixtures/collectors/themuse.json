@@ -1,0 +1,40 @@
+{
+  "page": 0,
+  "page_count": 99,
+  "items_per_page": 20,
+  "took": 41,
+  "timed_out": false,
+  "total": 1980,
+  "results": [
+    {
+      "contents": "<p>Lead product discovery for our marketplace.</p>",
+      "name": "Senior Product Manager",
+      "type": "external",
+      "publication_date": "2026-10-19T19:54:16.528000Z",
+      "short_name": "senior-product-manager",
+      "model_type": "jobs",
+      "id": 14823311,
+      "locations": [{ "name": "New York, NY" }, { "name": "Flexible / Remote" }],
+      "categories": [{ "name": "Product Management" }],
+      "levels": [{ "name": "Senior Level", "short_name": "senior" }],
+      "tags": [],
+      "refs": { "landing_page": "https://www.themuse.com/jobs/acmefintech/senior-product-manager" },
+      "company": { "id": 11883, "short_name": "acmefintech", "name": "Acme Fintech" }
+    },
+    {
+      "contents": "<p>Keep our books in order.</p>",
+      "name": "Staff Accountant",
+      "type": "external",
+      "publication_date": "2026-10-19T17:10:00.000000Z",
+      "short_name": "staff-accountant",
+      "model_type": "jobs",
+      "id": 14823290,
+      "locations": [{ "name": "Chicago, IL" }],
+      "categories": [{ "name": "Accounting" }],
+      "levels": [{ "name": "Mid Level", "short_name": "mid" }],
+      "tags": [],
+      "refs": { "landing_page": "https://www.themuse.com/jobs/globex/staff-accountant" },
+      "company": { "id": 22011, "short_name": "globex", "name": "Globex" }
+    }
+  ]
+}

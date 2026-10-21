@@ -1,0 +1,48 @@
+{
+  "offers": [
+    {
+      "id": 1100201,
+      "slug": "strategy-associate",
+      "title": "Strategy Associate",
+      "status": "published",
+      "careers_url": "https://acme.recruitee.com/o/strategy-associate",
+      "careers_apply_url": "https://acme.recruitee.com/o/strategy-associate/c/new",
+      "location": "Amsterdam, Netherlands",
+      "city": "Amsterdam",
+      "country": "Netherlands",
+      "country_code": "NL",
+      "remote": false,
+      "hybrid": true,
+      "on_site": false,
+      "department": "Strategy",
+      "employment_type_code": "fulltime",
+      "published_at": "2026-10-01 09:15:00 UTC",
+      "created_at": "2026-09-28 12:00:00 UTC",
+      "description": "<p>Shape company strategy.</p>",
+      "requirements": "<ul><li>3+ years consulting</li></ul>",
+      "company_name": "Acme"
+    },
+    {
+      "id": 1100202,
+      "slug": "ai-solutions-lead",
+      "title": "AI Solutions Lead",
+      "status": "published",
+      "careers_url": "https://acme.recruitee.com/o/ai-solutions-lead",
+      "careers_apply_url": "https://acme.recruitee.com/o/ai-solutions-lead/c/new",
+      "location": "",
+      "city": "",
+      "country": "",
+      "country_code": "",
+      "remote": true,
+      "hybrid": false,
+      "on_site": false,
+      "department": "Product",
+      "employment_type_code": "fulltime",
+      "published_at": "2026-10-12 08:00:00 UTC",
+      "created_at": "2026-10-11 08:00:00 UTC",
+      "description": "<p>Deploy LLM solutions.</p>",
+      "requirements": "",
+      "company_name": "Acme"
+    }
+  ]
+}

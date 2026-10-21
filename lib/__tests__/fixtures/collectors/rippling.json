@@ -1,0 +1,16 @@
+[
+  {
+    "uuid": "0b6f6a7e-1111-4c1e-9d0a-000000000001",
+    "name": "Strategy & Operations Manager",
+    "department": { "id": "dept-1", "label": "Business Operations" },
+    "url": "https://ats.rippling.com/acme/jobs/0b6f6a7e-1111-4c1e-9d0a-000000000001",
+    "workLocation": { "id": "loc-1", "label": "San Francisco, CA" }
+  },
+  {
+    "uuid": "0b6f6a7e-1111-4c1e-9d0a-000000000002",
+    "name": "Product Manager, AI",
+    "department": { "id": "dept-2", "label": "Product" },
+    "url": "https://ats.rippling.com/acme/jobs/0b6f6a7e-1111-4c1e-9d0a-000000000002",
+    "workLocation": { "id": "loc-2", "label": "Remote (US)" }
+  }
+]

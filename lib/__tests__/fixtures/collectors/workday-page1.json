@@ -1,0 +1,28 @@
+{
+  "total": 0,
+  "jobPostings": [
+    {
+      "title": "Strategy Manager, Corporate Development",
+      "externalPath": "/job/London/Strategy-Manager--Corporate-Development_R0101",
+      "locationsText": "London",
+      "postedOn": "Posted 2 Days Ago",
+      "bulletFields": ["R0101"]
+    },
+    {
+      "title": "Senior Product Manager, AI Platform",
+      "externalPath": "/job/Remote-UK/Senior-Product-Manager--AI-Platform_R0102",
+      "locationsText": "Remote - UK",
+      "postedOn": "Posted 30+ Days Ago",
+      "bulletFields": ["R0102"]
+    },
+    {
+      "title": "Business Operations Lead",
+      "externalPath": "/job/Dubai/Business-Operations-Lead_R0103",
+      "locationsText": "2 Locations",
+      "postedOn": "Posted Today",
+      "bulletFields": []
+    }
+  ],
+  "facets": [],
+  "userAuthenticated": false
+}

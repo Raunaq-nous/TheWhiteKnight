@@ -1,0 +1,40 @@
+{
+  "metadata": { "total_results": 2, "truncated_results": 0, "truncated_companies": 0, "total_companies": 2 },
+  "data": [
+    {
+      "id": 189345672,
+      "job_title": "Senior Product Manager",
+      "url": "https://www.linkedin.com/jobs/view/4012345678",
+      "final_url": "https://boards.greenhouse.io/acmefintech/jobs/7012345",
+      "source_url": "https://www.linkedin.com/jobs/view/4012345678",
+      "date_posted": "2026-10-17",
+      "discovered_at": "2026-10-17T06:10:22.000Z",
+      "company": "Acme Fintech",
+      "company_domain": "acmefintech.com",
+      "company_object": { "id": "acme-fintech", "name": "Acme Fintech", "domain": "acmefintech.com", "industry": "Financial Services", "employee_count": 420 },
+      "location": "London, England, United Kingdom",
+      "short_location": "London, England",
+      "country_code": "GB",
+      "remote": false,
+      "hybrid": true,
+      "seniority": "senior",
+      "salary_string": null,
+      "description": "Own the payments roadmap. Partner with engineering and design.",
+      "technology_slugs": ["stripe", "jira"]
+    },
+    {
+      "id": 189345999,
+      "job_title": "Product Manager",
+      "url": "https://www.indeed.com/viewjob?jk=abcdef123456",
+      "final_url": null,
+      "date_posted": "2026-10-15",
+      "company": null,
+      "company_object": { "id": "globex", "name": "Globex", "domain": "globex.com" },
+      "location": null,
+      "short_location": "Remote",
+      "remote": true,
+      "hybrid": false,
+      "description": "Remote-first PM role on the core platform."
+    }
+  ]
+}

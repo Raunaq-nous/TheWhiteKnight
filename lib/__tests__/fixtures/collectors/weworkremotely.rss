@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>We Work Remotely: Remote jobs in design, programming, marketing and more</title>
+    <link>https://weworkremotely.com/</link>
+    <description>We Work Remotely: Remote jobs in design, programming, marketing and more</description>
+    <language>en-us</language>
+    <ttl>60</ttl>
+    <item>
+      <title>Acme Fintech: Senior Product Manager</title>
+      <region>Anywhere in the World</region>
+      <country>Anywhere in the World</country>
+      <category>Product</category>
+      <type>Full-Time</type>
+      <description><![CDATA[<p>Own the <strong>payments</strong> roadmap &amp; work with design.</p>]]></description>
+      <pubDate>Mon, 20 Oct 2026 10:15:00 +0000</pubDate>
+      <expires_at>Wed, 19 Nov 2026 10:15:00 +0000</expires_at>
+      <guid>https://weworkremotely.com/remote-jobs/acme-fintech-senior-product-manager</guid>
+      <link>https://weworkremotely.com/remote-jobs/acme-fintech-senior-product-manager</link>
+    </item>
+    <item>
+      <title>Smith &amp; Sons: Product Owner, Data &#8211; EMEA</title>
+      <region>Europe Only</region>
+      <category>Product</category>
+      <type>Contract</type>
+      <description>&lt;p&gt;Lead data products &amp;amp; analytics.&lt;/p&gt;</description>
+      <pubDate>Sun, 19 Oct 2026 08:00:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/smith-sons-product-owner-data-emea</guid>
+      <link>https://weworkremotely.com/remote-jobs/smith-sons-product-owner-data-emea</link>
+    </item>
+    <item>
+      <title><![CDATA[Globex: Senior Rails Developer]]></title>
+      <region>USA Only</region>
+      <category>Back-End Programming</category>
+      <description><![CDATA[<p>Ship features in Rails.</p>]]></description>
+      <pubDate>Sat, 18 Oct 2026 16:30:00 +0000</pubDate>
+      <guid>https://weworkremotely.com/remote-jobs/globex-senior-rails-developer</guid>
+      <link>https://weworkremotely.com/remote-jobs/globex-senior-rails-developer</link>
+    </item>
+  </channel>
+</rss>

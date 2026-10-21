@@ -146,12 +146,13 @@ function buildScanParams(profile: Profile): { query: string; roleKeywords: strin
 // fall back to whatever title/company/snippet the scan already has. Scoring
 // on a thin fallback is coarser but the job still gets scored and staged
 // rather than silently dropped.
-async function resolveJdText(job: JobResult, exaApiKey?: string): Promise<string> {
+async function resolveJdText(job: JobResult): Promise<string> {
   if (job.descriptionHtml && job.descriptionHtml.trim()) {
     return htmlToText(job.descriptionHtml);
   }
   try {
-    const fetched = await fetchJdText(job.url, exaApiKey);
+    // Automated: direct then Jina Reader; never Exa, never a restricted portal.
+    const fetched = await fetchJdText(job.applyUrl ?? job.url, { mode: "automated" });
     if (fetched.ok && fetched.text.trim()) return fetched.text;
   } catch {
     // fall through to the snippet-only fallback below
@@ -318,7 +319,7 @@ export async function runAutomation(
     // nothing meaningful to save, so this failure still skips the job.
     let jdText: string;
     try {
-      jdText = await resolveJdText(job, integration.exaApiKey);
+      jdText = await resolveJdText(job);
     } catch (e: any) {
       errors.push(`Could not fetch JD for ${job.company ?? "unknown"} - ${job.title}: ${e.message}`);
       continue;

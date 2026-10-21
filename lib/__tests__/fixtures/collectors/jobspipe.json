@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {
+      "id": "jp_01J9Z5K2ABCDEF",
+      "title": "Product Manager, Platform",
+      "company_name": "Acme Fintech",
+      "location": "London, United Kingdom",
+      "url": "https://jobs.ashbyhq.com/acmefintech/1f2e3d4c-5b6a-7980-a1b2-c3d4e5f6a7b8",
+      "apply_url": "https://jobs.ashbyhq.com/acmefintech/1f2e3d4c-5b6a-7980-a1b2-c3d4e5f6a7b8/application",
+      "posted_at": "2026-10-18T09:00:00Z",
+      "description": "<p>Lead our platform roadmap.</p>",
+      "remote": false,
+      "ats": "ashby"
+    },
+    {
+      "id": 42,
+      "title": "Senior PM",
+      "company": { "name": "Globex" },
+      "location": [{ "name": "Remote, EU" }],
+      "apply_url": "https://jobs.lever.co/globex/9a8b7c6d",
+      "published_at": "2026-10-16T12:00:00Z",
+      "description": "Remote PM role.",
+      "remote": true,
+      "ats": "lever"
+    }
+  ],
+  "next_cursor": null
+}
