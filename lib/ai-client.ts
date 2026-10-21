@@ -1,9 +1,11 @@
 // Server-only AI client. Supports Together AI (default), Anthropic, and OpenAI.
 import { ZodSchema } from "zod";
+import { chainNameForTask, resolveChain, overSpendCap, recordAiCall, estimateCostUsd, type GatewayProvider } from "./ai-gateway";
 
 const TOGETHER_BASE = "https://api.together.xyz/v1";
 const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
 const OPENAI_BASE = "https://api.openai.com/v1";
+const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 
 // Fast, cheap, non-reasoning, SERVERLESS Together model: the default for
 // every task. Not a REASONING_MODEL_PATTERNS match, so chatTogether never
@@ -61,6 +63,7 @@ export type AiTask =
   | "company_discovery"  // app/api/companies/discover
   | "audit"              // app/api/resume/audit (already ran on CHEAP_MODEL; folded into this registry)
   | "evaluator"          // fresh-context evaluator gate (lib/server/services/evaluator.ts)
+  | "skill_extraction"   // normalised skills from JDs (career tracks)
   | "drafting";          // resume/cover-letter/pitch/outreach generation, portfolio build voice drafting, skill-builder
 
 const TASK_ENV_VARS: Record<AiTask, string> = {
@@ -74,6 +77,7 @@ const TASK_ENV_VARS: Record<AiTask, string> = {
   company_discovery: "AI_MODEL_COMPANY_DISCOVERY",
   audit: "AI_MODEL_AUDIT",
   evaluator: "AI_MODEL_EVALUATOR",
+  skill_extraction: "AI_MODEL_SKILL_EXTRACTION",
   drafting: "AI_MODEL", // the pre-existing global var — preserved for the one tier that still defaults to it
 };
 
@@ -88,6 +92,7 @@ const TASK_DEFAULT_MODEL: Record<AiTask, string> = {
   company_discovery: CHEAP_MODEL,
   audit: CHEAP_MODEL,
   evaluator: CHEAP_MODEL,
+  skill_extraction: CHEAP_MODEL,
   drafting: DEFAULT_MODEL,
 };
 
@@ -147,6 +152,8 @@ export type ChatOptions = {
   // explicit `model` is given. Only meaningful on the Together path — a
   // user's own configured Anthropic/OpenAI model always wins regardless.
   task?: AiTask;
+  // Internal: skip the OpenRouter gateway (visionExtract tries it once itself).
+  skipGateway?: boolean;
 };
 
 export type ProviderSettings = {
@@ -271,6 +278,12 @@ async function chatTogether(messages: ChatMessage[], opts: ChatOptions, override
   let content = choice?.message?.content ?? "";
   const finishReason = choice?.finish_reason ?? "unknown";
   const { completionTokens, reasoningTokens, contentTokens } = extractTokenUsage(result);
+  const promptTokens = result.usage?.prompt_tokens ?? 0;
+  recordAiCall({
+    at: new Date().toISOString(), task: opts.task ?? "drafting", provider: "together", modelRequested: model,
+    modelServed: result.model ?? model, promptTokens, completionTokens, reasoningTokens,
+    costUsd: estimateCostUsd("together", model, promptTokens, completionTokens), ok: !!content,
+  });
 
   // Log the reasoning/content token split on EVERY call — this is what
   // makes the "reasoning ate the whole budget" failure class visible
@@ -364,6 +377,12 @@ async function chatAnthropic(messages: ChatMessage[], opts: ChatOptions, apiKey:
     body: JSON.stringify(body),
   }, "Anthropic");
   const result = await response.json();
+  const promptTokens = result.usage?.input_tokens ?? 0;
+  const completionTokens = result.usage?.output_tokens ?? 0;
+  recordAiCall({
+    at: new Date().toISOString(), task: opts.task ?? "drafting", provider: "anthropic", modelRequested: model, modelServed: result.model ?? model,
+    promptTokens, completionTokens, reasoningTokens: 0, costUsd: estimateCostUsd("anthropic", model, promptTokens, completionTokens), ok: true,
+  });
   return result.content?.[0]?.text?.trim() ?? "";
 }
 
@@ -383,14 +402,64 @@ async function chatOpenAI(messages: ChatMessage[], opts: ChatOptions, apiKey: st
     body: JSON.stringify(body),
   }, "OpenAI");
   const result = await response.json();
+  const promptTokens = result.usage?.prompt_tokens ?? 0;
+  const completionTokens = result.usage?.completion_tokens ?? 0;
+  recordAiCall({
+    at: new Date().toISOString(), task: opts.task ?? "drafting", provider: "openai", modelRequested: model, modelServed: result.model ?? model,
+    promptTokens, completionTokens, reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
+    costUsd: estimateCostUsd("openai", model, promptTokens, completionTokens), ok: true,
+  });
   return result.choices?.[0]?.message?.content?.trim() ?? "";
+}
+
+/**
+ * OpenRouter (OpenAI-compatible). One request carries the whole chain as
+ * OpenRouter's native fallback list ("models"), with provider routing set to
+ * deny data collection. The response names the model that actually served.
+ */
+async function chatOpenRouter(messages: ChatMessage[], opts: ChatOptions, chain: string[], task: string): Promise<string> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new ProviderError("OpenRouter error 401: OPENROUTER_API_KEY is not set", 401, null, "OpenRouter", true);
+  const body: any = {
+    model: chain[0],
+    models: chain,
+    provider: { data_collection: "deny" },
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 2000,
+    usage: { include: true },
+  };
+  if (opts.jsonMode) body.response_format = { type: "json_object" };
+  const response = await fetchWithRetry(`${OPENROUTER_BASE}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Title": "CareerOS" },
+    body: JSON.stringify(body),
+  }, "OpenRouter");
+  const result = await response.json();
+  const choice = result.choices?.[0];
+  let content: string = choice?.message?.content ?? "";
+  const usage = result.usage ?? {};
+  const promptTokens = usage.prompt_tokens ?? 0;
+  const completionTokens = usage.completion_tokens ?? 0;
+  const served = result.model ?? chain[0];
+  recordAiCall({
+    at: new Date().toISOString(), task, provider: "openrouter", modelRequested: chain.join(" > "), modelServed: served,
+    promptTokens, completionTokens, reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? 0,
+    costUsd: typeof usage.cost === "number" ? usage.cost : estimateCostUsd("openrouter", served, promptTokens, completionTokens), ok: !!content,
+  });
+  content = stripThinkBlocks(content);
+  if (!content.trim()) {
+    // Nothing usable from the whole chain: fail over to the next provider.
+    throw new ProviderError(`OpenRouter error 502 (empty_content): ${served} returned no content (finish_reason=${choice?.finish_reason ?? "unknown"})`, 502, "empty_content", "OpenRouter", true);
+  }
+  return content.trim();
 }
 
 function resolveTogetherModel(opts: ChatOptions): string {
   return opts.model ?? (opts.task ? getModelForTask(opts.task) : undefined) ?? process.env.AI_MODEL ?? DEFAULT_MODEL;
 }
 
-type Attempt = { label: string; run: () => Promise<string> };
+type Attempt = { label: string; provider: GatewayProvider; run: () => Promise<string> };
 
 /**
  * The ordered attempts for one call: the configured provider/model first,
@@ -402,16 +471,28 @@ function buildAttempts(messages: ChatMessage[], opts: ChatOptions, provider?: Pr
   const attempts: Attempt[] = [];
   if (provider?.provider === "anthropic" && provider.apiKey) {
     const model = opts.model ?? provider.model;
-    attempts.push({ label: `anthropic:${model ?? "default"}`, run: () => chatAnthropic(messages, { ...opts, model }, provider.apiKey!) });
+    attempts.push({ label: `anthropic:${model ?? "default"}`, provider: "anthropic", run: () => chatAnthropic(messages, { ...opts, model }, provider.apiKey!) });
   } else if (provider?.provider === "openai" && provider.apiKey) {
     const model = opts.model ?? provider.model;
-    attempts.push({ label: `openai:${model ?? "default"}`, run: () => chatOpenAI(messages, { ...opts, model }, provider.apiKey!) });
+    attempts.push({ label: `openai:${model ?? "default"}`, provider: "openai", run: () => chatOpenAI(messages, { ...opts, model }, provider.apiKey!) });
   }
   const isVision = messages.some(m => Array.isArray(m.content));
+  // The gateway: the task's OpenRouter chain, before Together.
+  if (process.env.OPENROUTER_API_KEY && !opts.skipGateway) {
+    const chainName = isVision ? "vision" : chainNameForTask(opts.task);
+    // Always the chain: an explicit opts.model names a Together model.
+    const chain = resolveChain(chainName);
+    if (chain.length) {
+      attempts.push({ label: `openrouter:${chainName}[${chain.join(",")}]`, provider: "openrouter", run: () => chatOpenRouter(messages, opts, chain, isVision ? "vision" : (opts.task ?? "drafting")) });
+    }
+  }
   // A Together fallback behind another provider never reuses that provider's model name.
-  const primaryTogether = attempts.length
+  const byo = attempts.some(a => a.provider === "anthropic" || a.provider === "openai");
+  const primaryTogether = byo
     ? resolveTogetherModel({ ...opts, model: undefined })
     : resolveTogetherModel({ ...opts, model: opts.model ?? provider?.model });
+  // Together is the last fallback, used only when its key exists (or when
+  // nothing else is configured, so the missing-key error is explicit).
   const togetherModels = attempts.length && !process.env.TOGETHER_API_KEY ? [] : [primaryTogether];
   if (!isVision && process.env.TOGETHER_API_KEY) {
     togetherModels.push(...[opts.task ? getModelForTask(opts.task) : DEFAULT_MODEL, ...getFallbackModels()]);
@@ -420,19 +501,31 @@ function buildAttempts(messages: ChatMessage[], opts: ChatOptions, provider?: Pr
   for (const model of togetherModels) {
     if (seen.has(model)) continue;
     seen.add(model);
-    attempts.push({ label: `together:${model}`, run: () => chatTogether(messages, { ...opts, model }) });
+    attempts.push({ label: `together:${model}`, provider: "together", run: () => chatTogether(messages, { ...opts, model }) });
   }
   return attempts;
 }
 
 export async function chat(messages: ChatMessage[], opts: ChatOptions = {}, provider?: ProviderSettings): Promise<string> {
-  const attempts = buildAttempts(messages, opts, provider);
+  // Spend guard: a provider at its monthly cap is skipped.
+  const all = buildAttempts(messages, opts, provider);
+  const attempts = all.filter(a => !overSpendCap(a.provider));
+  if (attempts.length < all.length) {
+    console.warn(`[CareerOS AI] spend cap reached, skipping: ${[...new Set(all.filter(a => !attempts.includes(a)).map(a => a.provider))].join(", ")}`);
+  }
+  if (!attempts.length) throw new Error("Every configured AI provider is at its monthly spend cap. Raise a cap in Settings or wait for the new month.");
   let lastErr: unknown = null;
   for (let i = 0; i < attempts.length; i++) {
     try {
       return await attempts[i].run();
     } catch (e) {
       lastErr = e;
+      if (e instanceof ProviderError) {
+        recordAiCall({
+          at: new Date().toISOString(), task: opts.task ?? "drafting", provider: attempts[i].provider, modelRequested: attempts[i].label,
+          modelServed: "", promptTokens: 0, completionTokens: 0, reasoningTokens: 0, costUsd: 0, ok: false, error: `${e.status}${e.code ? ` ${e.code}` : ""}`,
+        });
+      }
       const canFailOver = e instanceof ProviderError && e.failover && i < attempts.length - 1;
       if (!canFailOver) throw e;
       console.warn(`[CareerOS AI] failover: ${attempts[i].label} failed (${(e as ProviderError).status}${(e as ProviderError).code ? ` ${(e as ProviderError).code}` : ""}); trying ${attempts[i + 1].label}`);
@@ -504,9 +597,21 @@ export async function visionExtract(base64: string, mimeType: string, instructio
   }];
 
   let lastError: Error | null = null;
+  // The gateway's vision chain first (once), then the Together vision chain.
+  if (process.env.OPENROUTER_API_KEY && !overSpendCap("openrouter")) {
+    const chain = resolveChain("vision");
+    if (chain.length) {
+      try {
+        return await chatOpenRouter(messages, { temperature: 0.1, maxTokens: 3000 }, chain, "vision");
+      } catch (e: any) {
+        lastError = e;
+        if (!(e instanceof ProviderError && e.failover)) throw e;
+      }
+    }
+  }
   for (const model of modelsToTry) {
     try {
-      return await chat(messages, { temperature: 0.1, maxTokens: 3000, model });
+      return await chat(messages, { temperature: 0.1, maxTokens: 3000, model, skipGateway: true });
     } catch (e: any) {
       lastError = e;
       // Fall through to the next vision model on any failover trigger

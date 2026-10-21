@@ -9,7 +9,7 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 | --- | --- | --- | --- |
 | P0-1 | Resume content and structure | DONE | 2fe1c57 + this item's commit |
 | P0-2 | Fresh-context evaluator gate | DONE | see section |
-| P0-3 | Model gateway on OpenRouter | TODO | |
+| P0-3 | Model gateway on OpenRouter | DONE | see section |
 | P1-1 | Sourcing expansion | TODO | |
 | P1-2 | Career tracks and skill pathways (v1) | TODO | |
 | P2-1 | Feedback capture and playbook proposals | TODO | |
@@ -48,7 +48,20 @@ Assumption: drafts use the parsed JD key requirements (top 5) for coverage, with
 Verification: npm test 923 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P0-3 Model gateway on OpenRouter
-Status: TODO
+Status: DONE
+
+- OpenRouter as an OpenAI-compatible provider (OPENROUTER_API_KEY, server env). Each call sends the task's chain as OpenRouter's native fallback list ("models"), with provider routing { data_collection: "deny" } and usage accounting on.
+- Chains (config/model-chains.json): structured = GLM-5.3-Flash, DeepSeek V4.1 Flash, GLM-5.3; writing = GLM-5.3, Kimi K3, Claude Sonnet 5.5; vision = Qwen3.8-27B then the existing Together vision fallbacks. Tasks map to chains (structured: scoring, JD extraction, requirement map, resume selection, gap analysis, evaluator, skill extraction, profile extraction, form answers, company discovery, audit; writing: drafting, the summary rewrite, cover letters, outreach, pitches).
+- ASSUMPTION / server check: the sandbox could not reach https://openrouter.ai/api/v1/models (egress proxy refused), so the ids are best-effort slugs kept in config: z-ai/glm-5.3-flash, deepseek/deepseek-v4.1-flash, z-ai/glm-5.3, moonshotai/kimi-k3, anthropic/claude-sonnet-5.5, qwen/qwen3.8-27b. `npm run check:models` validates every configured id against the live list (SERVER-CHECKS.md).
+- Every chain is editable in Settings > Model gateway (admin only; stored server-wide because the keys are server-wide).
+- Attempt order: a BYO Anthropic/OpenAI key (if the user chose one), then OpenRouter, then Together as the last fallback when TOGETHER_API_KEY exists, with the existing failover rules (401/402/403/429/5xx, 400/404 model_not_available/model_not_found) plus OpenRouter empty content.
+- Call log: every call logs and records provider, requested chain, served model, prompt/completion/reasoning tokens and cost (ai_calls table, newest 5000 kept). Settings shows the recent calls per task and which model served each.
+- Health: /api/health is public liveness only. Live probes moved to /api/health/models (login required, cached 10 minutes, ?refresh=1).
+- Spend guard: monthly cap per paid provider (openrouter, together, anthropic, openai) in Settings; at the cap the provider is skipped and the call falls through; all capped gives a clear error. OpenRouter cost comes from its usage report; others are estimated from config prices.
+- Fixed: follow-up and form-answer services cast every provider to "together" and dropped the user's key.
+- Tests: lib/__tests__/ai-gateway.test.ts (chains, request shape, served-model record, no keys in logs, failover to Together, vision chain, spend guard, storage, health cache).
+
+Verification: npm test 939 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P1-1 Sourcing expansion
 Status: TODO

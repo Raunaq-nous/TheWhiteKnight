@@ -71,7 +71,8 @@ export async function finalizeResumeContent(content: ResumeContent, ctx: Finaliz
           yearsClaim: ctx.profile.yearsOfExperience ?? "", currentPosition: current ? `${current.role} at ${current.company}` : "",
           requirements: ctx.requirements,
         }) }],
-        { temperature: 0.3, maxTokens: 300, task: "resume_selection" },
+        // The summary is writing: the writing chain.
+        { temperature: 0.3, maxTokens: 300, task: "drafting" },
         ctx.providerSettings,
         SummarySchema,
       );
