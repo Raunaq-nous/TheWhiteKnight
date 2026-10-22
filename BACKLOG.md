@@ -10,7 +10,7 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 | P0-1 | Resume content and structure | DONE | 2fe1c57 + this item's commit |
 | P0-2 | Fresh-context evaluator gate | DONE | see section |
 | P0-3 | Model gateway on OpenRouter | DONE | see section |
-| P1-1 | Sourcing expansion | IN PROGRESS | WIP |
+| P1-1 | Sourcing expansion | DONE | see section |
 | P1-2 | Career tracks and skill pathways (v1) | TODO | |
 | P2-1 | Feedback capture and playbook proposals | TODO | |
 
@@ -64,10 +64,25 @@ Status: DONE
 Verification: npm test 939 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P1-1 Sourcing expansion
-Status: IN PROGRESS (WIP commit; collectors from two failed subagents are on disk but not yet verified or registered)
+Status: DONE (commits cb539a4, 8ab119a, f0ec8b8, 33d335f and this item's final commit)
 
-Done so far (not yet wired into scans): lib/job-sources.ts (source catalogue and priority), lib/job-dedupe.ts (cross-source dedupe keeping the company-direct URL), lib/ghost-jobs.ts (stale/repost/gone flags), lib/source-analytics.ts (conversion by source, ranking with category priors), JD fetch order direct -> Jina -> Exa (automated mode never calls Exa or fetches restricted portals), lib/alert-email.ts + lib/server/services/alert-inbox.ts (IMAP alert inbox, lookup-only portals), Application.source/ghost fields, IMAP fields in integration settings, imapflow + mailparser dependencies.
-Remaining: verify and test the collector files, register them, scan integration (autopilot keyless/company-direct preference, no Exa in autopilot, budgets), ghost flagging in autopilot, attribution on save, /analytics by source, ATS detector UI/route, settings UI for keys and IMAP, track-aware scanning, tests.
+How it was built: two parallel subagents wrote the collectors and stopped on a usage limit before running their tests; their work was then reviewed, fixed (ATS detector "Work With Us" -> "Us"; We Work Remotely entity leak) and finished in the main thread, one piece at a time.
+
+- Public ATS collectors (lib/server/services/collectors): Workday (POST, 20 per page, paginated to the board's reported total, page cap), Workable, Recruitee, Personio (XML), Teamtailor (RSS), Rippling; registered with the existing Greenhouse, Lever, Ashby and SmartRecruiters.
+- ATS detector (lib/server/services/ats-detector.ts, POST /api/companies/detect, "Add by domain or careers URL" on /companies): detects the ATS and slug from a URL or the company's own public pages (max 3 fetches, public hosts only) and adds the company to the targets.
+- Aggregators with optional keys and monthly budget counters (lib/server/source-budget.ts; SOURCE_BUDGET_<NAME> overrides): Google Jobs via SerpApi (SERPAPI_API_KEY), JSearch (JSEARCH_API_KEY), Adzuna (existing user keys), TheirStack (THEIRSTACK_API_KEY), JobsPipe (JOBSPIPE_API_KEY; endpoint uncertain, isolated in JOBSPIPE_BASE). Keys are redacted from every error.
+- Keyless remote boards: Remotive, Arbeitnow, The Muse, Remote OK (User-Agent and attribution link kept), We Work Remotely (RSS), Himalayas, Jobicy.
+- Scan orchestration (scan-service): company-direct boards, then Google Jobs, remote boards, other aggregators; Exa for manual scans only. Autopilot uses keyed aggregators only to top up what keyless company-direct sources found, within budget, and never calls Exa. Restricted portals (LinkedIn, Naukri, Indeed, Glassdoor and similar) are removed from Exa's domain list.
+- Alert inbox (lib/alert-email.ts, lib/server/services/alert-inbox.ts; IMAP settings in Settings > Integrations): read-only IMAP, alert emails from LinkedIn, Naukri, iimjobs, Instahyre, Cutshort, Wellfound, Bayt, GulfTalent and Naukrigulf parsed deterministically (email content inert, no model). ASSUMPTION: all nine portals are "lookup-only" (terms forbid automated access): the portal page is never fetched; the job is matched on the company's own ATS board by company and title. A company-direct ATS link inside an alert is ingested as is. Unresolved alerts are listed in the run log with the reason.
+- JD fetch order: direct fetch with JSON-LD, then Jina Reader (JINA_API_KEY optional), then Exa as a manual-only last resort. Automated fetches never call Exa and never touch a restricted portal; a URL you paste is fetched as before.
+- Cross-source dedupe (lib/job-dedupe.ts): one record per job, keeping the company-direct apply URL; same title in different cities stays separate.
+- Ghost-job filter (lib/ghost-jobs.ts): stale (>30 days), repost (same JD fingerprint under a new id on the same host), gone (missing from the company's freshly fetched ATS feed). Flagged jobs stay visible with the reason and are never staged by autopilot.
+- Attribution and conversion: Application.source (+ via, externalId) on autopilot, batch and manual ingest (source inferred from the URL's host); /analytics shows response and interview rates by source; scan ordering uses each source's observed interview rate shrunk toward category priors from the appendix's Huntr data, so company-direct leads until your own data says otherwise.
+- Track-aware scanning (lib/track-scan.ts): active career tracks (Settings > Automation, /api/tracks) add their titles and keywords, bring their target companies into the scan, and set preferred source categories. docs/CAREER-TRACKS.md committed verbatim and loaded from config/career-tracks.json.
+- Fixtures: ALL collector and alert-email fixtures are reconstructed from documented shapes (no network in the sandbox). `npm run capture:fixtures` on the server makes one live request per keyless source, reports mapping, and saves raw captures to lib/__tests__/fixtures/collectors/live/.
+- Tests: collectors-ats, ats-detector, collectors-aggregators, sourcing, scan-orchestration, jd-fetch-order, track-scan, automation-service (autopilot sourcing).
+
+Verification: npm test 1157 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P1-2 Career tracks and skill pathways (v1)
 Status: TODO

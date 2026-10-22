@@ -26,6 +26,8 @@ export type JobResult = {
   // For aggregators: the board/publisher the listing came from.
   via?: string;
   remote?: boolean;
+  // Other sources the same job was seen on (set by cross-source dedupe).
+  alsoSeenOn?: string[];
 };
 
 export type { JobSource } from "../../../job-sources";

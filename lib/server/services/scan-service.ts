@@ -48,6 +48,8 @@ export type JobScanInput = {
   budget?: SourceBudget;
   // Observed conversion per source: results are ordered by it.
   sourceStats?: SourceConversion[];
+  // Active career tracks' preferred source categories (tie-break order).
+  preferredCategories?: string[];
 };
 
 // Re-exported for existing callers (automation-service.ts, rules-prefilter.ts)
@@ -150,6 +152,7 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
     includeRemoteBoards = true,
     location,
     sourceStats = [],
+    preferredCategories = [],
   } = input;
   const budget = input.budget ?? dbSourceBudget();
   const autopilot = mode === "autopilot";
@@ -273,7 +276,7 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
   }));
   // Order: relevance (in bands of 10), then the source's observed
   // conversion for this user (company-direct first by default).
-  const order = rankSources(sourceStats, [...new Set(scored.map(j => j.source))]);
+  const order = rankSources(sourceStats, [...new Set(scored.map(j => j.source))], preferredCategories);
   const rank = (s: string) => order.indexOf(s);
   const relevant = scored
     .filter(j => (j.relevance ?? 0) >= 20)

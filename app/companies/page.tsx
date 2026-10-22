@@ -42,6 +42,29 @@ export default function CompaniesPage() {
   const [sectorFilter, setSectorFilter] = useState<Sector | "all">("all");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
   const [adding, setAdding] = useState(false);
+  // ATS detector: domain or careers URL -> ATS + slug -> a new target.
+  const [detectInput, setDetectInput] = useState("");
+  const [detectMsg, setDetectMsg] = useState("");
+  const [detecting, setDetecting] = useState(false);
+  const detectAndAdd = async () => {
+    if (!detectInput.trim()) return;
+    setDetecting(true); setDetectMsg("");
+    try {
+      const res = await fetch("/api/companies/detect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: detectInput }) });
+      const data = await res.json();
+      if (!res.ok) { setDetectMsg(data.error ?? "Detection failed."); return; }
+      if (!data.detected) { setDetectMsg(`No public ATS found (${data.reason}). Add it manually below.`); return; }
+      const t: CompanyTarget = data.target;
+      if (targets.some(x => x.id === t.id || (x.ats === t.ats && x.atsTenant === t.atsTenant))) { setDetectMsg(`${t.name} is already in your targets (${t.ats}).`); return; }
+      persist([t, ...targets]);
+      setDetectMsg(`Added ${t.name}: ${t.ats} (${t.atsTenant}).`);
+      setDetectInput("");
+    } catch (e: any) {
+      setDetectMsg(e.message ?? "Detection failed.");
+    } finally {
+      setDetecting(false);
+    }
+  };
   const [draft, setDraft] = useState<Partial<CompanyTarget>>({ enabled: true, region: ["global"], sector: "ai-emerging", ats: "custom" });
 
   // AI discovery state
@@ -200,6 +223,15 @@ export default function CompaniesPage() {
           </div>
         )}
 
+        <div data-testid="ats-detector" style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 16, marginBottom: 16 }}>
+          <div className="label" style={{ marginBottom: 8 }}>ADD BY DOMAIN OR CAREERS URL (DETECTS THE ATS)</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input placeholder="acme.com or https://acme.com/careers" value={detectInput} onChange={e => setDetectInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") detectAndAdd(); }} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
+            <button className="btn btn-primary" onClick={detectAndAdd} disabled={detecting}>{detecting ? "DETECTING..." : "DETECT AND ADD"}</button>
+          </div>
+          {detectMsg && <div style={{ marginTop: 8, fontSize: "0.75rem", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>{detectMsg}</div>}
+        </div>
+
         {adding && (
           <div style={{ background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", padding: 20, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 12 }}>ADD COMPANY</div>
@@ -216,6 +248,11 @@ export default function CompaniesPage() {
                 <option value="lever">Lever</option>
                 <option value="workday">Workday</option>
                 <option value="smartrecruiters">SmartRecruiters</option>
+                <option value="workable">Workable</option>
+                <option value="recruitee">Recruitee</option>
+                <option value="personio">Personio</option>
+                <option value="teamtailor">Teamtailor</option>
+                <option value="rippling">Rippling</option>
               </select>
               <input placeholder="ATS tenant slug (optional)" value={draft.atsTenant ?? ""} onChange={e => setDraft({ ...draft, atsTenant: e.target.value })} style={inputStyle} />
               <select value={draft.region?.[0] ?? "global"} onChange={e => setDraft({ ...draft, region: [e.target.value as Region] })} style={inputStyle}>

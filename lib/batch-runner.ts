@@ -3,6 +3,7 @@
 // State is persisted to SQLite via write-through so progress survives refresh.
 
 import { Profile } from "./profile";
+import { inferSourceFromUrl, type JobSource } from "./job-sources";
 import { TargetBucket, Application, generateId, generateSlug, saveApplication } from "./store";
 import { getModelSettings } from "./model-settings";
 import { AFScoreResult } from "./prompts";
@@ -18,6 +19,9 @@ export type BatchInput = {
   remote?: boolean;
   seniority?: string;
   sector?: string;
+  // Attribution: where the job came from (scan source, or inferred from the URL).
+  source?: JobSource;
+  sourceVia?: string;
 };
 
 export type BatchItem = BatchInput & {
@@ -104,6 +108,8 @@ async function processItem(item: BatchItem, profile: Profile, buckets: TargetBuc
       sector: item.sector ?? "",
       seniority: item.seniority ?? "senior",
       sourceUrl: item.jdUrl ?? "",
+      source: item.source ?? inferSourceFromUrl(item.jdUrl),
+      ...(item.sourceVia ? { sourceVia: item.sourceVia } : {}),
       capturedAt: now.split("T")[0],
       jdRaw: item.jdText,
       jdParsed: scored.jdParsed,

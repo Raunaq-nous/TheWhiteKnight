@@ -17,7 +17,8 @@
     "verify:resume": "tsx scripts/verify-resume.ts",
     "remove:profile-bullets": "tsx scripts/remove-profile-bullets.ts",
     "tag:imported-bullets": "tsx scripts/tag-imported-bullets.ts",
-    "check:models": "tsx scripts/check-models.ts"
+    "check:models": "tsx scripts/check-models.ts",
+    "capture:fixtures": "tsx scripts/capture-collector-fixtures.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
