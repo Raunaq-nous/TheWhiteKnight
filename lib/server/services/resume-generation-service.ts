@@ -39,6 +39,7 @@ import { extractTopRequirements } from "./jd-requirements";
 import { finalizeResumeContent, requirementCoverage, type SummaryReport, type RequirementCoverage } from "./resume-finalize";
 import type { Profile } from "../../profile";
 import type { Application } from "../../store";
+import { rulesFor, type Playbook } from "../../playbook";
 
 export type GenerateResumeContentResult = {
   data: ResumeContent;
@@ -73,7 +74,7 @@ export async function generateResumeContent(
   app: Application,
   providerSettings: ProviderSettings | undefined,
   resumeArchetype?: ResumeArchetype,
-  options: { evaluatorFindings?: string[] | null } = {},
+  options: { evaluatorFindings?: string[] | null; playbook?: Playbook | null } = {},
 ): Promise<GenerateResumeContentResult> {
   const archetype = detectResumeArchetype(profile, app, resumeArchetype);
   const maxPages = resolveConfiguredMaxPages(profile, app, archetype);
@@ -94,7 +95,10 @@ export async function generateResumeContent(
   const eligibleIds = new Set(buildCandidates(effectiveProfile, new Map(), maxPages, { isTextAllowed }).pool.map(c => c.id));
 
   const data = await chatJSON<ResumeContent>(
-    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages, { topRequirements: jd.requirements, eligibleIds, evaluatorFindings: options.evaluatorFindings ?? undefined }) }],
+    [{ role: "user", content: resumePrompt(effectiveProfile, app, archetype, maxPages, {
+      topRequirements: jd.requirements, eligibleIds, evaluatorFindings: options.evaluatorFindings ?? undefined,
+      playbookRules: rulesFor(options.playbook, { artifact: "resume", archetype, trackId: app.track?.id }),
+    }) }],
     // "resume_selection": the model RANKS eligible ids and writes the summary.
     { temperature: 0.4, maxTokens: 6000, task: "resume_selection" },
     providerSettings,
@@ -149,9 +153,10 @@ export async function generateEvaluatedResume(
   app: Application,
   providerSettings: ProviderSettings | undefined,
   resumeArchetype?: ResumeArchetype,
+  playbook?: Playbook | null,
 ): Promise<GenerateResumeContentResult & { evaluation: ArtifactEvaluation }> {
   const { artifact, evaluation } = await withEvaluatorGate({
-    generate: findings => generateResumeContent(profile, app, providerSettings, resumeArchetype, { evaluatorFindings: findings }),
+    generate: findings => generateResumeContent(profile, app, providerSettings, resumeArchetype, { evaluatorFindings: findings, playbook }),
     evaluate: r => evaluateArtifact({
       kind: "resume",
       artifact: resumeContentToMarkdown(r.data, r.archetype),

@@ -9,6 +9,7 @@ import { getProfile } from "../../lib/profile";
 import { NLUpdateResult } from "../../lib/prompts";
 import { getModelSettings } from "../../lib/model-settings";
 import { getIntegrationSettings } from "../../lib/integration-settings";
+import { appContext, recordFeedback, resumeBulletDiff } from "../../lib/feedback";
 import { generateTailoredResume, refineResume, generateCoverLetter, generateExecutiveSummary, generateProblemSolverPitch, generateSkillGap, generateHMOutreach, generateLinkedInDM, generateCEOColdEmail, refineGeneration, GenerationAction, SkillGapResult } from "../../lib/generate";
 import { queueDM, queueOutreach, queueCEOEmail, scheduleFollowUp } from "../../lib/notifications";
 import { ContactsPanel } from "../contacts-panel";
@@ -217,6 +218,7 @@ function ApplicationDetail() {
       // A manually set career track carries its resume archetype.
       const override = resumeArchetypeChoice === "auto" ? (app.track?.method === "manual" ? app.track.archetype : undefined) : resumeArchetypeChoice;
       const { data, archetype } = await refineResume(profile, app, resumeContent, resumeRefineText.trim(), override);
+      recordFeedback({ kind: "draft_edit", artifact: "resume", instruction: resumeRefineText.trim(), ...resumeBulletDiff(resumeContent, data), ...appContext(app), archetype });
       await persistResumeContent(data, archetype);
       setResumeRefineText("");
     } catch (e: any) {
@@ -344,6 +346,7 @@ function ApplicationDetail() {
     try {
       const newContent = await refineGeneration(aiOutput.action, profile, app, aiOutput.content, refineText.trim());
       setVersionHistory(prev => [...prev, { action: aiOutput.action, content: aiOutput.content, instruction: refineText.trim() }]);
+      recordFeedback({ kind: "draft_edit", artifact: aiOutput.action, instruction: refineText.trim(), ...appContext(app) });
       setAiOutput({ action: aiOutput.action, content: newContent });
       setRefineText("");
     } catch (e: any) {
@@ -1153,7 +1156,11 @@ window.addEventListener('load', function() {
               <ResumeGapFillBox
                 app={app}
                 resumeContent={resumeContent}
-                onResumeContentChange={next => persistResumeContent(next, resumeArchetypeUsed ?? "general")}
+                onResumeContentChange={next => {
+                  // A bullet I added by hand from the gap analysis is an edit to the draft.
+                  recordFeedback({ kind: "draft_edit", artifact: "resume", ...resumeBulletDiff(resumeContent, next), ...appContext(app), archetype: resumeArchetypeUsed ?? undefined });
+                  return persistResumeContent(next, resumeArchetypeUsed ?? "general");
+                }}
               />
             </div>
           )}

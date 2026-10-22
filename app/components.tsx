@@ -85,6 +85,7 @@ const NAV_LINKS = [
   { href: "/applications/", label: "Applications" },
   { href: "/analytics/", label: "Analytics" },
   { href: "/skills/", label: "Skill Builder" },
+  { href: "/playbook/", label: "Playbook" },
   { href: "/contacts/", label: "Contacts" },
   { href: "/companies/", label: "Companies" },
   { href: "/batch/", label: "Batch" },

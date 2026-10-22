@@ -38,14 +38,15 @@ function ApprovalCard({
   onDecide,
 }: {
   item: ApprovalItem;
-  onDecide: (id: string, decision: "approve" | "reject") => Promise<void>;
+  onDecide: (id: string, decision: "approve" | "reject", reason: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState("");
 
   const decide = async (decision: "approve" | "reject") => {
     setBusy(true);
     try {
-      await onDecide(item.id, decision);
+      await onDecide(item.id, decision, reason);
     } finally {
       setBusy(false);
     }
@@ -108,6 +109,17 @@ function ApprovalCard({
           </div>
         )}
       </div>
+      {isPending && (
+        <input
+          className="input"
+          data-testid="approval-reason"
+          style={{ marginTop: 8, fontSize: "0.6875rem", width: "100%" }}
+          placeholder="Reason (optional): what made you approve or reject this? Feeds the playbook."
+          maxLength={400}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+        />
+      )}
     </div>
   );
 }
@@ -134,11 +146,11 @@ export default function ApprovalsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleDecide = async (id: string, decision: "approve" | "reject") => {
+  const handleDecide = async (id: string, decision: "approve" | "reject", reason: string) => {
     const res = await fetch(`/api/approvals/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({ decision, reason: reason.trim() || undefined }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({})) as { error?: string };

@@ -3,6 +3,8 @@ import { getSession } from "../../../../lib/session";
 import { resolveApproval } from "../../../../lib/server/approval-gate";
 import { approvalRepo } from "../../../../lib/server/repositories/approval-repo";
 import { executeApproval } from "../../../../lib/server/services/approval-executor";
+import { feedbackRepo } from "../../../../lib/server/repositories/feedback-repo";
+import { approvalDecisionEvent } from "../../../../lib/feedback";
 
 export const runtime = "nodejs";
 
@@ -13,7 +15,7 @@ export async function POST(
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { decision } = await req.json() as { decision: "approve" | "reject" };
+  const { decision, reason } = await req.json() as { decision: "approve" | "reject"; reason?: string };
   if (decision !== "approve" && decision !== "reject") {
     return NextResponse.json({ error: "decision must be approve or reject" }, { status: 400 });
   }
@@ -35,6 +37,7 @@ export async function POST(
     if (!result) {
       return NextResponse.json({ error: "Approval not found or already resolved" }, { status: 404 });
     }
+    recordDecision(session.email, existing.action, "reject", reason);
     return NextResponse.json({ ok: true, status: result.status });
   }
 
@@ -51,6 +54,7 @@ export async function POST(
       return NextResponse.json({ error: "Approval not found or already resolved" }, { status: 404 });
     }
     token = resolved.token;
+    recordDecision(session.email, existing.action, "approve", reason);
   } else if (existing.status === "consumed") {
     return NextResponse.json({ error: "Already executed" }, { status: 409 });
   } else {
@@ -68,4 +72,12 @@ export async function POST(
   }
 
   return NextResponse.json({ ok: true, status: "consumed", executed: true });
+}
+
+// Feedback for the playbook reflector. Recorded once, on the first resolution
+// (not on an execution retry), and never allowed to fail the decision.
+function recordDecision(userEmail: string, action: Parameters<typeof approvalDecisionEvent>[0], decision: "approve" | "reject", reason: unknown) {
+  try {
+    feedbackRepo.add(userEmail, approvalDecisionEvent(action, decision, typeof reason === "string" ? reason : undefined));
+  } catch { /* feedback is best-effort */ }
 }

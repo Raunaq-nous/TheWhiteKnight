@@ -11,7 +11,10 @@ import { resolveResumeSelections } from "../../../lib/resume-selection";
 import { enforceEmployerLocations } from "../../../lib/resume-confidentiality";
 import { suppressSideBuilds } from "../../../lib/resume-tool-placement";
 import { generateEvaluatedResume, resumeSourceProfile } from "../../../lib/server/services/resume-generation-service";
-import { generateEvaluatedDraft } from "../../../lib/server/services/draft-service";
+import { generateEvaluatedDraft, draftPlaybookRules } from "../../../lib/server/services/draft-service";
+import { playbookForGeneration } from "../../../lib/server/services/playbook-service";
+import { rulesFor } from "../../../lib/playbook";
+import { getSession } from "../../../lib/session";
 import { EVALUATED_DRAFT_KINDS } from "../../../lib/evaluation";
 import { finalizeResumeContent } from "../../../lib/server/services/resume-finalize";
 import { isAiRelatedJd, isTechnicalJd, jdRelevanceTerms } from "../../../lib/resume-jd";
@@ -30,6 +33,7 @@ import {
   referralDMPromptWithProfile,
   ceoColdEmailPrompt,
   refinePrompt,
+  playbookBlock,
 } from "../../../lib/prompts";
 
 export const runtime = "nodejs";
@@ -61,6 +65,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing action, profile, or app" }, { status: 400 });
     }
 
+    // My accepted playbook rules, when signed in (generation never depends on it).
+    const playbook = playbookForGeneration((await getSession().catch(() => null))?.email);
+
     if (action === "skill-gap") {
       const data = await chatJSON(
         [{ role: "user", content: skillGapPrompt(profile, app) }],
@@ -80,7 +87,7 @@ export async function POST(req: NextRequest) {
       // draft-service.ts, so there is exactly one way a resume gets built
       // and resolveResumeSelections can never be forgotten on one path.
       // Behind the fresh-context evaluator gate (regenerated once on FAIL).
-      const result = await generateEvaluatedResume(profile, app, providerSettings, resumeArchetype);
+      const result = await generateEvaluatedResume(profile, app, providerSettings, resumeArchetype, playbook);
       const { data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport, evaluation } = result;
       return NextResponse.json({ data, archetype, maxPages, formatGate, toolPlacementGate, confidentialityGate, jdRequirements, jdWarning, coverage, summaryReport, evaluation });
     }
@@ -99,7 +106,7 @@ export async function POST(req: NextRequest) {
       // Same source as generation: never profile.projects.
       const sourceProfile = resumeSourceProfile(profile, app, archetype);
       const data = await chatJSON<ResumeContent>(
-        [{ role: "user", content: resumeRefinePrompt(sourceProfile, app, archetype, parsedCurrent, instruction, maxPages) }],
+        [{ role: "user", content: resumeRefinePrompt(sourceProfile, app, archetype, parsedCurrent, instruction, maxPages) + playbookBlock(rulesFor(playbook, { artifact: "resume", archetype, trackId: app.track?.id })) }],
         { temperature: 0.5, maxTokens: 4000, task: "resume_selection" },
         providerSettings,
         ResumeContentSchema,
@@ -131,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     // Cover letters and outreach drafts go behind the evaluator gate.
     if ((EVALUATED_DRAFT_KINDS as string[]).includes(action)) {
-      const { text, evaluation } = await generateEvaluatedDraft({ action, profile, app, target, providerSettings });
+      const { text, evaluation } = await generateEvaluatedDraft({ action, profile, app, target, providerSettings, playbook });
       return NextResponse.json({ content: text, evaluation });
     }
 
@@ -173,6 +180,7 @@ export async function POST(req: NextRequest) {
       temperature = 0.5; // lower temp for targeted edits
     }
     else return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+    prompt += playbookBlock(draftPlaybookRules({ action, app, playbook, refineFor: req.headers.get("x-refine-for") || undefined }));
 
     const content = await chat(
       [{ role: "user", content: prompt }],

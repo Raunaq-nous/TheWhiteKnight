@@ -12,6 +12,7 @@ import type { TrackId } from "./career-tracks";
 import type { GhostCheck } from "./ghost-jobs";
 import type { ResumeArchetype } from "./resume-archetype";
 import type { ResumeAuditResult } from "./schemas";
+import { applicationChangeFeedback, recordFeedback } from "./feedback";
 
 export type InterviewRound = "phone_screen" | "first" | "second" | "final" | "case" | "technical" | "exec" | "other";
 
@@ -156,8 +157,11 @@ export function getApplication(slug: string): Application | undefined {
 }
 
 export async function updateApplication(id: string, changes: Partial<Application>): Promise<boolean> {
+  const prev = getCache().applications.find(a => a.id === id);
   try {
     await wt_updateApplication(id, changes);
+    // Status moves and replies feed the playbook reflector (fire-and-forget).
+    for (const event of applicationChangeFeedback(prev, changes)) recordFeedback(event);
     return true;
   } catch (e: any) {
     console.error("[CareerOS] updateApplication failed:", e);

@@ -19,6 +19,7 @@ import { applicationRepo, settingsRepo, notificationRepo, approvalRepo } from ".
 import { requireApproval } from "../lib/server/approval-gate.js";
 import { scoreJob } from "../lib/server/services/scoring-service.js";
 import { generateDraft } from "../lib/server/services/draft-service.js";
+import { playbookForGeneration } from "../lib/server/services/playbook-service.js";
 import { getFormAnswers, persistStagedForm } from "../lib/server/services/form-service.js";
 
 // USER_EMAIL is resolved lazily so this module can be imported for testing
@@ -198,7 +199,7 @@ server.registerTool(
     const modelSettings = settingsRepo.getModelSettings(getUserEmail());
     const providerSettings = { provider: modelSettings.provider as any, model: modelSettings.model };
 
-    const result = await generateDraft({ action: kind as any, profile: profileData, app, providerSettings });
+    const result = await generateDraft({ action: kind as any, profile: profileData, app, providerSettings, playbook: playbookForGeneration(getUserEmail()) });
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   },
 );

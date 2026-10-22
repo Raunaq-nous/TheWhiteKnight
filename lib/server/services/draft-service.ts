@@ -19,7 +19,9 @@ import {
   ceoColdEmailPrompt,
   refinePrompt,
   evaluatorFindingsBlock,
+  playbookBlock,
 } from "../../prompts";
+import { playbookArtifactFor, rulesFor, type Playbook } from "../../playbook";
 
 export type DraftInput = {
   action: GenerationAction;
@@ -31,10 +33,23 @@ export type DraftInput = {
   instruction?: string;
   researchContext?: string;
   refineFor?: string;
+  // My accepted playbook; the rules that apply to this artifact are appended.
+  playbook?: Playbook | null;
 };
 
-/** The prompt and sampling settings for a plain-text draft action. */
+/** The playbook rules for a draft: by artifact (a refine takes the artifact it refines), archetype and track. */
+export function draftPlaybookRules(input: Pick<DraftInput, "action" | "app" | "refineFor" | "playbook">): string[] {
+  const action = input.action === "refine" ? (input.refineFor ?? "document") : input.action;
+  return rulesFor(input.playbook, { artifact: playbookArtifactFor(action), archetype: input.app?.resumeArchetype ?? input.app?.track?.archetype, trackId: input.app?.track?.id });
+}
+
+/** The prompt and sampling settings for a plain-text draft action, with the applicable playbook rules appended. */
 export function draftPromptFor(input: DraftInput): { prompt: string; temperature: number; maxTokens: number } {
+  const base = basePromptFor(input);
+  return { ...base, prompt: base.prompt + playbookBlock(draftPlaybookRules(input)) };
+}
+
+function basePromptFor(input: DraftInput): { prompt: string; temperature: number; maxTokens: number } {
   const { action, profile, app, target, currentContent, instruction, researchContext, refineFor } = input;
   if (action === "cover-letter") return { prompt: coverLetterPrompt(profile, app), temperature: 0.7, maxTokens: 2000 };
   if (action === "executive-summary") return { prompt: executiveSummaryPrompt(profile, app), temperature: 0.6, maxTokens: 3000 };
@@ -82,7 +97,7 @@ export async function generateDraft(input: DraftInput): Promise<unknown> {
   }
 
   if (action === "resume") {
-    const { data, archetype, formatGate, evaluation } = await generateEvaluatedResume(profile, app, providerSettings);
+    const { data, archetype, formatGate, evaluation } = await generateEvaluatedResume(profile, app, providerSettings, undefined, input.playbook);
     if (formatGate.blocked) {
       console.warn(
         `[CareerOS] Auto-drafted resume for ${app?.company ?? "unknown"} failed the format gate: ` +

@@ -64,6 +64,7 @@ export type AiTask =
   | "audit"              // app/api/resume/audit (already ran on CHEAP_MODEL; folded into this registry)
   | "evaluator"          // fresh-context evaluator gate (lib/server/services/evaluator.ts)
   | "skill_extraction"   // normalised skills from JDs (career tracks)
+  | "reflector"          // playbook rule proposals from feedback events (lib/server/services/playbook-service.ts)
   | "drafting";          // resume/cover-letter/pitch/outreach generation, portfolio build voice drafting, skill-builder
 
 const TASK_ENV_VARS: Record<AiTask, string> = {
@@ -78,6 +79,7 @@ const TASK_ENV_VARS: Record<AiTask, string> = {
   audit: "AI_MODEL_AUDIT",
   evaluator: "AI_MODEL_EVALUATOR",
   skill_extraction: "AI_MODEL_SKILL_EXTRACTION",
+  reflector: "AI_MODEL_REFLECTOR",
   drafting: "AI_MODEL", // the pre-existing global var — preserved for the one tier that still defaults to it
 };
 
@@ -93,6 +95,7 @@ const TASK_DEFAULT_MODEL: Record<AiTask, string> = {
   audit: CHEAP_MODEL,
   evaluator: CHEAP_MODEL,
   skill_extraction: CHEAP_MODEL,
+  reflector: CHEAP_MODEL,
   drafting: DEFAULT_MODEL,
 };
 
