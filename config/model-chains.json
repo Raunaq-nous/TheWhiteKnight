@@ -13,6 +13,7 @@
     "gap_analysis": "structured",
     "evaluator": "structured",
     "skill_extraction": "structured",
+    "reflector": "structured",
     "profile_extraction": "structured",
     "form_answers": "structured",
     "company_discovery": "structured",

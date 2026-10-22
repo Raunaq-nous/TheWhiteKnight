@@ -62,3 +62,19 @@ curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/skills/demand | jq '.un
 curl -s -X POST -H "Cookie: $CAREEROS_COOKIE" -H "Content-Type: application/json" -d '{"modelLimit":10}' https://<host>/api/skills/demand | jq '.withModel'
 ```
 In the app: open /skills, pick your tracks, check the demand ranking and coverage, draft a pathway for a gap with no seed (it shows DRAFT), accept it, tick its steps and proof, and confirm the "Offer as a profile bullet" flow blocks a forbidden term (try "PX Pulse") before adding.
+
+## P2-1 Feedback capture and playbook
+```
+# Feedback events recorded so far (counts per kind, newest 100):
+curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/feedback | jq '.counts, (.events[:5])'
+# The playbook, pending proposals and recent feedback:
+curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/playbook | jq '{version: .playbook.version, rules: [.playbook.rules[].text], pending: [.proposals[] | select(.status=="pending") | .text]}'
+# Run the reflector once (structured chain); proposals come back PENDING:
+curl -s -X POST -H "Cookie: $CAREEROS_COOKIE" -H "Content-Type: application/json" -d '{}' https://<host>/api/playbook/propose | jq
+# Accept or reject one proposal, remove one rule:
+curl -s -X POST -H "Cookie: $CAREEROS_COOKIE" -H "Content-Type: application/json" -d '{"proposalId":"<id>","decision":"accept"}' https://<host>/api/playbook/decide | jq '.playbook.version'
+curl -s -X POST -H "Cookie: $CAREEROS_COOKIE" -H "Content-Type: application/json" -d '{"ruleId":"<id>"}' https://<host>/api/playbook/remove | jq '.playbook.version'
+# Without a cookie every playbook route answers 401:
+curl -s -o /dev/null -w "%{http_code}\n" https://<host>/api/playbook
+```
+In the app: reject one item on /approvals with a reason, uncheck a bullet in the resume builder and confirm, refine a cover letter, and move an application's status; each shows up under RECENT FEEDBACK on /playbook. Click "Propose rules from feedback", accept one proposal, regenerate a matching draft, and check the server log or the draft for the rule's effect. Remove the rule and confirm the version goes up by one. With a rule active, re-run `npm run verify:resume -- <email> <slug> consulting` to confirm the page-count and confidentiality gates still pass.

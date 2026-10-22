@@ -5,6 +5,7 @@ import { profileRepo } from "../repositories/profile-repo";
 import { settingsRepo } from "../repositories/settings-repo";
 import { queueApproval } from "../approval-gate";
 import { generateDraft } from "./draft-service";
+import { playbookForGeneration } from "./playbook-service";
 
 export type FollowUpResult = {
   processed: number;
@@ -56,7 +57,7 @@ export async function runDueFollowUps(
 
     let draft: unknown;
     try {
-      draft = await generateDraft({ action: "outreach-hm", profile, app, providerSettings });
+      draft = await generateDraft({ action: "outreach-hm", profile, app, providerSettings, playbook: playbookForGeneration(userEmail) });
     } catch {
       skipped++;
       continue;

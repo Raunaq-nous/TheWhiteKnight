@@ -35,7 +35,7 @@ afterEach(() => {
 
 describe("chains", () => {
   it("structured tasks use the structured chain; writing (untasked, drafting) the writing chain; images the vision chain", () => {
-    for (const t of ["scoring", "jd_extraction", "requirement_map", "resume_selection", "gap_analysis", "evaluator", "skill_extraction"]) expect(chainNameForTask(t)).toBe("structured");
+    for (const t of ["scoring", "jd_extraction", "requirement_map", "resume_selection", "gap_analysis", "evaluator", "skill_extraction", "reflector"]) expect(chainNameForTask(t)).toBe("structured");
     expect(chainNameForTask(undefined)).toBe("writing");
     expect(chainNameForTask("drafting")).toBe("writing");
     expect(chainNameForTask("vision")).toBe("vision");

@@ -8,6 +8,7 @@ import { runRulesPreFilter } from "./rules-prefilter";
 import { fetchJdText } from "./jd-fetch-service";
 import { scoreJob, ScoreJobOutput } from "./scoring-service";
 import { generateDraft } from "./draft-service";
+import { playbookForGeneration } from "./playbook-service";
 import { htmlToText } from "../../jd-fetch";
 import { ATS_COLLECTORS } from "./collectors";
 import { collectFromAlertInbox } from "./alert-inbox";
@@ -20,6 +21,8 @@ import { getUserSingleton, setUserSingleton } from "../user-singletons";
 import { trackScanPlan } from "../../track-scan";
 import { annotateApplication } from "./track-service";
 import type { Region } from "../../company-targets";
+import { feedbackRepo } from "../repositories/feedback-repo";
+import { appContext, evaluatorFindingsEvent } from "../../feedback";
 import type { Application } from "../../store";
 import type { Profile } from "../../profile";
 import type {
@@ -195,7 +198,7 @@ async function autopilotStage(
   let draft: unknown = null;
   let error: string | undefined;
   try {
-    draft = await generateDraft({ action: "cover-letter", profile, app, providerSettings });
+    draft = await generateDraft({ action: "cover-letter", profile, app, providerSettings, playbook: playbookForGeneration(userEmail) });
   } catch (e: any) {
     error = `Draft failed for ${app.company} - ${app.role}: ${e.message}`;
   }
@@ -215,7 +218,10 @@ async function autopilotStage(
     },
   });
   const evaluation = (draft as { evaluation?: ArtifactEvaluation } | null)?.evaluation;
-  if (evaluation) applicationRepo.update(userEmail, app.id, { evaluations: { ...(app.evaluations ?? {}), "cover-letter": evaluation } });
+  if (evaluation) {
+    applicationRepo.update(userEmail, app.id, { evaluations: { ...(app.evaluations ?? {}), "cover-letter": evaluation } });
+    try { feedbackRepo.add(userEmail, evaluatorFindingsEvent("cover-letter", evaluation, appContext(app))); } catch { /* best-effort */ }
+  }
 
   return { staged: true, error };
 }

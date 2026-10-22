@@ -122,6 +122,19 @@ function applySchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_ai_calls_task ON ai_calls (task, at DESC);
     CREATE INDEX IF NOT EXISTS idx_ai_calls_provider ON ai_calls (provider, at);
+
+    -- Feedback events (lib/feedback.ts): approvals and rejections with an
+    -- optional reason, unchecked builder bullets, draft edits, evaluator
+    -- findings, status changes and replies. The playbook reflector reads them.
+    CREATE TABLE IF NOT EXISTS feedback_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_email  TEXT NOT NULL,
+      at          TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      data        TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback_events (user_email, id DESC);
   `);
 
   // Additive migrations for DBs created before these columns existed.

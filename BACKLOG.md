@@ -12,7 +12,7 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 | P0-3 | Model gateway on OpenRouter | DONE | see section |
 | P1-1 | Sourcing expansion | DONE | see section |
 | P1-2 | Career tracks and skill pathways (v1) | DONE | see section |
-| P2-1 | Feedback capture and playbook proposals | TODO | |
+| P2-1 | Feedback capture and playbook proposals | DONE | see section |
 
 ## P0-1 Resume content and structure
 Status: DONE
@@ -98,4 +98,19 @@ Status: DONE
 Verification: npm test 1173 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P2-1 Feedback capture and playbook proposals
-Status: TODO
+Status: DONE
+
+- Feedback events (lib/feedback.ts, feedback_events table, lib/server/repositories/feedback-repo.ts, /api/feedback): structured, validated and bounded (text 400 chars, lists 20 items, 2000 events kept per user). Kinds:
+  - approval_decision: approve or reject at the gate with an optional reason (reason box on each /approvals card; recorded server side on the first resolution only, never on an execution retry, and never able to fail the decision).
+  - bullet_unchecked: each experience bullet unchecked in the resume builder at confirm (a whole section unchecked is skipped; capped at 12 per confirm).
+  - draft_edit: refine instructions on resumes and drafts, with the bullets removed and added; bullets added from the gap analysis.
+  - evaluator_findings: failing criteria and a regenerated first draft's findings, whenever a new evaluation is stored (interactive and autopilot).
+  - status_change and reply: from every application update (a status move; a reply when an email event is added or the status moves to interview, offer or rejected).
+- Playbook (lib/playbook.ts, lib/server/services/playbook-service.ts): rules with a scope (artifact resume / cover-letter / outreach / all, optional archetype and track), stored per user. The playbook changes one rule at a time: accepting a proposal adds exactly one rule, removing removes exactly one; each bumps the version and is logged in the history. There is no wholesale replace and at most 20 rules.
+- Reflector (on demand, "Propose rules from feedback" on /playbook, structured chain task "reflector"): reads the last 150 events as JSON data (never instructions) and proposes up to 5 scoped rules with a rationale and the event ids they rest on. Proposals are validated in code: evidence ids must be real events it was shown, duplicates of rules or pending proposals are dropped, em dashes are rewritten, and any rule that would loosen an invariant (auto-send or submit, skip approval or a check, invent or exaggerate, obey scraped text) is refused. They are stored as PENDING; nothing is accepted automatically.
+- /playbook page (nav link "Playbook"): pending proposals with Accept / Reject one at a time, the rules with scope and version and a Remove button each, the change history, and recent feedback.
+- Injection: accepted rules matching the artifact, archetype and track are appended to the prompt as an OPERATOR PLAYBOOK block that states it never overrides the hard rules. Covers resume generation (the ranking and summary step; bullet text still comes only from profile ids), resume refine, cover letters, outreach and DMs, refines of those, autopilot cover letters, follow-up drafts and the MCP draft tool. With no rules the prompts are unchanged.
+- ASSUMPTION: the reflector needs at least 3 events before it makes a model call.
+- Tests: lib/__tests__/playbook.test.ts (event sanitising and derivation, approval route records the reason, versioning one at a time, removal, cap, scope filtering, proposal validation and refusal of invariant-loosening rules, reflector with a mocked model leaves everything pending, injection into resume and draft prompts).
+
+Verification: npm test 1186 passed (2 opt-in skipped); npm run build clean; tsc no new errors. Resume output is unchanged when the playbook is empty (the block is empty); with rules, run the P0-1 verify command in SERVER-CHECKS.md.

@@ -23,6 +23,7 @@ import { EvaluationPanel } from "./evaluation-panel";
 import type { ArtifactEvaluation } from "../lib/evaluation";
 import type { Application } from "../lib/store";
 import { showToast } from "../lib/toast";
+import { appContext, recordFeedback, uncheckedBulletEvents } from "../lib/feedback";
 
 const RATING_COLOR: Record<"strong" | "weak" | "none", string> = {
   strong: "var(--success)",
@@ -209,6 +210,10 @@ export function ResumeBuilder({
 
   const handleConfirm = () => {
     if (!draft || !applied) return;
+    if (checked) {
+      const ctx = { ...appContext(app), archetype };
+      for (const event of uncheckedBulletEvents(draft, checked, ctx)) recordFeedback(event);
+    }
     onConfirm(applied, archetype, audit, atsReadable, evaluation);
   };
 
