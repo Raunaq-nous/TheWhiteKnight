@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const exaJobSearchMock = vi.fn();
 const adzunaSearchMock = vi.fn();
 
+// Budgets in memory: tests never touch the real database.
+vi.mock("../server/source-budget", async () => {
+  const actual = await vi.importActual<typeof import("../server/source-budget")>("../server/source-budget");
+  return { ...actual, dbSourceBudget: () => actual.memorySourceBudget() };
+});
 vi.mock("../exa-client", () => ({ exaJobSearch: (...args: any[]) => exaJobSearchMock(...args) }));
 vi.mock("../adzuna-client", () => ({
   adzunaSearch: (...args: any[]) => adzunaSearchMock(...args),
@@ -82,7 +87,7 @@ describe("scanJobs", () => {
 
   it("skips a disabled company entirely", async () => {
     const disabled = { ...greenhouseCompany, enabled: false };
-    const result = await scanJobs({ query: "product manager", companies: [disabled] });
+    const result = await scanJobs({ query: "product manager", companies: [disabled], includeRemoteBoards: false });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(result.jobs).toHaveLength(0);
   });

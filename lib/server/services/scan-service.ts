@@ -3,11 +3,18 @@ import { CompanyTarget, Region } from "../../company-targets";
 import {
   ATS_COLLECTORS,
   REGION_PORTAL_DOMAINS,
+  GOOGLE_JOBS_COLLECTORS,
+  KEYED_AGGREGATORS,
+  REMOTE_BOARD_COLLECTORS,
   exaPortalCollector,
   exaCompanyCollector,
   adzunaCollector,
 } from "./collectors";
 import type { CompanyDomainHint, JobResult } from "./collectors/types";
+import { dedupeJobs } from "../../job-dedupe";
+import { rankSources, type SourceConversion } from "../../source-analytics";
+import { SOURCE_META, isCompanyDirect, type JobSource } from "../../job-sources";
+import { dbSourceBudget, type SourceBudget } from "../source-budget";
 
 // Extracted from the former app/api/scan/jobs/route.ts body so both the
 // manual scan UI (via the route, now a thin wrapper) and the scheduled
@@ -29,6 +36,18 @@ export type JobScanInput = {
   numResults?: number;
   roleKeywords?: string[];
   excludeKeywords?: string[];
+  // "autopilot": keyless and company-direct sources first, keyed
+  // aggregators only to top up and within budget, never Exa. "manual"
+  // (default): everything configured, Exa included.
+  mode?: "manual" | "autopilot";
+  // Keyless remote boards (default on).
+  includeRemoteBoards?: boolean;
+  // Free-text location for aggregators (e.g. "India", "Dubai").
+  location?: string;
+  // Monthly call budgets for keyed sources (default: the persistent store).
+  budget?: SourceBudget;
+  // Observed conversion per source: results are ordered by it.
+  sourceStats?: SourceConversion[];
 };
 
 // Re-exported for existing callers (automation-service.ts, rules-prefilter.ts)
@@ -52,7 +71,14 @@ export type JobScanOutput = {
     ats: number;
     adzuna: number;
     exa: number;
+    // Every source's surviving count.
+    bySource?: Record<string, number>;
   };
+  // URLs each company's ATS feed listed this scan (successful fetches
+  // only), keyed by company id: the "gone from its feed" ghost check.
+  feeds?: Record<string, string[]>;
+  // Keyed sources skipped because their monthly budget is used up.
+  budgetSkipped?: string[];
 };
 
 // Relevance scoring: 0-100. Title gets 70 weight, snippet 30.
@@ -120,7 +146,13 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
     numResults = 30,
     roleKeywords = [],
     excludeKeywords = [],
+    mode = "manual",
+    includeRemoteBoards = true,
+    location,
+    sourceStats = [],
   } = input;
+  const budget = input.budget ?? dbSourceBudget();
+  const autopilot = mode === "autopilot";
 
   const queryTokens = tokenize(query);
   const roleTokens = roleKeywords.flatMap(k => tokenize(k));
@@ -129,55 +161,85 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
 
   const errors: string[] = [];
   const allResults: JobResult[] = [];
+  const feeds: Record<string, string[]> = {};
+  const budgetSkipped: string[] = [];
+  const relevantCount = () => allResults.filter(j => scoreRelevance(j.title, j.snippet, queryTokens, roleTokens, excludeTokens) >= 20).length;
 
-  // Per-company ATS collectors (Greenhouse/Ashby/Lever/SmartRecruiters).
-  // A company needs a tenant identifier to be dispatched: its own
-  // `atsTenant`, or, for SmartRecruiters, a fallback to the company's own
-  // `id` slug (ASSUMPTION: SmartRecruiters' companyIdentifier commonly
-  // matches the kind of slug already used for CompanyTarget.id, e.g.
-  // "roland-berger"; existing SmartRecruiters seed entries don't set
-  // atsTenant explicitly).
-  const atsPromises: Promise<JobResult[]>[] = [];
+  // 1. COMPANY-DIRECT: each target company's public ATS board. A company
+  // needs a tenant: its own atsTenant, SmartRecruiters' id slug
+  // (ASSUMPTION: commonly matches CompanyTarget.id), or for Workday the
+  // careers URL ({tenant}.wd{N}.myworkdayjobs.com/{site}).
+  const atsPromises: Promise<void>[] = [];
   for (const c of companies) {
     if (!c.enabled) continue;
     const collector = ATS_COLLECTORS[c.ats];
     if (!collector) continue;
     const tenant = c.atsTenant ?? (c.ats === "smartrecruiters" ? c.id : undefined);
-    if (!tenant) continue;
+    const careersUrl = c.ats === "workday" ? c.careersUrl : undefined;
+    if (!tenant && !careersUrl) continue;
     atsPromises.push(
-      collector.collect({ tenant, companyName: c.name }).then(r => {
+      collector.collect({ tenant, careersUrl, companyName: c.name }).then(r => {
         if (r.error) errors.push(`${c.ats} (${c.name}): ${r.error}`);
-        return r.jobs;
+        else feeds[c.id] = r.jobs.map(j => j.url);
+        allResults.push(...r.jobs);
       }),
     );
   }
+  await Promise.all(atsPromises);
 
-  const atsResults = await Promise.all(atsPromises);
-  for (const r of atsResults) allResults.push(...r);
+  // Keyed sources run only with a key and remaining budget; autopilot uses
+  // them only to top up what keyless, company-direct sources found.
+  const keyed = async (source: JobSource, run: () => Promise<{ jobs: JobResult[]; error?: string }>) => {
+    if (autopilot && relevantCount() >= numResults) return;
+    if (budget.remaining(source) <= 0) { budgetSkipped.push(source); return; }
+    budget.consume(source, 1);
+    const r = await run();
+    if (r.error) errors.push(`${SOURCE_META[source].label}: ${r.error}`);
+    allResults.push(...r.jobs);
+  };
+  const searchLocation = location ?? (regions.includes("india") ? "India" : regions.includes("middle-east") ? "United Arab Emirates" : undefined);
 
-  if (adzunaAppId && adzunaAppKey && regions.length > 0) {
-    const adzunaResult = await adzunaCollector.collect({
-      appId: adzunaAppId,
-      appKey: adzunaAppKey,
-      query,
-      regions,
-    });
-    if (adzunaResult.error) errors.push(`Adzuna: ${adzunaResult.error}`);
-    allResults.push(...adzunaResult.jobs);
+  // 2. GOOGLE JOBS aggregators (route to the employer's own form).
+  for (const g of GOOGLE_JOBS_COLLECTORS) {
+    const apiKey = process.env[g.envKey];
+    if (!apiKey) continue;
+    await keyed(g.source, () => g.collector.collect({ apiKey, query, location: searchLocation, maxPages: 1, numResults }));
   }
 
-  if (exaApiKey && regions.length > 0) {
-    const portalDomains = Array.from(new Set(regions.flatMap(r => REGION_PORTAL_DOMAINS[r] ?? [])));
-    const portalResult = await exaPortalCollector.collect({
-      apiKey: exaApiKey,
-      query: `${query} job opening 2025`,
-      domains: portalDomains,
-      numResults: Math.min(numResults, 30),
-    });
-    if (portalResult.error) errors.push(`Exa portal search: ${portalResult.error}`);
-    allResults.push(...portalResult.jobs);
+  // 3. KEYLESS REMOTE BOARDS: one public call each.
+  if (includeRemoteBoards) {
+    const boardResults = await Promise.all(REMOTE_BOARD_COLLECTORS.map(b => b.collect({ query }).then(r => {
+      if (r.error) errors.push(`${b.name}: ${r.error}`);
+      return r.jobs;
+    })));
+    for (const r of boardResults) allResults.push(...r);
+  }
 
-    const customCompanies = companies.filter(c => c.enabled && (c.ats === "custom" || c.ats === "workday"));
+  // 4. OTHER AGGREGATORS (keyed, budgeted).
+  if (adzunaAppId && adzunaAppKey && regions.length > 0) {
+    await keyed("adzuna", () => adzunaCollector.collect({ appId: adzunaAppId, appKey: adzunaAppKey, query, regions }));
+  }
+  for (const a of KEYED_AGGREGATORS) {
+    const apiKey = process.env[a.envKey];
+    if (!apiKey) continue;
+    await keyed(a.source, () => a.collector.collect({ apiKey, query, location: searchLocation, numResults }));
+  }
+
+  // 5. EXA search: manual scans only; autopilot never calls Exa.
+  if (!autopilot && exaApiKey && regions.length > 0) {
+    const portalDomains = Array.from(new Set(regions.flatMap(r => REGION_PORTAL_DOMAINS[r] ?? [])));
+    if (portalDomains.length) {
+      const portalResult = await exaPortalCollector.collect({
+        apiKey: exaApiKey,
+        query: `${query} job opening`,
+        domains: portalDomains,
+        numResults: Math.min(numResults, 30),
+      });
+      if (portalResult.error) errors.push(`Exa portal search: ${portalResult.error}`);
+      allResults.push(...portalResult.jobs);
+    }
+
+    const customCompanies = companies.filter(c => c.enabled && c.ats === "custom");
     if (customCompanies.length > 0 && customCompanies.length <= 30) {
       const companyLookup: CompanyDomainHint[] = [];
       const customDomains: string[] = [];
@@ -202,28 +264,30 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
     }
   }
 
-  const seen = new Set<string>();
-  const deduped = allResults.filter(j => {
-    if (seen.has(j.url)) return false;
-    seen.add(j.url);
-    return true;
-  });
+  // CROSS-SOURCE DEDUPE: one record per job, keeping the company-direct URL.
+  const deduped = dedupeJobs(allResults);
 
   const scored = deduped.map(j => ({
     ...j,
     relevance: scoreRelevance(j.title, j.snippet, queryTokens, roleTokens, excludeTokens),
   }));
+  // Order: relevance (in bands of 10), then the source's observed
+  // conversion for this user (company-direct first by default).
+  const order = rankSources(sourceStats, [...new Set(scored.map(j => j.source))]);
+  const rank = (s: string) => order.indexOf(s);
   const relevant = scored
     .filter(j => (j.relevance ?? 0) >= 20)
-    .sort((a, b) => (b.relevance ?? 0) - (a.relevance ?? 0))
+    .sort((a, b) => Math.floor((b.relevance ?? 0) / 10) - Math.floor((a.relevance ?? 0) / 10) || rank(a.source) - rank(b.source) || (b.relevance ?? 0) - (a.relevance ?? 0))
     .slice(0, Math.max(numResults, 30));
 
   // Zero-token keyword/seniority rejection log — every posting the
-  // relevance filter above actually dropped, with why. Deterministic;
-  // costs nothing beyond the string matching already done for scoring.
+  // relevance filter above actually dropped, with why.
   const rejected: KeywordFilterRejection[] = scored
     .filter(j => (j.relevance ?? 0) < 20)
     .map(j => ({ title: j.title, company: j.company, reason: explainLowRelevance(j.title, j.snippet, queryTokens, excludeTokens) }));
+
+  const bySource: Record<string, number> = {};
+  for (const j of relevant) bySource[j.source] = (bySource[j.source] ?? 0) + 1;
 
   return {
     jobs: relevant,
@@ -232,9 +296,12 @@ export async function scanJobs(input: JobScanInput): Promise<JobScanOutput> {
     counts: {
       total: relevant.length,
       beforeFiltering: deduped.length,
-      ats: relevant.filter(j => j.source === "greenhouse" || j.source === "ashby" || j.source === "lever" || j.source === "smartrecruiters").length,
+      ats: relevant.filter(j => isCompanyDirect(j.source)).length,
       adzuna: relevant.filter(j => j.source === "adzuna").length,
       exa: relevant.filter(j => j.source === "exa-portal" || j.source === "exa-company").length,
+      bySource,
     },
+    feeds,
+    ...(budgetSkipped.length ? { budgetSkipped } : {}),
   };
 }

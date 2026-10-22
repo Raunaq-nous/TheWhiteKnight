@@ -86,6 +86,18 @@ export type AutomationRunLog = {
   jobsStaged: number; // good-fit jobs: drafted + queued for approval
   jobsSourced: number; // total new applications created (staged + not-good-fit)
   jobsSkippedDuplicate: number;
+  // Ghost-job checks (stale >30 days, repost, gone from the ATS feed):
+  // new jobs flagged this run (saved, never staged) and existing pipeline
+  // jobs newly found gone from their company's feed.
+  jobsGhostFlagged?: number;
+  existingMarkedGone?: number;
+  // Job-alert inbox: emails read, and jobs that could not be matched to a
+  // company-direct posting (with why).
+  alertEmailsRead?: number;
+  alertUnresolved?: { title: string; company: string; portal: string; reason: string }[];
+  // Results per source, and keyed sources skipped for budget.
+  bySource?: Record<string, number>;
+  budgetSkipped?: string[];
   // AI scoring failed for this job (e.g. the reasoning-model token-budget
   // exhaustion class of failure) but the job was still saved to the ledger,
   // marked unscored, rather than silently dropped and crashing the run.

@@ -19,7 +19,10 @@ const notifyOperatorMock = vi.fn().mockResolvedValue(undefined);
 vi.mock("../server/services/scan-service", () => ({ scanJobs: (...args: any[]) => scanJobsMock(...args) }));
 vi.mock("../server/services/scoring-service", () => ({ scoreJob: (...args: any[]) => scoreJobMock(...args) }));
 vi.mock("../server/services/draft-service", () => ({ generateDraft: (...args: any[]) => generateDraftMock(...args) }));
-vi.mock("../server/services/jd-fetch-service", () => ({ fetchJdText: (...args: any[]) => fetchJdTextMock(...args) }));
+vi.mock("../server/services/jd-fetch-service", async () => {
+  const actual = await vi.importActual<typeof import("../server/services/jd-fetch-service")>("../server/services/jd-fetch-service");
+  return { ...actual, fetchJdText: (...args: any[]) => fetchJdTextMock(...args) };
+});
 vi.mock("../server/channels/notify-operator", () => ({ notifyOperator: (...args: any[]) => notifyOperatorMock(...args) }));
 
 import { _resetDbForTesting } from "../server/db";
@@ -631,5 +634,75 @@ describe("send-execution import boundary — the property that matters most", ()
     const stageFnMatch = source.match(/async function autopilotStage\([\s\S]*?\n}/);
     expect(stageFnMatch).not.toBeNull();
     expect(stageFnMatch![0]).toContain("queueApproval(");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1-1 sourcing: autopilot mode, attribution, ghost jobs
+// ---------------------------------------------------------------------------
+describe("autopilot sourcing (P1-1)", () => {
+  const scanOk = (jobs: JobResult[], extra: Record<string, unknown> = {}) =>
+    ({ jobs, counts: { total: jobs.length, beforeFiltering: jobs.length, ats: jobs.length, adzuna: 0, exa: 0, bySource: { greenhouse: jobs.length } }, ...extra });
+
+  it("scans in autopilot mode and never passes an Exa key", async () => {
+    profileRepo.save(USER, makeProfile());
+    enableAutomation();
+    settingsRepo.saveIntegrationSettings(USER, { exaApiKey: "exa-key" });
+    scanJobsMock.mockResolvedValue(scanOk([]));
+    await runOnce(USER, NOW, { force: true });
+    const input = scanJobsMock.mock.calls[0][0];
+    expect(input.mode).toBe("autopilot");
+    expect(input.exaApiKey).toBeUndefined();
+  });
+
+  it("stores the source on every saved application", async () => {
+    profileRepo.save(USER, makeProfile());
+    enableAutomation();
+    scanJobsMock.mockResolvedValue(scanOk([job({ source: "workday", via: undefined, externalId: "R123", publishedDate: NOW.toISOString() })]));
+    scoreJobMock.mockResolvedValue(scoreResult("skip"));
+    await runOnce(USER, NOW, { force: true });
+    const [saved] = applicationRepo.list(USER);
+    expect(saved.source).toBe("workday");
+    expect(saved.externalId).toBe("R123");
+  });
+
+  it("a stale posting (over 30 days) is saved with its reason but never staged", async () => {
+    profileRepo.save(USER, makeProfile());
+    enableAutomation();
+    const stale = new Date(NOW.getTime() - 35 * 86_400_000).toISOString();
+    scanJobsMock.mockResolvedValue(scanOk([job({ publishedDate: stale })]));
+    scoreJobMock.mockResolvedValue(scoreResult("apply_immediately"));
+    generateDraftMock.mockResolvedValue({ text: "draft" });
+    const run = await runOnce(USER, NOW, { force: true });
+    const [saved] = applicationRepo.list(USER);
+    expect(saved.ghost?.flags.map(f => f.kind)).toEqual(["stale"]);
+    expect(saved.nextAction).toMatch(/Possible ghost job/);
+    expect(run.jobsStaged).toBe(0);
+    expect(run.jobsGhostFlagged).toBe(1);
+    expect(approvalRepo.list(USER)).toHaveLength(0);
+  });
+
+  it("a repost (same JD, new id on the same board) is flagged on the second run", async () => {
+    profileRepo.save(USER, makeProfile());
+    enableAutomation();
+    const jd = "<p>" + "We need a senior product manager to own the payments roadmap and partner with engineering. ".repeat(4) + "</p>";
+    scanJobsMock.mockResolvedValueOnce(scanOk([job({ url: "https://boards.greenhouse.io/acme/jobs/1", descriptionHtml: jd, publishedDate: NOW.toISOString() })]));
+    scoreJobMock.mockResolvedValue(scoreResult("skip"));
+    await runOnce(USER, NOW, { force: true });
+    scanJobsMock.mockResolvedValueOnce(scanOk([job({ url: "https://boards.greenhouse.io/acme/jobs/2", title: "Senior Product Manager II", descriptionHtml: jd, publishedDate: NOW.toISOString() })]));
+    await runOnce(USER, new Date(NOW.getTime() + 86_400_000), { force: true });
+    const second = applicationRepo.list(USER).find(a => a.sourceUrl.endsWith("/2"))!;
+    expect(second.ghost?.flags.map(f => f.kind)).toEqual(["repost"]);
+  });
+
+  it("an existing company-direct job missing from its company's fetched ATS feed is marked gone", async () => {
+    profileRepo.save(USER, makeProfile());
+    enableAutomation();
+    settingsRepo.saveCompanyTargets(USER, [{ id: "acme", name: "Acme Corp", region: ["global"], sector: "industry", ats: "greenhouse", atsTenant: "acme", careersUrl: "https://acme.com/careers", enabled: true }] as any);
+    applicationRepo.save(USER, existingApp({ source: "greenhouse" }));
+    scanJobsMock.mockResolvedValue(scanOk([], { feeds: { acme: ["https://boards.greenhouse.io/acme/jobs/999"] } }));
+    const run = await runOnce(USER, NOW, { force: true });
+    expect(run.existingMarkedGone).toBe(1);
+    expect(applicationRepo.list(USER)[0].ghost?.flags[0].kind).toBe("gone");
   });
 });

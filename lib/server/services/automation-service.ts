@@ -9,6 +9,14 @@ import { fetchJdText } from "./jd-fetch-service";
 import { scoreJob, ScoreJobOutput } from "./scoring-service";
 import { generateDraft } from "./draft-service";
 import { htmlToText } from "../../jd-fetch";
+import { ATS_COLLECTORS } from "./collectors";
+import { collectFromAlertInbox } from "./alert-inbox";
+import { dedupeJobs } from "../../job-dedupe";
+import { computeSourceConversion } from "../../source-analytics";
+import { isCompanyDirect } from "../../job-sources";
+import { ghostFlags, rememberFingerprint, type FingerprintIndex, type GhostFlag } from "../../ghost-jobs";
+import { namesMatch } from "../../profile-merge";
+import { getUserSingleton, setUserSingleton } from "../user-singletons";
 import type { Region } from "../../company-targets";
 import type { Application } from "../../store";
 import type { Profile } from "../../profile";
@@ -258,7 +266,10 @@ export async function runAutomation(
       query: query || "role",
       regions: regions.length > 0 ? regions : ["global"],
       companies,
-      exaApiKey: integration.exaApiKey,
+      // Autopilot: keyless and company-direct first, keyed aggregators only
+      // to top up within budget, and never Exa (so no exaApiKey here).
+      mode: "autopilot",
+      sourceStats: computeSourceConversion(applicationRepo.list(userEmail)),
       adzunaAppId: integration.adzunaAppId,
       adzunaAppKey: integration.adzunaAppKey,
       numResults: 30,
@@ -277,6 +288,26 @@ export async function runAutomation(
   }
 
   errors.push(...(scanResult.errors ?? []));
+
+  // JOB-ALERT INBOX: alerts resolved to company-direct postings join the
+  // scan's results (deduped); unresolved ones are logged with why.
+  const alert = await collectFromAlertInbox(userEmail, integration, companies, ATS_COLLECTORS, { now });
+  if (alert.error) errors.push(alert.error);
+  if (alert.jobs.length) scanResult = { ...scanResult, jobs: dedupeJobs([...scanResult.jobs, ...alert.jobs]) };
+
+  // GHOST CHECK, existing pipeline: a company-direct job no longer in its
+  // company's ATS feed (when that feed was fetched cleanly this run).
+  let existingMarkedGone = 0;
+  for (const app of applicationRepo.list(userEmail)) {
+    if (!isCompanyDirect(app.source) || (app.status !== "sourced" && app.status !== "reviewed")) continue;
+    if (app.ghost?.flags.some(f => f.kind === "gone")) continue;
+    const target = companies.find(c => namesMatch(c.name, app.company));
+    const feed = target ? scanResult.feeds?.[target.id] : undefined;
+    if (!feed || feed.includes(app.sourceUrl)) continue;
+    const flag: GhostFlag = { kind: "gone", detail: "no longer listed in the company's ATS feed" };
+    applicationRepo.update(userEmail, app.id, { ghost: { flags: [...(app.ghost?.flags ?? []), flag], checkedAt: now.toISOString() } });
+    existingMarkedGone++;
+  }
   const jobsFetched = scanResult.counts?.beforeFiltering ?? scanResult.jobs.length;
   const jobsFound = scanResult.jobs.length; // survivors of scanJobs' own keyword/seniority relevance filter (already zero-token)
   // scanResult.rejected names WHY each dropped-at-the-keyword-stage job was
@@ -306,6 +337,8 @@ export async function runAutomation(
   const jobCap = resolveJobCap(settings.maxJobsPerRun);
   const toProcess = newJobs.slice(0, jobCap);
 
+  let fingerprints = getUserSingleton<FingerprintIndex>(userEmail, "jd_fingerprints") ?? {};
+  let jobsGhostFlagged = 0;
   let jobsScored = 0;
   let jobsStaged = 0;
   let jobsSourced = 0;
@@ -324,6 +357,13 @@ export async function runAutomation(
       errors.push(`Could not fetch JD for ${job.company ?? "unknown"} - ${job.title}: ${e.message}`);
       continue;
     }
+
+    // GHOST CHECK, new job: stale (>30 days) or a repost of a JD seen
+    // before under a new id. Flagged jobs are saved but never staged.
+    const flags = ghostFlags({ url: job.url, publishedDate: job.publishedDate, jdText }, { now, index: fingerprints });
+    fingerprints = rememberFingerprint(fingerprints, jdText, job.url, now);
+    const ghost = { flags, checkedAt: new Date().toISOString() };
+    if (flags.length) jobsGhostFlagged++;
 
     // Scoring failure (e.g. a reasoning model exhausting its token budget on
     // a dense JD — see lib/ai-client.ts) is NOT treated the same way: the
@@ -367,6 +407,11 @@ export async function runAutomation(
         sector: "",
         seniority: "senior",
         sourceUrl: job.url,
+        // Attribution: where this job came from.
+        source: job.source,
+        ...(job.via ? { sourceVia: job.via } : {}),
+        ...(job.externalId ? { externalId: job.externalId } : {}),
+        ghost,
         capturedAt: nowIso.split("T")[0],
         jdRaw: jdText,
         jdParsed: scoreResult.parsed,
@@ -402,6 +447,11 @@ export async function runAutomation(
         sector: "",
         seniority: "senior",
         sourceUrl: job.url,
+        // Attribution: where this job came from.
+        source: job.source,
+        ...(job.via ? { sourceVia: job.via } : {}),
+        ...(job.externalId ? { externalId: job.externalId } : {}),
+        ghost,
         capturedAt: nowIso.split("T")[0],
         jdRaw: jdText,
         jdParsed: null,
@@ -422,7 +472,10 @@ export async function runAutomation(
       jobsSourced++;
       existingApps.push(newApp); // keeps this run's own in-memory ledger view current
 
-      if (scoreResult) {
+      if (flags.length) {
+        // A possible ghost job stays visible with its reason, out of staging.
+        applicationRepo.update(userEmail, newApp.id, { nextAction: `Possible ghost job (${flags.map(f => f.detail).join("; ")}): verify before applying` });
+      } else if (scoreResult) {
         const staged = await autopilotStage(userEmail, newApp, scoreResult, profile, providerSettings);
         if (staged.staged) jobsStaged++;
         if (staged.error) errors.push(staged.error);
@@ -447,9 +500,16 @@ export async function runAutomation(
     jobsSourced,
     jobsSkippedDuplicate,
     jobsUnscored,
+    jobsGhostFlagged,
+    existingMarkedGone,
+    alertEmailsRead: alert.emailsRead,
+    alertUnresolved: alert.unresolved.slice(0, 50).map(u => ({ title: u.job.title, company: u.job.company, portal: u.job.portal, reason: u.reason })),
+    bySource: scanResult.counts?.bySource,
+    budgetSkipped: scanResult.budgetSkipped,
     errors,
   };
 
+  setUserSingleton(userEmail, "jd_fingerprints", fingerprints);
   settingsRepo.appendAutomationRun(userEmail, run);
   settingsRepo.saveAutomationSettings(userEmail, { ...settings, lastRunAt: now.toISOString() });
 
