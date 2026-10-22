@@ -25,6 +25,8 @@ import { ResumeBuilder } from "../resume-builder";
 import { ResumeAuditResult } from "../../lib/schemas";
 import { showToast } from "../../lib/toast";
 import { EvaluationPanel } from "../evaluation-panel";
+import { CAREER_TRACKS } from "../../lib/career-tracks";
+import { rulesAnnotation } from "../../lib/skill-demand";
 import type { ArtifactEvaluation } from "../../lib/evaluation";
 import { findDriftedBullets, replacementCandidates } from "../../lib/resume-bullet-drift";
 const STATUSES = ["sourced", "reviewed", "applied", "interview", "offer", "rejected"] as const;
@@ -187,7 +189,8 @@ function ApplicationDetail() {
     setResumeGenerating(true);
     setResumeGenError("");
     try {
-      const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
+      // A manually set career track carries its resume archetype.
+      const override = resumeArchetypeChoice === "auto" ? (app.track?.method === "manual" ? app.track.archetype : undefined) : resumeArchetypeChoice;
       const { data, archetype, jdWarning, confidentialityGate, evaluation } = await generateTailoredResume(profile, app, override);
       await persistResumeContent(data, archetype, null, null, evaluation ?? null);
       if (evaluation?.verdict === "FAIL") showToast("The independent review failed this resume. See its findings in the resume panel.", "error");
@@ -211,7 +214,8 @@ function ApplicationDetail() {
     setResumeRefining(true);
     setResumeRefineError("");
     try {
-      const override = resumeArchetypeChoice === "auto" ? undefined : resumeArchetypeChoice;
+      // A manually set career track carries its resume archetype.
+      const override = resumeArchetypeChoice === "auto" ? (app.track?.method === "manual" ? app.track.archetype : undefined) : resumeArchetypeChoice;
       const { data, archetype } = await refineResume(profile, app, resumeContent, resumeRefineText.trim(), override);
       await persistResumeContent(data, archetype);
       setResumeRefineText("");
@@ -823,6 +827,23 @@ window.addEventListener('load', function() {
           <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 16 }}>
             <div className="label" style={{ marginBottom: 16 }}>ACTIONS</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <select
+                data-testid="track-override"
+                value={app.track?.method === "manual" ? app.track.id : "auto"}
+                onChange={e => {
+                  const id = e.target.value;
+                  const t = CAREER_TRACKS.find(x => x.id === id);
+                  // Manual override; "auto" re-classifies by rules.
+                  const track = t ? { id: t.id, archetype: t.resumeArchetype, confidence: 1, method: "manual" as const } : rulesAnnotation(app).track;
+                  setApp(prev => (prev ? { ...prev, track } : prev));
+                  updateApplication(app.id, { track });
+                }}
+                title={`Career track${app.track ? `: ${CAREER_TRACKS.find(x => x.id === app.track!.id)?.label} (${app.track.method})` : ": unclassified"}`}
+                style={{ padding: "6px 8px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+              >
+                <option value="auto">TRACK: {app.track && app.track.method !== "manual" ? `${CAREER_TRACKS.find(x => x.id === app.track!.id)?.label ?? app.track.id} (auto)` : "AUTO"}</option>
+                {CAREER_TRACKS.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
               <select
                 value={resumeArchetypeChoice}
                 onChange={e => setResumeArchetypeChoice(e.target.value as ResumeArchetype | "auto")}

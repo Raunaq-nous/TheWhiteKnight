@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Header, Footer } from "../components";
 import { saveApplication, generateSlug, generateId } from "../../lib/store";
 import { inferSourceFromUrl } from "../../lib/job-sources";
+import { rulesAnnotation } from "../../lib/skill-demand";
 import { scoreJobWithAI } from "../../lib/scoring";
 import { getProfile, getSeedProfile } from "../../lib/profile";
 import { getModelSettings } from "../../lib/model-settings";
@@ -363,6 +364,8 @@ export default function IngestPage() {
       updatedAt: new Date().toISOString(),
     };
 
+    // Career track and skill demand by rules (the /skills page can refine with the model).
+    Object.assign(newApp, rulesAnnotation(newApp));
     saveApplication(newApp);
     router.push(`/`);
   };

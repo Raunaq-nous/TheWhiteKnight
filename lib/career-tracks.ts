@@ -8,7 +8,7 @@ import type { SourceCategory } from "./job-sources";
 
 export type TrackId = "consulting_strategy" | "ai_deployment_strategy" | "forward_deployed_engineer" | "venture_capital";
 
-export type SeedPathway = { skill: string; steps: string[]; proof: string; estimate: string };
+export type SeedPathway = { skill: string; steps: string[]; proof: string; estimate: string; covers?: string[] };
 
 export type CareerTrack = {
   id: TrackId;

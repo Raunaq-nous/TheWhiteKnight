@@ -11,7 +11,7 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 | P0-2 | Fresh-context evaluator gate | DONE | see section |
 | P0-3 | Model gateway on OpenRouter | DONE | see section |
 | P1-1 | Sourcing expansion | DONE | see section |
-| P1-2 | Career tracks and skill pathways (v1) | TODO | |
+| P1-2 | Career tracks and skill pathways (v1) | DONE | see section |
 | P2-1 | Feedback capture and playbook proposals | TODO | |
 
 ## P0-1 Resume content and structure
@@ -85,7 +85,17 @@ How it was built: two parallel subagents wrote the collectors and stopped on a u
 Verification: npm test 1157 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P1-2 Career tracks and skill pathways (v1)
-Status: TODO
+Status: DONE
+
+- docs/CAREER-TRACKS.md committed verbatim from the appendix (in P1-1's final commit) and loaded from config/career-tracks.json: consulting_strategy, ai_deployment_strategy, forward_deployed_engineer, venture_capital, each with titles, keywords, must-have and emerging skills, evaluation formats, sourcing and seeded pathways (each pathway lists the skills it covers).
+- Classification (lib/skill-demand.ts, lib/server/services/track-service.ts): every ingested JD gets a track and its resume archetype. Rules first (title match, then keywords); when two tracks are close, autopilot confirms with the structured model. Batch and manual ingest use rules; /skills annotates older applications by rules. Manual override on the application page (track select); a manually set track's archetype is used for the resume unless an archetype is chosen explicitly. ASSUMPTION: ai_deployment_strategy maps to the consulting resume archetype (engagement-delivery framing), forward_deployed_engineer to ai_ml_engineering, venture_capital to vc_investing.
+- Skill demand: skills extracted per job by rules against config/skill-vocabulary.json (synonyms merge to one canonical name) and, in autopilot or via "Refine with model" on /skills (10 jobs per click), by the model on the structured chain, unioned and normalised. Stored per job (Application.skillDemand). Aggregated per track over a rolling 90 days with counts and shares; "emerging" when the last-30-day share is at least 1.5x the previous-60-day share and the skill appears in 2+ recent jobs.
+- Coverage: strong / weak / none per demanded skill from bullet-level evidence, the requirement map's definitions applied deterministically (strong = a bullet evidences it with a number or scope marker; weak = only unquantified evidence; none = nothing), with the verbatim evidencing bullet.
+- /skills page (app/skill-tracks.tsx above the existing skill builder): per active track (all four when none chosen), demand ranking, emerging flags, coverage with evidence, gaps, and a pathway per gap. Seeded pathways from the appendix; a gap without a seed gets a model-drafted pathway (steps, proof artifact, time estimate) marked DRAFT until accepted or edited.
+- Progress: steps and the proof artifact can be marked done. A finished proof offers a profile bullet: written by the user, checked against the confidentiality gate (/api/skills/proof-check), and added through the existing write-back (appendGapAnswerToProfile) only on an explicit click. Pathways are never resume content.
+- Tests: lib/__tests__/career-tracks.test.ts (normalisation, rules extraction, classification, aggregation, emerging detection, coverage, pathways, model paths mocked, storage) and track-scan.test.ts.
+
+Verification: npm test 1173 passed (2 opt-in skipped); npm run build clean; tsc no new errors.
 
 ## P2-1 Feedback capture and playbook proposals
 Status: TODO

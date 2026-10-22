@@ -8,6 +8,7 @@ import { showToast } from "./toast";
 import type { ResumeContent } from "./resume-schema";
 import type { ArtifactEvaluation, EvaluatedKind } from "./evaluation";
 import type { JobSource } from "./job-sources";
+import type { TrackId } from "./career-tracks";
 import type { GhostCheck } from "./ghost-jobs";
 import type { ResumeArchetype } from "./resume-archetype";
 import type { ResumeAuditResult } from "./schemas";
@@ -97,6 +98,11 @@ export type Application = {
   source?: JobSource;
   sourceVia?: string;
   externalId?: string;
+  // Career track (docs/CAREER-TRACKS.md) and its resume archetype: by rules,
+  // confirmed by the model when two tracks are close, or set manually.
+  track?: { id: TrackId; archetype: ResumeArchetype; confidence: number; method: "rules" | "model" | "manual" } | null;
+  // Normalised skills this JD asks for (skill demand per track).
+  skillDemand?: { skills: string[]; method: "rules" | "model"; extractedAt: string } | null;
   // Ghost-job check: stale (>30 days), repost, or gone from its ATS feed.
   // Flagged jobs stay visible but are never staged by autopilot.
   ghost?: GhostCheck | null;

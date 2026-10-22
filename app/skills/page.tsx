@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Header, Footer } from "../components";
+import { SkillTracks } from "../skill-tracks";
 import { getProfile } from "../../lib/profile";
 import { getApplications, Application } from "../../lib/store";
 import { getPlan, savePlan, getStatuses, toggleStep, setStatus, StoredPlan } from "../../lib/skills-store";
@@ -153,6 +154,9 @@ export default function SkillBuilderPage() {
       <Header />
       <main className="page-main">
         <div className="container">
+          {/* Career tracks: demand, coverage, gaps and pathways (P1-2). */}
+          <SkillTracks />
+
           {/* Hero */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 24 }}>
             <div style={{ flex: 1, minWidth: 300 }}>

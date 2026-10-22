@@ -18,6 +18,7 @@ import { ghostFlags, rememberFingerprint, type FingerprintIndex, type GhostFlag 
 import { namesMatch } from "../../profile-merge";
 import { getUserSingleton, setUserSingleton } from "../user-singletons";
 import { trackScanPlan } from "../../track-scan";
+import { annotateApplication } from "./track-service";
 import type { Region } from "../../company-targets";
 import type { Application } from "../../store";
 import type { Profile } from "../../profile";
@@ -476,6 +477,13 @@ export async function runAutomation(
         createdAt: nowIso,
         updatedAt: nowIso,
       };
+
+      // Career track and skill demand (rules, model-confirmed when close).
+      try {
+        Object.assign(newApp, await annotateApplication(newApp, providerSettings, { useModel: true }));
+      } catch (e: any) {
+        errors.push(`Track/skill annotation failed for ${newApp.company}: ${e.message}`);
+      }
 
       // Save to the ledger FIRST — even if drafting/staging fails below, this
       // job is now permanently recorded and will never be re-scored.

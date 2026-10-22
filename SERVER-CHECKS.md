@@ -53,3 +53,12 @@ curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/automation/runs | jq '.
 ```
 Expect: no Exa source in an autopilot run's bySource; alert jobs resolved to company-direct URLs (or listed in alertUnresolved with the reason); /analytics shows the "Response and interview rates by source" table.
 For the alert inbox, set Settings > Integrations > Job-alert inbox (IMAP host, port 993, user, app password, folder) first.
+
+## P1-2 Career tracks and skill pathways
+```
+# Demand, coverage and pathways per track (annotates unclassified applications by rules first):
+curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/skills/demand | jq '.unclassified, (.tracks[] | {label, jobs, top: [.skills[:5][] | {skill, count, emerging, rating: .coverage.rating}]})'
+# Refine 10 jobs with the model (structured chain):
+curl -s -X POST -H "Cookie: $CAREEROS_COOKIE" -H "Content-Type: application/json" -d '{"modelLimit":10}' https://<host>/api/skills/demand | jq '.withModel'
+```
+In the app: open /skills, pick your tracks, check the demand ranking and coverage, draft a pathway for a gap with no seed (it shows DRAFT), accept it, tick its steps and proof, and confirm the "Offer as a profile bullet" flow blocks a forbidden term (try "PX Pulse") before adding.

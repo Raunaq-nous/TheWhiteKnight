@@ -4,6 +4,7 @@
 
 import { Profile } from "./profile";
 import { inferSourceFromUrl, type JobSource } from "./job-sources";
+import { rulesAnnotation } from "./skill-demand";
 import { TargetBucket, Application, generateId, generateSlug, saveApplication } from "./store";
 import { getModelSettings } from "./model-settings";
 import { AFScoreResult } from "./prompts";
@@ -130,6 +131,7 @@ async function processItem(item: BatchItem, profile: Profile, buckets: TargetBuc
       createdAt: now,
       updatedAt: now,
     };
+    Object.assign(appRecord, rulesAnnotation(appRecord));
     saveApplication(appRecord);
 
     const done: BatchItem = {
