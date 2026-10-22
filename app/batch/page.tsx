@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import type { JobSource } from "../../lib/job-sources";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { getProfile } from "../../lib/profile";
@@ -21,7 +22,7 @@ export default function BatchPage() {
   const [query, setQuery] = useState("AI Product Manager");
   const [regions, setRegions] = useState<Region[]>(["middle-east", "india", "apac", "global"]);
   const [scanning, setScanning] = useState(false);
-  const [discovered, setDiscovered] = useState<{ title: string; company?: string; location?: string; url: string; snippet?: string; relevance?: number; source?: string; selected: boolean }[]>([]);
+  const [discovered, setDiscovered] = useState<{ title: string; company?: string; location?: string; url: string; snippet?: string; relevance?: number; source?: JobSource; via?: string; selected: boolean }[]>([]);
 
   // PASTE tab state
   const [pasteText, setPasteText] = useState("");
@@ -96,6 +97,8 @@ export default function BatchPage() {
       location: d.location ?? "",
       jdText: `${d.title}\n\n${d.snippet ?? ""}\n\nSource: ${d.url}`,
       jdUrl: d.url,
+      source: d.source,
+      ...(d.via ? { sourceVia: d.via } : {}),
     }));
     if (inputs.length === 0) { setError("Select at least one job."); return; }
     setError(""); setRunning(true);

@@ -66,9 +66,17 @@ export function expectedInterviewRate(source: string, stat?: SourceConversion): 
   return ((stat?.interviewed ?? 0) + prior * PRIOR_WEIGHT) / (applied + PRIOR_WEIGHT);
 }
 
-/** Sources in scan order: best expected interview rate first; ties by category priority (company-direct first). */
-export function rankSources(stats: SourceConversion[], sources: string[]): string[] {
+/**
+ * Sources in scan order: best expected interview rate first; ties by the
+ * active career tracks' preferred categories, then category priority
+ * (company-direct first).
+ */
+export function rankSources(stats: SourceConversion[], sources: string[], preferredCategories: string[] = []): string[] {
   const stat = new Map(stats.map(s => [s.source, s]));
-  const cat = (s: string) => CATEGORY_PRIORITY[SOURCE_META[s as JobSource]?.category ?? "manual"];
+  const cat = (s: string) => {
+    const c = SOURCE_META[s as JobSource]?.category ?? "manual";
+    const pref = preferredCategories.indexOf(c);
+    return (pref >= 0 ? pref : preferredCategories.length) * 10 + CATEGORY_PRIORITY[c];
+  };
   return [...sources].sort((a, b) => (expectedInterviewRate(b, stat.get(b)) - expectedInterviewRate(a, stat.get(a))) || cat(a) - cat(b));
 }

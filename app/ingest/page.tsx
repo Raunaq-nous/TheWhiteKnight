@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header, Footer } from "../components";
 import { saveApplication, generateSlug, generateId } from "../../lib/store";
+import { inferSourceFromUrl } from "../../lib/job-sources";
 import { scoreJobWithAI } from "../../lib/scoring";
 import { getProfile, getSeedProfile } from "../../lib/profile";
 import { getModelSettings } from "../../lib/model-settings";
@@ -334,6 +335,8 @@ export default function IngestPage() {
       sector,
       seniority,
       sourceUrl,
+      // Attribution: the ATS or board the pasted URL belongs to, else manual.
+      source: inferSourceFromUrl(sourceUrl),
       capturedAt: new Date().toISOString().split("T")[0],
       jdRaw: jdText,
       jdParsed: unscored ? null : scoreResult.parsed,

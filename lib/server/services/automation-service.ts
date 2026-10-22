@@ -17,6 +17,7 @@ import { isCompanyDirect } from "../../job-sources";
 import { ghostFlags, rememberFingerprint, type FingerprintIndex, type GhostFlag } from "../../ghost-jobs";
 import { namesMatch } from "../../profile-merge";
 import { getUserSingleton, setUserSingleton } from "../user-singletons";
+import { trackScanPlan } from "../../track-scan";
 import type { Region } from "../../company-targets";
 import type { Application } from "../../store";
 import type { Profile } from "../../profile";
@@ -250,13 +251,22 @@ export async function runAutomation(
   }
 
   const integration = settingsRepo.getIntegrationSettings(userEmail);
-  const companies = settingsRepo.getCompanyTargets(userEmail).filter(c => c.enabled);
+  const allCompanies = settingsRepo.getCompanyTargets(userEmail);
+  const companies = allCompanies.filter(c => c.enabled);
   const modelSettings = settingsRepo.getModelSettings(userEmail);
   const providerSettings = modelSettings.provider !== "together"
     ? { provider: modelSettings.provider, model: modelSettings.model, apiKey: modelSettings.apiKey }
     : undefined;
 
-  const { query, roleKeywords, excludeKeywords } = buildScanParams(profile);
+  const baseParams = buildScanParams(profile);
+  // Track-aware: active career tracks add their titles, keywords, target
+  // companies and preferred sources.
+  const plan = trackScanPlan(
+    { query: baseParams.query, roleKeywords: baseParams.roleKeywords, companies: allCompanies },
+    getUserSingleton<{ active?: string[] }>(userEmail, "career_tracks")?.active,
+  );
+  const { query, roleKeywords } = plan;
+  const { excludeKeywords } = baseParams;
   const regions = Array.from(new Set(companies.flatMap(c => c.region))) as Region[];
 
   const errors: string[] = [];
@@ -265,7 +275,8 @@ export async function runAutomation(
     scanResult = await scanJobs({
       query: query || "role",
       regions: regions.length > 0 ? regions : ["global"],
-      companies,
+      companies: plan.companies,
+      preferredCategories: plan.preferredCategories,
       // Autopilot: keyless and company-direct first, keyed aggregators only
       // to top up within budget, and never Exa (so no exaApiKey here).
       mode: "autopilot",

@@ -1,0 +1,87 @@
+{
+  "_note": "Seed data from docs/CAREER-TRACKS.md (October 2026). Skill demand measured from real JDs overrides these lists over time; this file is the prior, not the truth.",
+  "tracks": [
+    {
+      "id": "consulting_strategy",
+      "label": "Strategy consulting",
+      "resumeArchetype": "consulting",
+      "titles": ["Consultant", "Engagement Manager", "Project Leader", "Principal", "Senior Manager", "AI Consultant", "Delivery Lead", "AI Implementation Lead"],
+      "keywords": ["strategy", "consulting", "experienced hire", "capital projects", "infrastructure", "energy", "operations", "case interview", "quantumblack", "bcg x", "ai implementation", "management consulting", "advisory"],
+      "mustHaveSkills": ["structured problem solving", "client leadership", "team leadership", "quantified impact", "executive communication", "AI fluency"],
+      "emergingSkills": ["AI-assisted case work", "judgment in using AI tools", "data science case framing"],
+      "evaluationFormats": ["case interview", "behavioural rounds", "AI-enabled case components (McKinsey Lilli, BCG live-case LLM access, Bain AI component)", "technical screen for AI units"],
+      "sourcing": {
+        "preferredSources": ["company-direct", "alert-email", "google-jobs"],
+        "boards": ["iimjobs", "LinkedIn alerts"],
+        "companies": ["McKinsey", "Boston Consulting Group", "Bain and Company", "Accenture", "Deloitte", "PwC", "EY", "KPMG", "Kearney", "Oliver Wyman", "Roland Berger", "Strategy&"]
+      },
+      "pathways": [
+        { "skill": "AI-assisted case practice", "steps": ["Run cases with an LLM as a tool: prompt it, critique its output, synthesise a recommendation", "Record three mock cases", "Write a debrief for each"], "proof": "Three recorded mock cases with written debriefs", "estimate": "About two weeks" },
+        { "skill": "SQL and ML framing for AI units", "steps": ["SQL window functions and CTEs", "ML framing: metrics, bias and variance, evaluation", "Write one data-science case end to end on non-client data"], "proof": "A use-case write-up on non-client data", "estimate": "Four to six weeks" },
+        { "skill": "Leadership story bank", "steps": ["Collect stories on team leadership, client disagreement, project pivots and delivered impact", "Write each in STAR form", "Map them to common questions"], "proof": "Eight STAR stories mapped to common questions", "estimate": "About one week" }
+      ]
+    },
+    {
+      "id": "ai_deployment_strategy",
+      "label": "AI deployment strategy",
+      "resumeArchetype": "consulting",
+      "titles": ["Deployment Strategist", "Deployment Lead", "Technical Deployment Lead", "AI Solutions Lead", "AI Transformation Lead", "Applied AI Strategy", "Engagement Manager"],
+      "keywords": ["deployment", "ai transformation", "applied ai", "ai solutions", "customer-facing", "value case", "sow", "executive briefing", "security review", "procurement", "adoption", "agents", "mcp", "evals"],
+      "mustHaveSkills": ["programme scoping", "value cases", "stakeholder management", "adoption and change management", "security and compliance awareness", "evaluation literacy", "agents and MCP"],
+      "emergingSkills": ["AI security reviews", "data processing agreements", "AI procurement", "agent evaluation"],
+      "evaluationFormats": ["customer scenario interviews", "executive presentation", "technical fluency screen"],
+      "sourcing": {
+        "preferredSources": ["company-direct", "google-jobs", "alert-email"],
+        "boards": ["Wellfound", "YC Work at a Startup", "Cutshort", "Instahyre"],
+        "companies": ["OpenAI", "Anthropic", "Palantir", "Scale AI", "Databricks", "Cohere", "Mistral AI", "Glean", "Sierra", "Harvey"]
+      },
+      "pathways": [
+        { "skill": "Evaluation literacy", "steps": ["Pick one personal build (the CareerOS evaluator gate is a ready example)", "Label a set of outputs by hand", "Measure accuracy against the human labels"], "proof": "An evaluation report", "estimate": "About two weeks" },
+        { "skill": "Enterprise deployment fluency", "steps": ["Learn the basics of AI security reviews", "Learn data processing agreements and procurement", "Write an anonymised SOW for an AI deployment"], "proof": "The SOW template", "estimate": "About one week" },
+        { "skill": "Agents and MCP", "steps": ["Document the CareerOS MCP server", "Document a skill built on it", "Publish it as a case study"], "proof": "The write-up", "estimate": "About two weeks" },
+        { "skill": "Formal AI deployment programmes", "steps": ["Join a formal deployment-training programme (Anthropic's October 2026 programme for 10,000 engineers)", "Pair it with the existing Claude certifications"], "proof": "Programme completion", "estimate": "Programme length" }
+      ]
+    },
+    {
+      "id": "forward_deployed_engineer",
+      "label": "Forward deployed engineer",
+      "resumeArchetype": "ai_ml_engineering",
+      "titles": ["Forward Deployed Engineer", "Forward Deployed AI Engineer", "Forward Deployed Software Engineer", "Applied AI Engineer", "Solutions Engineer"],
+      "keywords": ["forward deployed", "fde", "applied ai", "rag", "agent orchestration", "evaluations", "fine-tuning", "python", "typescript", "production", "customer-facing", "mcp", "sub-agents"],
+      "mustHaveSkills": ["Python", "TypeScript, Go or Java", "tests and error handling", "observability", "SQL", "RAG", "agent orchestration", "evaluations", "fine-tuning trade-offs", "customer-facing delivery"],
+      "emergingSkills": ["MCP servers", "sub-agents", "agent skills", "evaluation frameworks"],
+      "evaluationFormats": ["coding interview", "system design for LLM applications", "evaluation deep-dive", "customer scenarios"],
+      "sourcing": {
+        "preferredSources": ["company-direct", "google-jobs", "alert-email"],
+        "boards": ["Wellfound", "YC Work at a Startup", "Cutshort", "Instahyre"],
+        "companies": ["OpenAI", "Anthropic", "Palantir", "Databricks", "Scale AI"]
+      },
+      "pathways": [
+        { "skill": "Own a production system end to end", "steps": ["Add tests and CI to CareerOS on its server", "Add monitoring and alerting", "Run an on-call routine and record incidents"], "proof": "A public write-up with metrics", "estimate": "Six to eight weeks" },
+        { "skill": "Python and TypeScript to code-review level", "steps": ["Take a structured course", "Open pull requests and get them reviewed", "Get them merged"], "proof": "Merged PRs", "estimate": "Eight to twelve weeks" },
+        { "skill": "Evaluation engineering", "steps": ["Build a regression suite", "Build a hallucination suite", "Publish both in a public repo"], "proof": "An eval suite in a public repo", "estimate": "Two to three weeks" }
+      ]
+    },
+    {
+      "id": "venture_capital",
+      "label": "Venture capital",
+      "resumeArchetype": "vc_investing",
+      "titles": ["Associate", "Senior Associate", "Principal", "Investor", "Platform", "Venture Partner", "Scout"],
+      "keywords": ["venture", "vc", "investing", "investment", "fund", "portfolio", "sourcing", "diligence", "ai investing", "climate", "energy transition", "infrastructure fund"],
+      "mustHaveSkills": ["deal sourcing", "due diligence", "financial reasoning (unit economics, valuation, dilution, fund-return logic)", "investment memo writing", "network building", "portfolio support"],
+      "emergingSkills": ["AI sector thesis", "energy-transition infrastructure software"],
+      "evaluationFormats": ["investment memo", "market map", "case on a real startup", "partner interviews"],
+      "sourcing": {
+        "preferredSources": ["company-direct", "alert-email", "google-jobs"],
+        "boards": ["VC Stack", "venturecapitalcareers.com", "fund websites", "portfolio job boards"],
+        "companies": []
+      },
+      "pathways": [
+        { "skill": "Sector thesis and market map", "steps": ["Pick a thesis (AI for capital projects and construction, or energy-transition infrastructure software)", "Map the companies", "Publish the map and thesis"], "proof": "A published market map and thesis", "estimate": "About three weeks" },
+        { "skill": "Investment memos", "steps": ["Pick three real startups", "Write a one-page memo on each from public information"], "proof": "Three memos", "estimate": "About four weeks" },
+        { "skill": "Venture mechanics", "steps": ["Term sheets", "Dilution and liquidation preferences", "Power-law fund returns"], "proof": "Worked examples", "estimate": "About two weeks" },
+        { "skill": "Venture network", "steps": ["Hold regular conversations with founders and investors", "Join a scout programme where one is available"], "proof": "A log of conversations and any scout role", "estimate": "Ongoing" }
+      ]
+    }
+  ]
+}

@@ -36,3 +36,20 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<host>/api/health/models   # ex
 curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/gateway | jq '.resolved, .spend, (.recentCalls | map_values(.[0] | {provider, modelServed, ok}))'
 ```
 If `check:models` reports an UNKNOWN ID, open Settings > Model gateway (admin) and replace it with the matching id from https://openrouter.ai/api/v1/models, or edit config/model-chains.json and redeploy.
+
+## P1-1 Sourcing expansion
+```
+# 1. Every keyless source answers and maps (one public request each); saves raw captures:
+npm run capture:fixtures -- --greenhouse=stripe --lever=<slug> --ashby=<slug> \
+  --workday=https://<tenant>.wd<N>.myworkdayjobs.com/<site> --workable=<slug> --recruitee=<slug> \
+  --personio=<slug> --teamtailor=<slug> --rippling=<slug>
+# 2. Keys present and this month's budget use per keyed source (names only, never values):
+curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/sources | jq '.sources'
+# 3. ATS detector on a real company:
+curl -s -H "Cookie: $CAREEROS_COOKIE" -H "Content-Type: application/json" -d '{"input":"stripe.com"}' https://<host>/api/companies/detect | jq '.detected, .detection'
+# 4. One autopilot run, then read its per-source counts, ghost flags, alert-inbox results and skipped budgets:
+curl -s -X POST -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/automation/run
+curl -s -H "Cookie: $CAREEROS_COOKIE" https://<host>/api/automation/runs | jq '.[0] | {bySource, jobsGhostFlagged, existingMarkedGone, alertEmailsRead, alertUnresolved, budgetSkipped, errors}'
+```
+Expect: no Exa source in an autopilot run's bySource; alert jobs resolved to company-direct URLs (or listed in alertUnresolved with the reason); /analytics shows the "Response and interview rates by source" table.
+For the alert inbox, set Settings > Integrations > Job-alert inbox (IMAP host, port 993, user, app password, folder) first.

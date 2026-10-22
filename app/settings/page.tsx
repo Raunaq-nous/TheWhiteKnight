@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Header, Footer } from "../components";
 import { MODEL_OPTIONS, getModelSettings, saveModelSettings, ModelProvider } from "../../lib/model-settings";
 import { ModelGatewaySettings } from "../model-gateway-settings";
+import { CareerTrackPicker } from "../career-track-picker";
 import { INTEGRATION_OPTIONS, getIntegrationSettings, saveIntegrationSettings, IntegrationSettings } from "../../lib/integration-settings";
 import {
   AutomationSettings,
@@ -301,7 +302,7 @@ export default function SettingsPage() {
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>
           <div className="label" style={{ marginBottom: 16 }}>INTEGRATIONS</div>
           <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
-            Optional API keys for contact discovery (Exa, Apollo), email sending (Resend), and email verification (Hunter). All keys are stored only in your browser. Free tiers are sufficient for most users.
+            Optional API keys for contact discovery (Exa, Apollo), email sending (Resend), email verification (Hunter) and the job-alert inbox. Keys are stored in your own CareerOS database, never in browser storage. Free tiers are sufficient for most users.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {INTEGRATION_OPTIONS.map(opt => (
@@ -334,6 +335,28 @@ export default function SettingsPage() {
                 </div>
               </div>
             ))}
+            <div data-testid="imap-settings" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 14 }}>
+              <div className="label" style={{ marginBottom: 6 }}>JOB-ALERT INBOX (IMAP, READ-ONLY)</div>
+              <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginBottom: 8, lineHeight: 1.5 }}>
+                Autopilot reads alert emails from LinkedIn, Naukri, iimjobs, Instahyre, Cutshort, Wellfound, Bayt, GulfTalent and Naukrigulf. Those portals are never fetched: each job is looked up on the company&apos;s own careers board. The folder is opened read-only. Use an app password, and a dedicated folder if you can.
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8 }}>
+                {([
+                  ["imapHost", "imap.gmail.com", "text"], ["imapPort", "993", "number"], ["imapFolder", "INBOX", "text"],
+                  ["imapUser", "you@example.com", "text"], ["imapPassword", "App password", "password"],
+                ] as const).map(([field, placeholder, type]) => (
+                  <input
+                    key={field}
+                    type={type}
+                    value={(integrations[field] as string | number | undefined) ?? ""}
+                    onChange={e => setIntegrations(prev => ({ ...prev, [field]: field === "imapPort" ? (e.target.value ? Number(e.target.value) : undefined) : e.target.value }))}
+                    placeholder={placeholder}
+                    style={{ padding: "6px 10px", background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", fontFamily: "var(--font-mono)", fontSize: "0.75rem", borderRadius: "var(--radius)" }}
+                  />
+                ))}
+              </div>
+            </div>
+            <SourceStatus />
             <div style={{ borderTop: "1px solid var(--border-light)", paddingTop: 14 }}>
               <div className="label" style={{ marginBottom: 8 }}>SENDER IDENTITY (FOR EMAIL SEND)</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -365,6 +388,10 @@ export default function SettingsPage() {
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 24, marginBottom: 24 }}>
           <div className="label" style={{ marginBottom: 16 }}>AUTOMATION</div>
+          <div style={{ marginBottom: 16 }}>
+            <div className="label" style={{ marginBottom: 8 }}>CAREER TRACKS TO SCAN FOR</div>
+            <CareerTrackPicker />
+          </div>
           <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
             On a schedule, scans your enabled target companies (see the Companies page) for new postings, scores each against your profile, drafts a cover letter for good-fit jobs, and stages them in your approval queue. It never sends or submits anything — every staged job waits for your review at /approvals, exactly like manual scoring does.
           </p>
@@ -575,6 +602,24 @@ export default function SettingsPage() {
         </div>
       </main>
       <Footer />
+    </div>
+  );
+}
+
+// Which job-source keys the server has (names only, never values) and each
+// keyed source's monthly budget usage.
+function SourceStatus() {
+  const [data, setData] = useState<{ sources: { source: string; label: string; envKey?: string; keySet: boolean; used: number; cap: number | null }[] } | null>(null);
+  useEffect(() => { fetch("/api/sources").then(r => (r.ok ? r.json() : null)).then(setData).catch(() => {}); }, []);
+  if (!data) return null;
+  return (
+    <div data-testid="source-status" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 14, fontFamily: "var(--font-mono)", fontSize: "0.7rem" }}>
+      <div className="label" style={{ marginBottom: 6 }}>JOB-SOURCE KEYS (SERVER ENV) AND MONTHLY BUDGETS</div>
+      {data.sources.map(s => (
+        <div key={s.source} style={{ color: s.keySet ? "var(--text-secondary)" : "var(--text-tertiary)" }}>
+          {s.label}: {s.envKey ? `${s.envKey} ${s.keySet ? "set" : "not set"}` : "user keys"} · {s.used}/{s.cap ?? "unlimited"} calls this month
+        </div>
+      ))}
     </div>
   );
 }

@@ -705,4 +705,18 @@ describe("autopilot sourcing (P1-1)", () => {
     expect(run.existingMarkedGone).toBe(1);
     expect(applicationRepo.list(USER)[0].ghost?.flags[0].kind).toBe("gone");
   });
+
+  it("track-aware: an active career track adds its titles to the query and its companies to the scan", async () => {
+    profileRepo.save(USER, makeProfile());
+    enableAutomation();
+    settingsRepo.saveCompanyTargets(USER, [{ id: "openai", name: "OpenAI", region: ["global"], sector: "ai-emerging", ats: "ashby", atsTenant: "openai", careersUrl: "https://openai.com/careers", enabled: false }] as any);
+    const { setUserSingleton } = await import("../server/user-singletons");
+    setUserSingleton(USER, "career_tracks", { active: ["ai_deployment_strategy"] });
+    scanJobsMock.mockResolvedValue(scanOk([]));
+    await runOnce(USER, NOW, { force: true });
+    const input = scanJobsMock.mock.calls[0][0];
+    expect(input.query).toContain("Deployment Strategist");
+    expect(input.companies.find((c: any) => c.id === "openai").enabled).toBe(true);
+    expect(input.preferredCategories).toContain("company-direct");
+  });
 });

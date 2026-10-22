@@ -71,3 +71,22 @@ export const CATEGORY_PRIORITY: Record<SourceCategory, number> = {
 export function isCompanyDirect(source: string | undefined): boolean {
   return !!source && SOURCE_META[source as JobSource]?.category === "company-direct";
 }
+
+// Hosts that identify a source when the user pastes a job URL.
+const HOST_SOURCES: [RegExp, JobSource][] = [
+  [/greenhouse\.io$/, "greenhouse"], [/lever\.co$/, "lever"], [/ashbyhq\.com$/, "ashby"], [/smartrecruiters\.com$/, "smartrecruiters"],
+  [/myworkdayjobs\.com$/, "workday"], [/workable\.com$/, "workable"], [/recruitee\.com$/, "recruitee"], [/personio\.(de|com)$/, "personio"],
+  [/teamtailor\.com$/, "teamtailor"], [/rippling\.com$/, "rippling"], [/remotive\.com$/, "remotive"], [/arbeitnow\.com$/, "arbeitnow"],
+  [/themuse\.com$/, "themuse"], [/remoteok\.com$/, "remoteok"], [/weworkremotely\.com$/, "weworkremotely"], [/himalayas\.app$/, "himalayas"],
+  [/jobicy\.com$/, "jobicy"],
+];
+
+/** The source a pasted job URL implies: its ATS or board when the host says so, else "manual". */
+export function inferSourceFromUrl(url: string | undefined): JobSource {
+  try {
+    const host = new URL(url ?? "").hostname.toLowerCase();
+    return HOST_SOURCES.find(([re]) => re.test(host))?.[1] ?? "manual";
+  } catch {
+    return "manual";
+  }
+}
