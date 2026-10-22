@@ -7,12 +7,12 @@ Invariants (never weakened): approval gate for every send/submit, LinkedIn draft
 
 | ID | Item | Status | Commit |
 | --- | --- | --- | --- |
-| P0-1 | Resume content and structure | DONE | 2fe1c57 + this item's commit |
-| P0-2 | Fresh-context evaluator gate | DONE | see section |
-| P0-3 | Model gateway on OpenRouter | DONE | see section |
-| P1-1 | Sourcing expansion | DONE | see section |
-| P1-2 | Career tracks and skill pathways (v1) | DONE | see section |
-| P2-1 | Feedback capture and playbook proposals | DONE | see section |
+| P0-1 | Resume content and structure | DONE | 2599e8a (on 2fe1c57) |
+| P0-2 | Fresh-context evaluator gate | DONE | ba0b83b |
+| P0-3 | Model gateway on OpenRouter | DONE | 73ed801 (failover fix a5dd9f0) |
+| P1-1 | Sourcing expansion | DONE | cb539a4, 8ab119a, f0ec8b8, 33d335f, 26d9b45 |
+| P1-2 | Career tracks and skill pathways (v1) | DONE | 5b4d9dd |
+| P2-1 | Feedback capture and playbook proposals | DONE | b13402f |
 
 ## P0-1 Resume content and structure
 Status: DONE
