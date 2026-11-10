@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en" data-mode="calm">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code explorer: __CLARITY_TITLE__</title>
+<!--
+  Code explorer template (clarity kit v1.1), styled to match raunaq-nous.github.io/raunaq-portfolio:
+  the same calm and nerd modes, type, greys and grain. `clarity.py build` replaces the data
+  placeholder near the end with the repository's notes and code. The page works offline; the web
+  fonts load when online and fall back to system fonts otherwise.
+-->
+<script>
+  // Use the mode chosen on the portfolio (same storage key), before first paint, to avoid a flash.
+  (function () { try { var m = localStorage.getItem('site-mode'); document.documentElement.setAttribute('data-mode', m === 'nerd' ? 'nerd' : 'calm'); } catch (e) {} })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+:root, [data-mode='calm'] {
+  --ink: 241 240 236; --ink-2: 233 231 226; --ink-3: 224 222 216; --paper: 14 14 13;
+  --grey-1: 58 57 54; --grey-2: 92 91 87; --grey-3: 126 124 119; --grey-4: 168 166 161; --line: 212 210 204;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-body: 'Hanken Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Newsreader', Georgia, serif;
+  --display-track: -0.025em; --gutter: clamp(20px, 3.2vw, 48px); --nav-h: 56px;
+  color-scheme: light;
+}
+[data-mode='nerd'] {
+  --ink: 9 9 9; --ink-2: 16 16 16; --ink-3: 22 22 22; --paper: 241 240 236;
+  --grey-1: 185 183 177; --grey-2: 140 138 133; --grey-3: 98 97 93; --grey-4: 60 59 56; --line: 38 38 36;
+  --font-body: var(--font-mono); --font-display: var(--font-mono); --display-track: -0.06em;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { background: rgb(var(--ink)); color: rgb(var(--paper)); -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: rgb(var(--ink)); color: rgb(var(--paper)); font: 15px/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; transition: background-color .35s ease, color .35s ease; }
+::selection { background: rgb(var(--paper)); color: rgb(var(--ink)); }
+:focus-visible { outline: 1px solid rgb(var(--paper)); outline-offset: 3px; }
+a { color: inherit; text-decoration: none; }
+code { font-family: var(--font-mono); font-size: .88em; background: rgb(var(--ink-2)); padding: 1px 5px; border-radius: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: -999px; top: 8px; background: rgb(var(--ink)); padding: 8px 12px; z-index: 80; }
+.skip:focus { left: 8px; }
+.grain { position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: .07; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.label { font-family: var(--font-mono); font-size: 10.5px; line-height: 1.4; letter-spacing: .14em; text-transform: uppercase; }
+.display { font-family: var(--font-display); font-weight: 400; letter-spacing: var(--display-track); line-height: .95; margin: 0; overflow-wrap: anywhere; }
+[data-mode='nerd'] .display { font-weight: 500; line-height: 1; }
+.calm-only { display: inline; } .nerd-only { display: none; }
+[data-mode='nerd'] .calm-only { display: none; } [data-mode='nerd'] .nerd-only { display: inline; }
+.link-quiet { position: relative; transition: color .3s ease; }
+.link-quiet::after { content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: right; transition: transform .45s cubic-bezier(.2,.7,.1,1); }
+.link-quiet:hover::after, .link-quiet:focus-visible::after { transform: scaleX(1); transform-origin: left; }
+.u { text-decoration: underline; text-decoration-color: rgb(var(--grey-4)); text-underline-offset: 3px; }
+.u:hover { text-decoration-color: rgb(var(--paper)); }
+
+/* Top bar */
+.top { position: sticky; top: 0; z-index: 50; height: var(--nav-h); display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 0 var(--gutter); background: rgb(var(--ink) / .92); border-bottom: 1px solid rgb(var(--line));
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.crumbs { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; color: rgb(var(--grey-2)); min-width: 0; }
+.crumbs a:hover { color: rgb(var(--paper)); }
+.crumbs .here { color: rgb(var(--paper)); }
+.mode { position: relative; display: flex; align-items: center; width: 128px; height: 32px; border-radius: 999px; flex: none;
+  border: 1px solid rgb(var(--line)); background: rgb(var(--ink-2) / .8); overflow: hidden; cursor: pointer; padding: 0; color: inherit; font: inherit; }
+.mode:hover { border-color: rgb(var(--paper) / .4); }
+.mode .knob { position: absolute; top: 3px; left: 3px; width: calc(50% - 3px); height: calc(100% - 6px); border-radius: 999px;
+  background: rgb(var(--paper) / .1); border: 1px solid rgb(var(--paper) / .3); transition: left .3s ease-out; }
+[data-mode='nerd'] .mode .knob { left: calc(50% + 1px); }
+.mode span.opt { position: relative; z-index: 1; flex: 1; text-align: center; font-family: var(--font-mono); font-size: .6rem;
+  letter-spacing: .05em; color: rgb(var(--grey-3)); transition: color .3s ease; }
+.mode .o-calm { text-transform: uppercase; }
+[data-mode='calm'] .mode .o-calm, [data-mode='nerd'] .mode .o-nerd { color: rgb(var(--paper)); font-weight: 600; }
+
+/* Layout */
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: calc(100vh - var(--nav-h)); }
+.rail { position: sticky; top: var(--nav-h); height: calc(100vh - var(--nav-h)); overflow: auto; border-right: 1px solid rgb(var(--line));
+  padding: 24px 18px 18px var(--gutter); display: flex; flex-direction: column; gap: 18px; }
+.rail .who { margin: 0; color: rgb(var(--grey-3)); }
+.rail h1 { font-family: var(--font-display); font-weight: 400; font-size: 30px; line-height: 1; letter-spacing: var(--display-track); margin: 6px 0 0; overflow-wrap: anywhere; }
+.search input { width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid rgb(var(--line)); background: transparent;
+  color: rgb(var(--paper)); font: 14px var(--font-body); border-radius: 0; }
+.search input::placeholder { color: rgb(var(--grey-3)); }
+.search input:focus { outline: none; border-bottom-color: rgb(var(--paper)); }
+.views { display: grid; gap: 2px; }
+.views a { display: flex; justify-content: space-between; padding: 7px 0; color: rgb(var(--grey-2)); border-bottom: 1px solid transparent; }
+.views a:hover { color: rgb(var(--paper)); }
+.views a[aria-current="page"] { color: rgb(var(--paper)); border-bottom-color: rgb(var(--line)); }
+.tree { flex: 1; }
+.tree-title { color: rgb(var(--grey-3)); margin: 4px 0 8px; }
+.t-area summary { cursor: pointer; list-style: none; display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) auto; align-items: baseline;
+  gap: 6px; padding: 6px 0; border-top: 1px solid rgb(var(--line)); }
+.t-area summary::-webkit-details-marker { display: none; }
+.t-area summary .label { color: rgb(var(--grey-3)); }
+.t-area summary:hover .t-name { color: rgb(var(--paper)); }
+.t-name { color: rgb(var(--grey-1)); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-area[open] .t-name { color: rgb(var(--paper)); }
+.t-count { color: rgb(var(--grey-3)); }
+.t-area ul { list-style: none; margin: 0 0 10px; padding: 0 0 0 2.2rem; }
+.t-area li a { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 8px; padding: 3px 0; color: rgb(var(--grey-1)); font-size: 13px; }
+.t-area li a:hover, .t-area li a[aria-current="page"] { color: rgb(var(--paper)); }
+.t-area li a[aria-current="page"] .t-base { text-decoration: underline; text-underline-offset: 3px; }
+.t-base { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-dir { grid-column: 2; color: rgb(var(--grey-3)); font-family: var(--font-mono); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { color: rgb(var(--grey-2)); font-size: 11px; line-height: 1.8; }
+.t-empty { color: rgb(var(--grey-3)); font-size: 13px; }
+.rail-foot { border-top: 1px solid rgb(var(--line)); padding-top: 12px; color: rgb(var(--grey-3)); }
+
+main { padding: 44px var(--gutter) 120px; max-width: 1360px; outline: none; min-width: 0; }
+.head-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: rgb(var(--grey-2)); margin: 0 0 22px; }
+.head-meta .em { color: rgb(var(--paper)); }
+h1.display { font-size: clamp(48px, 8vw, 132px); }
+h2.display { font-size: clamp(36px, 5vw, 76px); }
+.punch { font-size: 19px; line-height: 1.45; color: rgb(var(--grey-1)); max-width: 62ch; margin: 26px 0 0; }
+.path { margin: 12px 0 0; font-family: var(--font-mono); font-size: 13px; color: rgb(var(--grey-2)); overflow-wrap: anywhere; }
+.sec { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 9fr); gap: 20px 28px; border-top: 1px solid rgb(var(--line)); padding-top: 26px; margin-top: 56px; }
+.sec > .label { color: rgb(var(--grey-3)); }
+.sec-body { min-width: 0; }
+.hint { color: rgb(var(--grey-2)); font-size: 14px; max-width: 64ch; margin: 0 0 16px; }
+.pending { color: rgb(var(--grey-3)); font-style: italic; }
+[data-mode='nerd'] .pending { font-style: normal; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 32px; margin: 30px 0 0; }
+.pair dt, .facts dt { color: rgb(var(--grey-3)); }
+.pair dd { margin: 6px 0 0; max-width: 58ch; color: rgb(var(--grey-1)); }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 32px; margin: 0; padding: 0; list-style: none; }
+.stats li { display: grid; gap: 4px; }
+.stats .n { font-family: var(--font-display); font-size: 34px; line-height: 1; letter-spacing: var(--display-track); }
+.stats .label { color: rgb(var(--grey-3)); }
+
+/* Mind map */
+.mm-wrap { overflow-x: auto; border: 1px solid rgb(var(--line)); padding: 14px; background: rgb(var(--ink)); }
+.mm-wrap svg { display: block; }
+.mm-wrap text { font: 13px var(--font-body); }
+.mm-edge { stroke: rgb(var(--paper)); fill: none; stroke-width: 1; }
+.mm-root rect { fill: rgb(var(--paper)); }
+.mm-root text { fill: rgb(var(--ink)); font-weight: 600; }
+.mm-node { cursor: pointer; }
+.mm-node:focus { outline: none; }
+.mm-node:focus-visible rect.box { stroke: rgb(var(--paper)); stroke-width: 2; stroke-opacity: 1; }
+.mm-area rect.box { fill: rgb(var(--ink)); stroke: rgb(var(--paper)); stroke-opacity: .5; }
+.mm-area text { fill: rgb(var(--paper)); }
+.mm-area .mm-num, .mm-area .mm-count { fill: rgb(var(--grey-3)); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; }
+.mm-area:hover rect.box { stroke-opacity: 1; }
+.mm-area.is-open rect.box { fill: rgb(var(--paper)); stroke-opacity: 1; }
+.mm-area.is-open text, .mm-area.is-open .mm-num, .mm-area.is-open .mm-count { fill: rgb(var(--ink)); }
+.mm-area.is-dim { opacity: .45; }
+.mm-file rect.box { fill: rgb(var(--ink-2)); stroke: rgb(var(--line)); }
+.mm-file text { fill: rgb(var(--paper)); }
+.mm-file .mm-glyph { fill: rgb(var(--grey-2)); }
+.mm-file:hover rect.box { stroke: rgb(var(--paper)); }
+.mm-more rect.box { fill: none; stroke: rgb(var(--grey-3)); stroke-dasharray: 4 3; }
+.mm-more text { fill: rgb(var(--grey-1)); }
+.mm-detail { margin-top: 16px; max-width: 70ch; min-height: 1.5em; }
+.mm-detail h3 { font-family: var(--font-display); font-weight: 400; font-size: 26px; letter-spacing: var(--display-track); margin: 0 0 6px; }
+.mm-detail p { margin: 0 0 8px; color: rgb(var(--grey-1)); }
+.legend { color: rgb(var(--grey-3)); }
+
+/* Lists */
+.rows-list { list-style: none; margin: 0; padding: 0; }
+.rows-list li { border-bottom: 1px solid rgb(var(--line)); }
+.rows-list a.rowlink, .rows-list .rowstatic { display: grid; grid-template-columns: 3rem minmax(0, 1fr) auto; gap: 4px 16px; align-items: baseline; padding: 16px 0; }
+.rows-list .num { color: rgb(var(--grey-3)); }
+.rows-list .name { font-size: 20px; letter-spacing: -.01em; transition: transform .5s cubic-bezier(.2,.7,.1,1); }
+.rows-list a.rowlink:hover .name { transform: translateX(8px); }
+.rows-list .sub { grid-column: 2 / 4; color: rgb(var(--grey-2)); font-size: 14px; max-width: 70ch; }
+.rows-list .dirp { color: rgb(var(--grey-3)); font-family: var(--font-mono); font-size: 11px; margin-left: 10px; }
+
+/* Facts */
+.facts { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 14px 24px; margin: 0; }
+.facts dt { padding-top: 3px; }
+.facts dd { margin: 0; max-width: 70ch; color: rgb(var(--grey-1)); }
+.facts dd a, .note a.ref, .glossary a, .rows-list .sub a { text-decoration: underline; text-decoration-color: rgb(var(--grey-4)); text-underline-offset: 3px; }
+.reasons { margin: 8px 0 0; padding-left: 18px; }
+.terms, .glossary { display: grid; grid-template-columns: minmax(130px, max-content) minmax(0, 1fr); gap: 10px 22px; margin: 0; }
+.terms dt, .glossary dt { color: rgb(var(--paper)); font-weight: 500; }
+.terms dd, .glossary dd { margin: 0; color: rgb(var(--grey-1)); max-width: 68ch; }
+.glossary .used { color: rgb(var(--grey-3)); font-size: 13px; margin-top: 2px; }
+.banner { margin: 24px 0 0; padding: 12px 16px; border: 1px solid rgb(var(--line)); color: rgb(var(--grey-1)); max-width: 80ch; }
+.banner.warn { border-color: rgb(var(--paper)); color: rgb(var(--paper)); }
+
+/* Code with notes */
+.rows { border: 1px solid rgb(var(--line)); }
+.row { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr); border-top: 1px solid rgb(var(--line)); }
+.row:first-child { border-top: 0; }
+.row.sel { box-shadow: inset 2px 0 0 rgb(var(--paper)); }
+.row.sel .note { background: rgb(var(--ink-2)); }
+.code { background: rgb(var(--ink-2)); overflow-x: auto; min-width: 0; }
+.row:nth-child(even) .code { background: rgb(var(--ink-3)); }
+.code pre { margin: 0; padding: 12px 0; font: 12.5px/1.65 var(--font-mono); tab-size: 4; }
+.code code { background: none; padding: 0; font-size: inherit; border-radius: 0; }
+.ln { display: block; padding-right: 16px; white-space: pre; }
+.no { display: inline-block; width: 4.4em; padding-right: 14px; text-align: right; color: rgb(var(--grey-3)); user-select: none; }
+.note { padding: 14px 20px 16px; border-left: 1px solid rgb(var(--line)); }
+.note-inner { position: sticky; top: calc(var(--nav-h) + 14px); }
+.note .label { color: rgb(var(--grey-3)); display: flex; gap: 12px; flex-wrap: wrap; margin: 0 0 8px; }
+.note .label a:hover { color: rgb(var(--paper)); }
+.note h4 { font-family: var(--font-display); font-weight: 400; font-size: 21px; line-height: 1.15; letter-spacing: var(--display-track); margin: 0 0 8px; }
+[data-mode='nerd'] .note h4 { font-size: 16px; font-weight: 500; }
+.note p { margin: 0 0 9px; max-width: 62ch; color: rgb(var(--grey-1)); }
+.note .k { color: rgb(var(--paper)); font-weight: 600; margin-right: 6px; }
+.no-code { padding: 14px 18px; color: rgb(var(--grey-3)); }
+
+/* Status badges: monochrome, the glyph and the words carry the meaning */
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; border: 1px solid rgb(var(--line)); color: rgb(var(--grey-1)); }
+.b-warn { border-color: rgb(var(--paper)); color: rgb(var(--paper)); }
+.b-bad { background: rgb(var(--paper)); border-color: rgb(var(--paper)); color: rgb(var(--ink)); }
+.b-unk { color: rgb(var(--grey-3)); border-style: dashed; }
+
+.checks { width: 100%; border-collapse: collapse; }
+.checks th, .checks td { text-align: left; vertical-align: top; padding: 14px 14px 14px 0; border-top: 1px solid rgb(var(--line)); }
+.checks th { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 400; color: rgb(var(--grey-3)); border-top: 0; }
+.checks td { color: rgb(var(--grey-1)); }
+.checks td:first-child { color: rgb(var(--paper)); max-width: 34ch; }
+.table-wrap { overflow-x: auto; }
+.card { border-top: 1px solid rgb(var(--line)); padding: 22px 0 6px; }
+.card h3 { font-family: var(--font-display); font-weight: 400; font-size: 26px; letter-spacing: var(--display-track); margin: 0 0 14px; }
+[data-mode='nerd'] .card h3 { font-size: 18px; font-weight: 500; }
+.method { padding-left: 1.4em; max-width: 72ch; margin: 0; }
+.method li { margin-bottom: 10px; color: rgb(var(--grey-1)); }
+.method strong { color: rgb(var(--paper)); font-weight: 600; }
+.filter { padding: 9px 0; border: 0; border-bottom: 1px solid rgb(var(--line)); background: transparent; color: rgb(var(--paper)); font: 14px var(--font-body); width: min(420px, 100%); margin: 0 0 22px; border-radius: 0; }
+.filter:focus { outline: none; border-bottom-color: rgb(var(--paper)); }
+.empty { max-width: 60ch; margin: 14vh auto; padding: 0 var(--gutter); }
+.skipped { margin-top: 44px; color: rgb(var(--grey-3)); font-size: 14px; }
+.skipped summary { cursor: pointer; }
+
+@media (max-width: 960px) {
+  .app { grid-template-columns: 1fr; }
+  .rail { position: static; height: auto; border-right: 0; border-bottom: 1px solid rgb(var(--line)); padding-left: var(--gutter); }
+  .tree { max-height: 46vh; overflow: auto; }
+  main { padding-top: 32px; }
+  .sec { grid-template-columns: 1fr; margin-top: 40px; }
+  .row { grid-template-columns: 1fr; }
+  .note { border-left: 0; border-bottom: 1px dashed rgb(var(--line)); order: -1; }
+  .note-inner { position: static; }
+  .facts { grid-template-columns: 1fr; gap: 2px 0; }
+  .facts dd { margin-bottom: 14px; }
+  .crumbs .hide-sm { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+@media print { .rail, .top, .grain { display: none; } .app { display: block; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+<header class="top">
+  <nav class="crumbs label" id="crumbs" aria-label="Breadcrumb"></nav>
+  <button class="mode" id="mode" type="button" aria-label="Switch to nerd mode">
+    <span class="knob" aria-hidden="true"></span>
+    <span class="opt o-calm">calm</span>
+    <span class="opt o-nerd">&lt;nerd/&gt;</span>
+  </button>
+</header>
+<div class="app">
+  <aside class="rail" aria-label="Navigation">
+    <div>
+      <p class="label who"><span class="calm-only">Code explorer</span><span class="nerd-only">~/code</span></p>
+      <h1 id="repo-name">Code explorer</h1>
+    </div>
+    <label class="search">
+      <span class="sr-only">Search files, notes and terms</span>
+      <input id="q" type="search" placeholder="Search files, notes, terms (press /)" autocomplete="off">
+    </label>
+    <nav class="views" aria-label="Views">
+      <a href="#/overview" data-view="overview"><span class="calm-only">Overview and map</span><span class="nerd-only">cd overview</span></a>
+      <a href="#/readiness" data-view="readiness"><span class="calm-only">Is it production-ready?</span><span class="nerd-only">cat readiness</span></a>
+      <a href="#/decisions" data-view="decisions"><span class="calm-only">Why it is built this way</span><span class="nerd-only">cat decisions</span></a>
+      <a href="#/debug" data-view="debug"><span class="calm-only">When something breaks</span><span class="nerd-only">man debug</span></a>
+      <a href="#/glossary" data-view="glossary"><span class="calm-only">Glossary</span><span class="nerd-only">grep glossary</span></a>
+    </nav>
+    <div class="tree" id="tree" aria-label="Files by area"></div>
+    <footer class="rail-foot label" id="built"></footer>
+  </aside>
+  <main id="main" tabindex="-1"></main>
+</div>
+<div class="grain" aria-hidden="true"></div>
+<script id="clarity-data" type="application/json">/*__CLARITY_DATA__*/null</script>
+<script>
+(function () {
+  "use strict";
+
+  var main = document.getElementById("main");
+  var DATA = null;
+  try { DATA = JSON.parse(document.getElementById("clarity-data").textContent); } catch (error) { DATA = null; }
+
+  // ---- Mode (shared with the portfolio through the same storage key) ----
+  var modeButton = document.getElementById("mode");
+  function currentMode() { return document.documentElement.getAttribute("data-mode") === "nerd" ? "nerd" : "calm"; }
+  function syncModeLabel() { modeButton.setAttribute("aria-label", "Switch to " + (currentMode() === "calm" ? "nerd" : "calm") + " mode"); }
+  modeButton.addEventListener("click", function () {
+    var next = currentMode() === "calm" ? "nerd" : "calm";
+    document.documentElement.setAttribute("data-mode", next);
+    try { localStorage.setItem("site-mode", next); } catch (error) { /* private browsing: fine */ }
+    syncModeLabel();
+  });
+  syncModeLabel();
+
+  if (!DATA || !DATA.repo) {
+    main.innerHTML = '<div class="empty"><p class="label">No notes yet</p><h2 class="display" style="margin-top:14px">This page is empty</h2>' +
+      '<p class="punch">Open the repository in Claude Code and run <code>python3 .claude/clarity/clarity.py build</code> to fill it.</p></div>';
+    return;
+  }
+
+  var REPO = DATA.repo;
+  var SITE = DATA.site || {};
+  var FILES = DATA.files || {};
+  var PATHS = Object.keys(FILES).sort();
+  var TITLE = SITE.project_name || REPO.name || "Repository";
+  var FILE_STATES = {
+    "ready": ["\u2713", "Ready", "ok"], "needs-work": ["!", "Needs work", "warn"],
+    "not-ready": ["\u00D7", "Not ready", "bad"], "unknown": ["?", "Not checked", "unk"]
+  };
+  var CHECK_STATES = {
+    "pass": ["\u2713", "Yes", "ok"], "partial": ["!", "Partly", "warn"], "fail": ["\u00D7", "No", "bad"],
+    "unknown": ["?", "Not checked", "unk"], "ready": ["\u2713", "Ready", "ok"],
+    "needs-work": ["!", "Needs work", "warn"], "not-ready": ["\u00D7", "Not ready", "bad"]
+  };
+  var KIND_LABELS = { "setup": "setup", "function": "function", "class": "class", "method": "method",
+    "type": "data shape", "value": "settings or data", "route": "web address", "export": "export",
+    "statement": "database statement", "block": "block", "rule": "style rule", "entry point": "starting point",
+    "test group": "tests", "event handler": "reacts to an event" };
+
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function fmt(value) {
+    if (!value) return "";
+    return esc(value).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\n/g, "<br>");
+  }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function trunc(value, n) { value = String(value || ""); return value.length > n ? value.slice(0, n - 1) + "\u2026" : value; }
+  function base(path) { var i = path.lastIndexOf("/"); return i < 0 ? path : path.slice(i + 1); }
+  function dir(path) { var i = path.lastIndexOf("/"); return i < 0 ? "" : path.slice(0, i + 1); }
+  function fileHref(path, section) { return "#/file/" + encodeURIComponent(path) + (section ? "/" + section : ""); }
+  function both(calm, nerd) { return '<span class="calm-only">' + calm + '</span><span class="nerd-only">' + nerd + "</span>"; }
+  function badge(states, status) {
+    var s = states[status] || states.unknown;
+    return '<span class="badge b-' + s[2] + '"><span aria-hidden="true">' + s[0] + "</span>" + esc(s[1]) + "</span>";
+  }
+  function fileBadge(card) { return badge(FILE_STATES, (card.readiness && card.readiness.status) || "unknown"); }
+  function checkBadge(status) { return badge(CHECK_STATES, status || "unknown"); }
+  function explainState(card) {
+    if (!card.fresh) return ["\u25D0", "Code changed after these notes were written"];
+    if (card.status === "explained") return ["\u25CF", "Explained"];
+    if (card.status === "partial") return ["\u25D0", "Partly explained"];
+    return ["\u25CB", "Not explained yet"];
+  }
+  function sec(n, title, nerdTitle, body) {
+    return '<section class="sec"><p class="label">' + pad(n) + " / " + both(esc(title), esc(nerdTitle || title)) +
+      '</p><div class="sec-body">' + body + "</div></section>";
+  }
+
+  // ---- Breadcrumb back into the portfolio -------------------------------
+  var SITE_ROOT = SITE.url ? SITE.url.replace(/\/?$/, "/") : "";
+  var PROJECT_URL = SITE_ROOT && SITE.project ? SITE_ROOT + "work/" + SITE.project + "/" : "";
+  (function () {
+    var crumbs = document.getElementById("crumbs");
+    var parts = [];
+    if (SITE_ROOT) {
+      parts.push('<a class="link-quiet" href="' + esc(SITE_ROOT) + '">' + esc(SITE.owner || "Home") + "</a>");
+      parts.push('<span aria-hidden="true">/</span><a class="link-quiet" href="' + esc(SITE_ROOT + "code/") + '">Code</a>');
+      parts.push('<span aria-hidden="true">/</span><span class="here">' + esc(TITLE) + "</span>");
+    } else {
+      parts.push('<span class="here">' + esc(TITLE) + '</span><span aria-hidden="true">/</span><span>' + both("Code explorer", "./explore") + "</span>");
+    }
+    crumbs.innerHTML = parts.join("");
+    if (PROJECT_URL) {
+      var who = document.querySelector(".rail .who");
+      if (who) who.insertAdjacentHTML("afterend", '<p class="label" style="margin:10px 0 0"><a class="link-quiet" href="' + esc(PROJECT_URL) +
+        '">' + both("See the project page", "cd ../work/" + esc(SITE.project)) + "</a></p>");
+    }
+  })();
+  function lineLink(path, s) {
+    if (!SITE.repo_url || !REPO.commit) return "";
+    var url = SITE.repo_url.replace(/\/$/, "") + "/blob/" + encodeURIComponent(REPO.commit) + "/" +
+      path.split("/").map(encodeURIComponent).join("/") + "#L" + s.start + "-L" + s.end;
+    return '<a class="link-quiet" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"' +
+      (SITE.private ? ' title="Private repository: opens for the owner after signing in to GitHub"' : "") + ">" +
+      both(SITE.private ? "GitHub (owner only)" : "Open on GitHub", "git show") + "</a>";
+  }
+
+  // ---- Areas -------------------------------------------------------------
+  var AREAS = [];
+  var AREA_BY_ID = {};
+  (function buildAreas() {
+    (REPO.areas || []).forEach(function (a) {
+      if (!AREA_BY_ID[a.id]) { var copy = Object.assign({}, a, { files: [] }); AREAS.push(copy); AREA_BY_ID[a.id] = copy; }
+    });
+    PATHS.forEach(function (p) {
+      var id = FILES[p].area || "other";
+      if (!AREA_BY_ID[id]) {
+        var made = { id: id, name: id === "other" ? "Everything else" : id, summary: "", why: "", debug_tips: "", files: [] };
+        AREAS.push(made); AREA_BY_ID[id] = made;
+      }
+      AREA_BY_ID[id].files.push(p);
+    });
+    AREAS = AREAS.filter(function (a) { return a.files.length > 0; });
+    AREAS.forEach(function (a, i) { a.num = pad(i + 1); });
+  })();
+
+  var START = (REPO.start_here || []).filter(function (p) { return FILES[p]; });
+  function sortFiles(list) {
+    return list.slice().sort(function (a, b) {
+      var sa = START.indexOf(a), sb = START.indexOf(b);
+      if (sa !== sb) return (sa < 0 ? 999 : sa) - (sb < 0 ? 999 : sb);
+      return (FILES[b].lines || 0) - (FILES[a].lines || 0) || a.localeCompare(b);
+    });
+  }
+  function stats() {
+    var out = { files: 0, explained: 0, sections: 0, noted: 0, stale: 0, lines: 0 };
+    PATHS.forEach(function (p) {
+      var f = FILES[p];
+      out.files += 1; out.lines += f.lines || 0;
+      if (f.status === "explained") out.explained += 1;
+      (f.sections || []).forEach(function (s) { out.sections += 1; if (s.what) out.noted += 1; });
+      if (!f.fresh || f.summary_stale) out.stale += 1;
+    });
+    return out;
+  }
+
+  // ---- Sidebar -----------------------------------------------------------
+  document.getElementById("repo-name").textContent = TITLE;
+  document.title = "Code explorer: " + TITLE;
+  var builtBits = [];
+  if (DATA.built_at) builtBits.push("Built " + DATA.built_at.slice(0, 10));
+  if (REPO.commit) builtBits.push("commit " + REPO.commit);
+  if (SITE.mode === "notes") builtBits.push("notes only");
+  document.getElementById("built").textContent = builtBits.join(" / ");
+
+  var tree = document.getElementById("tree");
+  var search = document.getElementById("q");
+  var currentPath = null, currentArea = null, openArea = null;
+
+  function matches(path, q) {
+    var f = FILES[path];
+    if (path.toLowerCase().indexOf(q) >= 0) return true;
+    if ((f.summary || "").toLowerCase().indexOf(q) >= 0) return true;
+    return (f.terms || []).some(function (t) { return (t.term || "").toLowerCase().indexOf(q) >= 0; });
+  }
+  function renderTree() {
+    var q = (search.value || "").trim().toLowerCase();
+    var html = '<p class="label tree-title">' + both("Files by area", "ls -R") + "</p>";
+    var shown = 0;
+    AREAS.forEach(function (a) {
+      var files = sortFiles(a.files).filter(function (p) { return !q || matches(p, q); });
+      if (!files.length) return;
+      var open = q || a.id === currentArea ? " open" : "";
+      html += '<details class="t-area"' + open + ' data-area="' + esc(a.id) + '"><summary><span class="label">' + a.num +
+        '</span><span class="t-name">' + esc(a.name) + '</span><span class="label t-count">' + files.length + "</span></summary><ul>";
+      files.forEach(function (p) {
+        var st = explainState(FILES[p]);
+        var cur = p === currentPath ? ' aria-current="page"' : "";
+        html += '<li><a href="' + fileHref(p) + '"' + cur + ' title="' + esc(p) + '"><span class="dot" title="' + esc(st[1]) +
+          '" aria-label="' + esc(st[1]) + '">' + st[0] + '</span><span class="t-base">' + esc(base(p)) +
+          '</span><span class="t-dir">' + esc(dir(p)) + "</span></a></li>";
+        shown += 1;
+      });
+      html += "</ul></details>";
+    });
+    if (!shown) html += '<p class="t-empty">No files match \u201C' + esc(search.value) + '\u201D.</p>';
+    tree.innerHTML = html;
+  }
+  var timer = null;
+  search.addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(renderTree, 120); });
+  search.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    var first = tree.querySelector("li a");
+    if (first) location.hash = first.getAttribute("href");
+  });
+  document.addEventListener("keydown", function (event) {
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (event.key === "/" && !/input|textarea/i.test(tag)) { event.preventDefault(); search.focus(); }
+  });
+
+  // ---- Mind map ----------------------------------------------------------
+  function edge(x1, y1, x2, y2, opacity) {
+    var mx = (x1 + x2) / 2;
+    return '<path class="mm-edge" d="M' + x1 + " " + y1 + " C" + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2 +
+      '" stroke-opacity="' + opacity + '"/>';
+  }
+  function drawMap() {
+    var wrap = document.getElementById("mm");
+    var detail = document.getElementById("mm-detail");
+    if (!wrap) return;
+    if (!AREAS.length) { wrap.innerHTML = '<p class="pending">No source files yet.</p>'; return; }
+    var ROW = 40, H = 30, TOP = 10, X0 = 4, W0 = 200, X1 = 250, W1 = 268, X2 = 566, W2 = 292;
+    var ys = AREAS.map(function (_, i) { return TOP + i * ROW; });
+    var open = AREA_BY_ID[openArea] || null;
+    var fnodes = [];
+    if (open) {
+      var sorted = sortFiles(open.files);
+      var shown = sorted.slice(0, 14);
+      fnodes = shown.map(function (p) { return { kind: "file", path: p }; });
+      if (sorted.length > shown.length) fnodes.push({ kind: "more", n: sorted.length - shown.length });
+    }
+    var oi = open ? AREAS.indexOf(open) : -1;
+    var fTop = open ? Math.max(TOP, ys[oi] - ((fnodes.length - 1) * ROW) / 2) : TOP;
+    var lastA = ys[ys.length - 1];
+    var lastF = fnodes.length ? fTop + (fnodes.length - 1) * ROW : 0;
+    var height = Math.max(lastA, lastF) + H + TOP;
+    var width = (open ? X2 + W2 : X1 + W1) + 6;
+    var rootY = (ys[0] + lastA) / 2;
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + width + " " + height + '" width="' + width + '" height="' +
+      height + '" role="group" aria-label="Mind map of ' + esc(TITLE) + '">';
+    AREAS.forEach(function (a, i) { s += edge(X0 + W0, rootY + H / 2, X1, ys[i] + H / 2, open && a !== open ? 0.12 : 0.4); });
+    fnodes.forEach(function (_, j) { s += edge(X1 + W1, ys[oi] + H / 2, X2, fTop + j * ROW + H / 2, 0.4); });
+    s += '<g class="mm-root"><rect x="' + X0 + '" y="' + rootY + '" width="' + W0 + '" height="' + H + '" rx="15"/><text x="' +
+      (X0 + 16) + '" y="' + (rootY + 19) + '">' + esc(trunc(TITLE, 24)) + "</text></g>";
+    AREAS.forEach(function (a, i) {
+      var isOpen = a === open;
+      s += '<g class="mm-node mm-area' + (isOpen ? " is-open" : "") + (open && !isOpen ? " is-dim" : "") + '" tabindex="0" role="button" aria-expanded="' +
+        isOpen + '" aria-label="' + esc(a.name) + ", " + a.files.length + ' files" data-area="' + esc(a.id) + '"><rect class="box" x="' + X1 +
+        '" y="' + ys[i] + '" width="' + W1 + '" height="' + H + '" rx="15"/><text class="mm-num" x="' + (X1 + 14) + '" y="' + (ys[i] + 19) + '">' +
+        a.num + '</text><text x="' + (X1 + 44) + '" y="' + (ys[i] + 19) + '">' + esc(trunc(a.name, 25)) + '</text><text class="mm-count" x="' +
+        (X1 + W1 - 14) + '" y="' + (ys[i] + 19) + '" text-anchor="end">' + a.files.length + "</text></g>";
+    });
+    fnodes.forEach(function (f, j) {
+      var y = fTop + j * ROW;
+      if (f.kind === "more") {
+        s += '<g class="mm-node mm-more" tabindex="0" role="link" aria-label="' + f.n + ' more files in this area" data-more="' + esc(open.id) +
+          '"><rect class="box" x="' + X2 + '" y="' + y + '" width="' + W2 + '" height="' + H + '" rx="4"/><text x="' + (X2 + 14) + '" y="' + (y + 19) +
+          '">' + f.n + " more files in this area</text></g>";
+        return;
+      }
+      var card = FILES[f.path];
+      var st = explainState(card);
+      s += '<g class="mm-node mm-file" tabindex="0" role="link" aria-label="' + esc(f.path) + ", " + esc(st[1]) + '" data-path="' + esc(f.path) +
+        '"><rect class="box" x="' + X2 + '" y="' + y + '" width="' + W2 + '" height="' + H + '" rx="4"/><text x="' + (X2 + 14) + '" y="' + (y + 19) + '">' +
+        esc(trunc(base(f.path), 32)) + '</text><text class="mm-glyph" x="' + (X2 + W2 - 14) + '" y="' + (y + 19) + '" text-anchor="end">' + st[0] +
+        "</text><title>" + esc(f.path) + (card.summary ? ": " + esc(card.summary) : "") + "</title></g>";
+    });
+    wrap.innerHTML = s + "</svg>";
+    if (open) {
+      detail.innerHTML = '<p class="label legend">' + open.num + " / " + both("Area", "dir") + "</p><h3>" + esc(open.name) + "</h3>" +
+        (open.summary ? "<p>" + fmt(open.summary) + "</p>" : '<p class="pending">This area has no plain-English summary yet.</p>') +
+        '<p><a class="u" href="#/area/' + encodeURIComponent(open.id) + '">Read about this area and all ' + open.files.length + " of its files</a></p>";
+    } else {
+      detail.innerHTML = '<p class="label legend">\u25CF explained \u00A0 \u25D0 partly explained or out of date \u00A0 \u25CB not explained yet</p>';
+    }
+  }
+  main.addEventListener("click", function (event) { mapAction(event.target); });
+  main.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (mapAction(event.target)) event.preventDefault();
+  });
+  function mapAction(target) {
+    var node = target && target.closest ? target.closest(".mm-node") : null;
+    if (!node) return false;
+    if (node.getAttribute("data-area")) {
+      var id = node.getAttribute("data-area");
+      openArea = openArea === id ? null : id;
+      drawMap();
+      var again = document.querySelector('.mm-area[data-area="' + String(id).replace(/["\\]/g, "\\$&") + '"]');
+      if (again) again.focus();
+    } else if (node.getAttribute("data-path")) {
+      location.hash = fileHref(node.getAttribute("data-path"));
+    } else if (node.getAttribute("data-more")) {
+      location.hash = "#/area/" + encodeURIComponent(node.getAttribute("data-more"));
+    }
+    return true;
+  }
+
+  // ---- Views -------------------------------------------------------------
+  function fact(label, value) { return value ? '<dt class="label">' + esc(label) + "</dt><dd>" + value + "</dd>" : ""; }
+  function linkList(list) {
+    if (!list || !list.length) return "";
+    return list.map(function (item) {
+      return FILES[item] ? '<a href="' + fileHref(item) + '">' + esc(item) + "</a>" : "<code>" + esc(item) + "</code>";
+    }).join(", ");
+  }
+
+  function viewOverview() {
+    var st = stats();
+    var r = REPO.readiness || {};
+    var html = '<p class="label head-meta"><span>' + both("Code explorer", "./explore") + "</span><span>" + st.files + " files</span><span>" +
+      st.lines.toLocaleString("en") + " lines</span><span>" + st.sections + ' sections</span><span class="em">' +
+      ((CHECK_STATES[r.overall] || CHECK_STATES.unknown)[1]) + "</span></p>" +
+      '<h1 class="display">' + esc(TITLE) + "</h1>" +
+      (REPO.summary ? '<p class="punch">' + fmt(REPO.summary) + "</p>" :
+        '<p class="punch pending">No plain-English summary yet. In Claude Code, ask it to explain this repository.</p>') +
+      '<dl class="pair"><div><dt class="label">Who it is for</dt><dd>' + (fmt(REPO.who_its_for) || '<span class="pending">Not written yet.</span>') +
+      '</dd></div><div><dt class="label">How it runs</dt><dd>' + (fmt(REPO.how_it_runs) || '<span class="pending">Not written yet.</span>') + "</dd></div></dl>";
+    var n = 0;
+    html += sec(++n, "How complete these notes are", "coverage",
+      '<ul class="stats"><li><span class="n">' + st.explained + "/" + st.files + '</span><span class="label">files explained</span></li>' +
+      '<li><span class="n">' + st.noted + "/" + st.sections + '</span><span class="label">sections with notes</span></li>' +
+      '<li><span class="n">' + st.stale + '</span><span class="label">notes older than the code</span></li>' +
+      '<li><span class="n"><a class="link-quiet" href="#/readiness">' + checkBadge(r.overall) + '</a></span><span class="label">production-ready?</span></li></ul>');
+    var mapExtra = SITE.map ? '<p class="hint" style="margin-top:14px">' + both("Want every function and link? ", "full graph: ") +
+      '<a class="u" href="' + esc(SITE.map) + '">' + both("Open the technical map", "./map.html") + "</a></p>" : "";
+    html += sec(++n, "How the parts fit together", "tree --areas",
+      '<p class="hint">Pick an area to see its files, then pick a file to read its code with a plain-English note beside every section.</p>' +
+      '<div class="mm-wrap" id="mm"></div><div class="mm-detail" id="mm-detail" aria-live="polite"></div>' + mapExtra);
+    if (START.length) {
+      html += sec(++n, "Read these first", "head -n " + START.length, '<ol class="rows-list">' + START.map(function (p, i) {
+        return '<li><a class="rowlink" href="' + fileHref(p) + '"><span class="label num">' + pad(i + 1) + '</span><span class="name">' +
+          esc(base(p)) + '<span class="dirp">' + esc(dir(p)) + "</span></span>" + fileBadge(FILES[p]) + '<span class="sub">' +
+          fmt(FILES[p].summary || "") + "</span></a></li>"; }).join("") + "</ol>");
+    }
+    var skipped = REPO.skipped || [];
+    if (skipped.length) {
+      html += '<details class="skipped"><summary class="label">' + skipped.length + " files were left out of these notes</summary><ul>" +
+        skipped.slice(0, 200).map(function (s) { return "<li><code>" + esc(s.path) + "</code>: " + esc(s.reason) + "</li>"; }).join("") + "</ul></details>";
+    }
+    return html;
+  }
+
+  function viewArea(id) {
+    var a = AREA_BY_ID[id];
+    if (!a) return notFound("That area does not exist in these notes.");
+    currentArea = id;
+    var html = '<p class="label head-meta"><a class="link-quiet" href="#/overview">' + both("Overview", "cd ..") + "</a><span>" + a.num +
+      " / " + both("Area", "dir") + "</span><span>" + a.files.length + ' files</span></p><h2 class="display">' + esc(a.name) + "</h2>" +
+      (a.summary ? '<p class="punch">' + fmt(a.summary) + "</p>" : "");
+    var n = 0;
+    if (a.why || a.debug_tips) html += sec(++n, "Why it exists", "why", '<dl class="facts">' + fact("Why this area exists", fmt(a.why)) +
+      fact("If something here breaks", fmt(a.debug_tips)) + "</dl>");
+    html += sec(++n, "Files in this area", "ls", '<ul class="rows-list">' + sortFiles(a.files).map(function (p, i) {
+      var f = FILES[p];
+      return '<li><a class="rowlink" href="' + fileHref(p) + '"><span class="label num">' + pad(i + 1) + '</span><span class="name">' + esc(base(p)) +
+        '<span class="dirp">' + esc(dir(p)) + "</span></span>" + fileBadge(f) + '<span class="sub">' +
+        (f.summary ? fmt(f.summary) : '<span class="pending">Not explained yet.</span>') + "</span></a></li>"; }).join("") + "</ul>");
+    return html;
+  }
+
+  function viewFile(path, sectionId) {
+    var f = FILES[path];
+    if (!f) return notFound("There is no file called " + path + " in these notes.");
+    currentPath = path; currentArea = f.area;
+    var a = AREA_BY_ID[f.area];
+    var lines = typeof f.code === "string" ? f.code.split("\n") : null;
+    var html = '<p class="label head-meta"><a class="link-quiet" href="#/overview">' + both("Overview", "cd ~") + "</a>" +
+      (a ? '<a class="link-quiet" href="#/area/' + encodeURIComponent(a.id) + '">' + a.num + " / " + esc(a.name) + "</a>" : "") +
+      "<span>" + esc(f.language || "") + "</span><span>" + (f.lines || 0) + " lines</span>" + fileBadge(f) + "</p>" +
+      '<h2 class="display">' + esc(base(path)) + '</h2><p class="path">' + esc(path) + "</p>";
+    if (!f.fresh) {
+      html += '<p class="banner warn">The code in this file changed after these notes were written. Treat the notes as a guide, and ask Claude to re-explain this file.</p>';
+    } else if (f.status !== "explained") {
+      html += '<p class="banner">Some parts of this file are not explained yet.</p>';
+    }
+    var summary = [f.summary, f.purpose].filter(Boolean).join(" ");
+    var reasons = (f.readiness && f.readiness.reasons) || [];
+    var n = 0;
+    html += sec(++n, "In plain English", "man " + base(path), summary || f.why || f.how ? '<dl class="facts">' +
+      fact("What it does", fmt(summary)) + fact("Why it exists", fmt(f.why)) + fact("How it works", fmt(f.how)) +
+      fact("Takes in", fmt(f.inputs)) + fact("Gives back", fmt(f.outputs)) + fact("Relies on", linkList(f.depends_on)) +
+      fact("Used by", linkList(f.used_by)) + fact("What can go wrong", fmt(f.risks)) + fact("If it breaks", fmt(f.debug)) +
+      fact("Ready for real use?", fileBadge(f) + (reasons.length ? '<ul class="reasons">' + reasons.map(function (r) {
+        return "<li>" + fmt(r) + "</li>"; }).join("") + "</ul>" : "")) + "</dl>" :
+      '<p class="pending">This file has no plain-English summary yet.</p>');
+    if ((f.terms || []).length) {
+      html += sec(++n, "Words used here", "define", '<dl class="terms">' + f.terms.map(function (t) {
+        return "<dt>" + esc(t.term) + "</dt><dd>" + fmt(t.meaning) + "</dd>"; }).join("") + "</dl>");
+    }
+    var rows = (f.sections || []).map(function (s) {
+      var code = "";
+      if (lines) {
+        for (var k = s.start; k <= s.end && k <= lines.length; k++) {
+          code += '<span class="ln"><span class="no">' + k + "</span>" + (esc(lines[k - 1]) || " ") + "</span>";
+        }
+      }
+      var kind = KIND_LABELS[s.kind] || s.kind || "";
+      return '<div class="row' + (s.id === sectionId ? " sel" : "") + '" id="sec-' + esc(s.id) + '">' +
+        (lines ? '<div class="code" role="region" aria-label="Lines ' + s.start + " to " + s.end + '"><pre><code>' + code + "</code></pre></div>" :
+          '<div class="code no-code">' + both(SITE.private ? "This repository is private, so its code is not published here. The owner can open these lines on GitHub from the link beside the note." :
+            "The code is not published for this repository; the notes describe it.", "// source not published") + "</div>") +
+        '<aside class="note"><div class="note-inner"><p class="label"><a href="' + fileHref(path, s.id) + '">Lines ' + s.start + "\u2013" + s.end +
+        "</a>" + (kind ? "<span>" + esc(kind) + "</span>" : "") + '<span class="nerd-only">' + esc(s.name || "") + "</span>" + lineLink(path, s) +
+        "</p><h4>" + esc(s.title || s.name) + "</h4>" +
+        (s.what ? "<p>" + fmt(s.what) + "</p>" : '<p class="pending">Not explained yet.</p>') +
+        (s.why ? '<p><span class="k">Why</span>' + fmt(s.why) + "</p>" : "") +
+        (s.watch_out ? '<p><span class="k">Watch out</span>' + fmt(s.watch_out) + "</p>" : "") + "</div></aside></div>";
+    }).join("");
+    html += sec(++n, "Read it section by section", "cat -n " + base(path),
+      '<p class="hint">Each row pairs a piece of the code with a note. Every line of the file belongs to exactly one row.</p><div class="rows">' + rows + "</div>");
+    return html;
+  }
+
+  function viewReadiness() {
+    var r = REPO.readiness || {};
+    var html = '<p class="label head-meta"><span>' + both("Readiness review", "cat readiness") + "</span>" + (r.checked_at ? "<span>Checked " +
+      esc(String(r.checked_at).slice(0, 10)) + "</span>" : "") + '</p><h2 class="display">Is it production-ready?</h2><p class="punch">' +
+      checkBadge(r.overall) + " " + (r.summary ? fmt(r.summary) : '<span class="pending">No readiness review yet. In Claude Code, ask for a production check.</span>') + "</p>";
+    var n = 0;
+    var checks = r.checks || [];
+    if (checks.length) {
+      html += sec(++n, "Twelve questions", "checks", '<div class="table-wrap"><table class="checks"><thead><tr><th scope="col">Question</th>' +
+        '<th scope="col">Answer</th><th scope="col">Evidence</th><th scope="col">Next step</th></tr></thead><tbody>' + checks.map(function (c) {
+          return "<tr><td>" + esc(c.question) + "</td><td>" + checkBadge(c.status) + "</td><td>" + (fmt(c.evidence) || "") + "</td><td>" +
+            (fmt(c.next_step) || "") + "</td></tr>"; }).join("") + "</tbody></table></div>");
+    }
+    var groups = { "not-ready": [], "needs-work": [] };
+    PATHS.forEach(function (p) { var st = (FILES[p].readiness || {}).status; if (groups[st]) groups[st].push(p); });
+    [["not-ready", "Files that are not ready", "grep not-ready"], ["needs-work", "Files that need work", "grep needs-work"]].forEach(function (g) {
+      var list = groups[g[0]];
+      if (!list.length) return;
+      html += sec(++n, g[1] + " (" + list.length + ")", g[2], '<ul class="rows-list">' + list.map(function (p, i) {
+        var reasons = (FILES[p].readiness.reasons || []).map(fmt).join(" ");
+        return '<li><a class="rowlink" href="' + fileHref(p) + '"><span class="label num">' + pad(i + 1) + '</span><span class="name">' + esc(base(p)) +
+          '<span class="dirp">' + esc(dir(p)) + "</span></span>" + fileBadge(FILES[p]) + '<span class="sub">' + reasons + "</span></a></li>"; }).join("") + "</ul>");
+    });
+    return html;
+  }
+
+  function viewDecisions() {
+    var list = REPO.decisions || [];
+    var html = '<p class="label head-meta"><span>' + both("Decision records", "git log --decisions") + "</span><span>" + list.length +
+      ' recorded</span></p><h2 class="display">Why it is built this way</h2><p class="punch">Each decision records what was chosen, why, what else was considered, and when to revisit it.</p>';
+    if (!list.length) return html + '<p class="pending" style="margin-top:30px">No decisions recorded yet. The plan-first skill adds one whenever there is a real choice to make.</p>';
+    return html + sec(1, "Decisions", "decisions", list.map(function (d) {
+      return '<article class="card"><h3>' + esc((d.id ? d.id + ". " : "") + (d.title || "Decision")) + '</h3><dl class="facts">' +
+        fact("What was decided", fmt(d.decision)) + fact("Why", fmt(d.why)) + fact("Alternatives considered", fmt(d.alternatives)) +
+        fact("Trade-offs", fmt(d.tradeoffs)) + fact("Revisit when", fmt(d.revisit_when)) + fact("Files", linkList(d.files)) + "</dl></article>"; }).join(""));
+  }
+
+  function viewDebug() {
+    var html = '<p class="label head-meta"><span>' + both("Debugging guide", "man debug") + '</span></p><h2 class="display">When something breaks</h2>' +
+      '<p class="punch">A calm method that works for any bug, then the problems this app is most likely to have and where to look.</p>';
+    html += sec(1, "The method", "procedure", '<ol class="method">' +
+      "<li><strong>Make it happen again on purpose.</strong> Write down the exact steps, what you expected and what happened instead.</li>" +
+      "<li><strong>Read the error in plain words.</strong> Copy the full message. Ask Claude what it means before asking it to fix anything.</li>" +
+      "<li><strong>Find the area.</strong> Use the map on the overview to pick the area, then the file, then the section.</li>" +
+      "<li><strong>Prove it with a small test.</strong> Ask Claude for a test that fails because of the bug. A fix without a failing test first is a guess.</li>" +
+      "<li><strong>Fix the cause, not the symptom.</strong> Hiding an error message is not a fix. If two attempts fail, stop and rethink.</li>" +
+      "<li><strong>Keep it fixed.</strong> Keep the test, refresh these notes, and record the problem below if it could happen again.</li></ol>");
+    var list = REPO.debug_playbook || [];
+    html += sec(2, "Known problems", "known issues", list.length ? list.map(function (item) {
+      var area = AREA_BY_ID[item.likely_area];
+      return '<article class="card"><h3>' + esc(item.symptom || "Problem") + '</h3><dl class="facts">' +
+        fact("Likely area", area ? '<a href="#/area/' + encodeURIComponent(area.id) + '">' + area.num + " / " + esc(area.name) + "</a>" : esc(item.likely_area || "")) +
+        fact("Where to look", linkList(item.where_to_look)) +
+        fact("What to try", (item.steps || []).length ? '<ol class="method">' + item.steps.map(function (s) { return "<li>" + fmt(s) + "</li>"; }).join("") + "</ol>" : "") +
+        "</dl></article>"; }).join("") : '<p class="pending">No known problems recorded yet.</p>');
+    return html;
+  }
+
+  function viewGlossary() {
+    var terms = {};
+    (REPO.glossary || []).forEach(function (t) { if (t && t.term) terms[t.term.toLowerCase()] = { term: t.term, meaning: t.meaning, files: [] }; });
+    PATHS.forEach(function (p) {
+      (FILES[p].terms || []).forEach(function (t) {
+        if (!t || !t.term) return;
+        var key = t.term.toLowerCase();
+        if (!terms[key]) terms[key] = { term: t.term, meaning: t.meaning, files: [] };
+        if (terms[key].files.length < 5) terms[key].files.push(p);
+      });
+    });
+    var keys = Object.keys(terms).sort();
+    var html = '<p class="label head-meta"><span>' + both("Glossary", "grep glossary") + "</span><span>" + keys.length +
+      ' terms</span></p><h2 class="display">Glossary</h2><p class="punch">Technical words used in this codebase, in plain English.</p>';
+    if (!keys.length) return html + '<p class="pending" style="margin-top:30px">No terms recorded yet.</p>';
+    return html + sec(1, "Terms", "terms", '<label><span class="sr-only">Filter the glossary</span><input class="filter" id="gfilter" type="search" placeholder="Filter terms"></label>' +
+      '<dl class="glossary" id="glist">' + keys.map(function (k) {
+        var t = terms[k];
+        return '<dt data-k="' + esc(k) + '">' + esc(t.term) + '</dt><dd data-k="' + esc(k) + '">' + fmt(t.meaning) +
+          (t.files.length ? '<div class="used">Used in ' + t.files.map(function (p) { return '<a href="' + fileHref(p) + '">' + esc(base(p)) + "</a>"; }).join(", ") + "</div>" : "") +
+          "</dd>"; }).join("") + "</dl>");
+  }
+
+  function notFound(message) {
+    return '<p class="label head-meta"><span>404</span></p><h2 class="display">Not found</h2><p class="punch">' + esc(message) +
+      '</p><p style="margin-top:24px"><a class="u" href="#/overview">Back to the overview</a></p>';
+  }
+
+  // ---- Router ------------------------------------------------------------
+  function render() {
+    var raw = (location.hash || "#/overview").slice(2);
+    var parts = raw.split("/");
+    var view = parts[0] || "overview";
+    var arg = parts[1] ? decodeURIComponent(parts[1]) : "";
+    var extra = parts[2] ? decodeURIComponent(parts[2]) : "";
+    currentPath = null;
+    var html;
+    if (view === "file") html = viewFile(arg, extra);
+    else if (view === "area") html = viewArea(arg);
+    else if (view === "readiness") html = viewReadiness();
+    else if (view === "decisions") html = viewDecisions();
+    else if (view === "debug") html = viewDebug();
+    else if (view === "glossary") html = viewGlossary();
+    else { view = "overview"; html = viewOverview(); }
+    main.innerHTML = html;
+    document.querySelectorAll(".views a").forEach(function (link) {
+      if (link.getAttribute("data-view") === view) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+    });
+    renderTree();
+    if (view === "overview") drawMap();
+    if (view === "glossary") {
+      var gf = document.getElementById("gfilter");
+      if (gf) gf.addEventListener("input", function () {
+        var q = gf.value.trim().toLowerCase();
+        var text = {};
+        document.querySelectorAll("#glist [data-k]").forEach(function (el) { var k = el.getAttribute("data-k"); text[k] = (text[k] || "") + " " + el.textContent.toLowerCase(); });
+        document.querySelectorAll("#glist [data-k]").forEach(function (el) { var k = el.getAttribute("data-k"); el.style.display = !q || text[k].indexOf(q) >= 0 ? "" : "none"; });
+      });
+    }
+    var target = extra ? document.getElementById("sec-" + extra) : null;
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: "start" });
+    else if (window.scrollTo) { try { window.scrollTo(0, 0); } catch (error) { /* not available */ } }
+    main.focus({ preventScroll: true });
+  }
+  window.addEventListener("hashchange", render);
+  render();
+})();
+</script>
+</body>
+</html>

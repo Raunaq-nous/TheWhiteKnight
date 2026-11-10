@@ -16,3 +16,4 @@ Thumbs.db
 extracted/
 extracted-files/
 tsconfig.tsbuildinfo
+graphify-out/
