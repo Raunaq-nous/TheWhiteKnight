@@ -623,7 +623,7 @@ def load_cards(root: Path):
     base = root / FILES_DIR
     if not base.exists():
         return cards
-    for path in base.rglob("*.json"):
+    for path in (p for p in base.rglob("*.json") if p.is_file()):
         try:
             card = load_json(path, None)
         except (OSError, json.JSONDecodeError) as error:
