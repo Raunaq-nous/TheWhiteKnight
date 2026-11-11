@@ -8,7 +8,17 @@
             "command": "./sync-skills.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/graph-refresh.sh",
+            "timeout": 200
+          }
+        ]
       }
     ]
-  }
+  },
+  "outputStyle": "Owner briefing"
 }
